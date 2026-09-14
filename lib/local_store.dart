@@ -286,6 +286,29 @@ class LocalStore {
     }
   }
 
+  /// Возвращает соответствие {sourceLogId: draftDate} для всех логов,
+  /// включенных в незавершённые черновики (сценарии A04, A11).
+  Map<String, String> getActiveDraftDatesBySourceLogId({
+    required String scope,
+  }) {
+    final stmt = _db.prepare('''
+      SELECT dl.source_log_id, dd.date
+      FROM draft_logs dl
+      JOIN day_drafts dd ON dl.draft_id = dd.id
+      WHERE dd.scope = ? AND dd.status != 'completed';
+    ''');
+    try {
+      final rows = stmt.select([scope]);
+      final map = <String, String>{};
+      for (final row in rows) {
+        map[row['source_log_id'] as String] = row['date'] as String;
+      }
+      return map;
+    } finally {
+      stmt.close();
+    }
+  }
+
   /// Транзакционное сохранение нескольких логов и задачи (сценарии A01-A04).
   void saveLogsAndIssue({required List<LocalLog> logs, required Issue issue}) {
     _checkWritable();

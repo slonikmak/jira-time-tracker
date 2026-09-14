@@ -655,6 +655,9 @@ class _WorkScreenState extends State<WorkScreen> {
         );
         final isSelected = widget.appState.selectedLogIds.contains(log.id);
 
+        final isInDraft = widget.appState.isLogInDraft(log.id);
+        final draftDate = widget.appState.getDraftDateForLog(log.id);
+
         return Card(
           elevation: 0,
           margin: const EdgeInsets.symmetric(vertical: 4),
@@ -676,10 +679,12 @@ class _WorkScreenState extends State<WorkScreen> {
                     Tooltip(
                       message: log.isRunning
                           ? 'Поставьте таймер на паузу перед выбором для сборки дня'
-                          : 'Выбрать для сборки дня',
+                          : (isInDraft
+                                ? 'Лог уже включен в черновик на $draftDate'
+                                : 'Выбрать для сборки дня'),
                       child: Checkbox(
                         value: isSelected,
-                        onChanged: log.isRunning
+                        onChanged: (log.isRunning || isInDraft)
                             ? null
                             : (_) => widget.appState.toggleLogSelection(log.id),
                       ),
@@ -712,6 +717,30 @@ class _WorkScreenState extends State<WorkScreen> {
                         style: const TextStyle(fontWeight: FontWeight.w500),
                       ),
                     ),
+                    if (isInDraft) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: Colors.blue.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Text(
+                          'В черновике ($draftDate)',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.indigo,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
                     if (log.isRunning)
                       IconButton(
                         visualDensity: VisualDensity.compact,
@@ -719,7 +748,7 @@ class _WorkScreenState extends State<WorkScreen> {
                         tooltip: 'Поставить на паузу',
                         onPressed: () => widget.appState.pauseLog(log.id),
                       )
-                    else ...[
+                    else if (!isInDraft) ...[
                       IconButton(
                         visualDensity: VisualDensity.compact,
                         icon: const Icon(Icons.edit_outlined, size: 18),

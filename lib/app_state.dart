@@ -59,11 +59,25 @@ class AppState extends ChangeNotifier {
     _initData();
   }
 
+  Map<String, String> _activeDraftDatesBySourceLogId = {};
+
   void _initData() {
     _issues = store.getIssues(scope: activeScope);
     _logs = store.getLocalLogs(scope: activeScope);
+    _activeDraftDatesBySourceLogId = store.getActiveDraftDatesBySourceLogId(
+      scope: activeScope,
+    );
     _updateTicker();
   }
+
+  Map<String, String> get activeDraftDatesBySourceLogId =>
+      Map.unmodifiable(_activeDraftDatesBySourceLogId);
+
+  bool isLogInDraft(String logId) =>
+      _activeDraftDatesBySourceLogId.containsKey(logId);
+
+  String? getDraftDateForLog(String logId) =>
+      _activeDraftDatesBySourceLogId[logId];
 
   int get selectedTabIndex => _selectedTabIndex;
   String? get statusMessage => _statusMessage;
@@ -185,6 +199,9 @@ class AppState extends ChangeNotifier {
 
   Future<void> loadLogs() async {
     _logs = store.getLocalLogs(scope: activeScope);
+    _activeDraftDatesBySourceLogId = store.getActiveDraftDatesBySourceLogId(
+      scope: activeScope,
+    );
     _updateTicker();
     notifyListeners();
   }
@@ -482,6 +499,11 @@ class AppState extends ChangeNotifier {
     if (log.isConsumed) {
       throw StateError('Нельзя редактировать уже использованный лог.');
     }
+    if (isLogInDraft(logId)) {
+      throw StateError(
+        'Нельзя редактировать лог, уже включенный в черновик дня (${getDraftDateForLog(logId)}).',
+      );
+    }
 
     final updated = log.copyWith(
       accumulatedSeconds: durationSeconds,
@@ -500,6 +522,11 @@ class AppState extends ChangeNotifier {
         'Нельзя удалить работающий лог. Сначала поставьте его на паузу.',
       );
     }
+    if (isLogInDraft(logId)) {
+      throw StateError(
+        'Нельзя удалить лог, уже включенный в черновик дня (${getDraftDateForLog(logId)}).',
+      );
+    }
     _selectedLogIds.remove(logId);
     store.deleteLocalLog(logId);
     await loadIssues();
@@ -509,7 +536,7 @@ class AppState extends ChangeNotifier {
   /// Переключение выбора лога для сборки дня.
   void toggleLogSelection(String logId) {
     final log = _logs.where((l) => l.id == logId).firstOrNull;
-    if (log == null || log.isRunning) return;
+    if (log == null || log.isRunning || isLogInDraft(logId)) return;
 
     if (_selectedLogIds.contains(logId)) {
       _selectedLogIds.remove(logId);

@@ -266,6 +266,15 @@ void main() {
           createdAtUtc: now,
         );
         store.saveLogAndIssue(log: log1, issue: issue);
+        final log2 = LocalLog(
+          id: 'log-2',
+          scope: testScope,
+          issueId: '1001',
+          titleSnapshot: 'PROJ-1',
+          accumulatedSeconds: 1800,
+          createdAtUtc: now,
+        );
+        store.upsertLocalLog(log2);
 
         final draft = DayDraft(
           id: 'draft-1',
@@ -285,6 +294,12 @@ void main() {
               draftId: 'draft-1',
               sourceLogId: 'log-1',
               sourceDurationSeconds: 7200,
+              descriptionSnapshot: '',
+            ),
+            const DraftLog(
+              draftId: 'draft-1',
+              sourceLogId: 'log-2',
+              sourceDurationSeconds: 1800,
               descriptionSnapshot: '',
             ),
           ],
@@ -315,6 +330,29 @@ void main() {
               .getActiveDraftDatesBySourceLogId(scope: testScope)
               .containsKey('log-1'),
           isTrue,
+        );
+
+        final failedSegment = store
+            .getSegments(draftId: 'draft-1')
+            .first
+            .copyWith(sendState: SendState.failed);
+        store.updateSegment(failedSegment);
+        expect(
+          () => store.removeLogFromDraft(
+            draftId: 'draft-1',
+            sourceLogId: 'log-2',
+          ),
+          throwsStateError,
+        );
+        expect(store.getSegments(draftId: 'draft-1'), hasLength(2));
+        expect(
+          store
+              .getActiveDraftDatesBySourceLogId(scope: testScope)
+              .containsKey('log-2'),
+          isTrue,
+        );
+        store.updateSegment(
+          failedSegment.copyWith(sendState: SendState.pending),
         );
 
         // Удаляем первый сегмент
@@ -545,10 +583,10 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // Проверяем отображение заголовка, дат и чипов статистики
-        expect(find.text('Полный день: '), findsOneWidget);
-        expect(find.text('Паузы: '), findsOneWidget);
-        expect(find.text('Новое время: '), findsOneWidget);
+        // Проверяем отображение заголовка, дат и метрик дня
+        expect(find.text('Весь день'), findsOneWidget);
+        expect(find.text('Паузы'), findsWidgets);
+        expect(find.text('Новое время'), findsOneWidget);
         expect(find.text('PROJ-1'), findsWidgets);
 
         // Нажимаем иконку редактирования интервала

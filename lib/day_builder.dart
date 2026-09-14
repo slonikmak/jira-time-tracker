@@ -206,6 +206,7 @@ class DayBuilder {
         settings.lunchStartMinutesMin > settings.lunchStartMinutesMax ||
         settings.lunchDurationSecondsMin > settings.lunchDurationSecondsMax ||
         settings.shortBreakCountMin > settings.shortBreakCountMax ||
+        settings.shortBreakDurationSecondsMin <= 0 ||
         settings.shortBreakDurationSecondsMin >
             settings.shortBreakDurationSecondsMax) {
       throw const DayBuilderException('Некорректные настройки рабочего дня.');
@@ -329,115 +330,6 @@ class DayBuilder {
       );
     }
 
-    // Распределение бюджета между логами
-    final lockedLogs = logs.where((l) => l.durationLocked).toList();
-    final unlockedLogs = logs.where((l) => !l.durationLocked).toList();
-
-    final lockedSum = lockedLogs.fold<int>(
-      0,
-      (sum, l) => sum + l.sourceDurationSeconds,
-    );
-
-    if (lockedSum > newWorkBudget) {
-      final reqH = lockedSum ~/ 3600;
-      final reqM = (lockedSum % 3600) ~/ 60;
-      final availH = newWorkBudget ~/ 3600;
-      final availM = (newWorkBudget % 3600) ~/ 60;
-      throw DayBuilderException(
-        'Фиксированные логи требуют $reqH ч $reqM мин, а доступно только $availH ч $availM мин.',
-      );
-    }
-
-    final allocated = <String, int>{};
-
-    if (unlockedLogs.isEmpty) {
-      if (lockedSum != newWorkBudget) {
-        final reqH = lockedSum ~/ 3600;
-        final reqM = (lockedSum % 3600) ~/ 60;
-        final availH = newWorkBudget ~/ 3600;
-        final availM = (newWorkBudget % 3600) ~/ 60;
-        throw DayBuilderException(
-          'Все логи зафиксированы ($reqH ч $reqM мин), но бюджет составляет $availH ч $availM мин. Разблокируйте хотя бы один лог.',
-        );
-      }
-      for (final log in lockedLogs) {
-        allocated[log.sourceLogId] = log.sourceDurationSeconds;
-      }
-    } else {
-      for (final log in lockedLogs) {
-        allocated[log.sourceLogId] = log.sourceDurationSeconds;
-      }
-
-      final remainingBudget = newWorkBudget - lockedSum;
-      if (remainingBudget < unlockedLogs.length) {
-        throw const DayBuilderException(
-          'Недостаточно свободного времени для распределения между незафиксированными задачами.',
-        );
-      }
-
-      final totalUnlockedSource = unlockedLogs.fold<int>(
-        0,
-        (sum, l) => sum + l.sourceDurationSeconds,
-      );
-
-      var currentAllocatedSum = 0;
-      for (final log in unlockedLogs) {
-        final raw = totalUnlockedSource > 0
-            ? (log.sourceDurationSeconds * remainingBudget) ~/
-                  totalUnlockedSource
-            : remainingBudget ~/ unlockedLogs.length;
-        final val = max(1, raw);
-        allocated[log.sourceLogId] = val;
-        currentAllocatedSum += val;
-      }
-
-      var diff = remainingBudget - currentAllocatedSum;
-      final sortedUnlocked = List<DayBuilderLogInput>.from(unlockedLogs)
-        ..sort(
-          (a, b) => b.sourceDurationSeconds.compareTo(a.sourceDurationSeconds),
-        );
-
-      if (diff > 0) {
-        var idx = 0;
-        while (diff > 0) {
-          final logId = sortedUnlocked[idx % sortedUnlocked.length].sourceLogId;
-          allocated[logId] = (allocated[logId] ?? 0) + 1;
-          diff--;
-          idx++;
-        }
-      } else if (diff < 0) {
-        var idx = 0;
-        while (diff < 0) {
-          final logId = sortedUnlocked[idx % sortedUnlocked.length].sourceLogId;
-          if ((allocated[logId] ?? 0) > 1) {
-            allocated[logId] = allocated[logId]! - 1;
-            diff++;
-          }
-          idx++;
-        }
-      }
-    }
-
-    // Разбиение больших логов (> 120 мин) на части
-    final logChunks = <_LogChunk>[];
-    for (final log in logs) {
-      final allocatedSec = allocated[log.sourceLogId]!;
-      final parts = splitLargeDuration(allocatedSec, rnd);
-      for (final part in parts) {
-        logChunks.add(
-          _LogChunk(
-            sourceLogId: log.sourceLogId,
-            issueId: log.issueId,
-            description: log.description,
-            durationSeconds: part,
-          ),
-        );
-      }
-    }
-
-    // Чередование частей разных логов по кругу
-    final reorderedChunks = _interleaveChunks(logChunks, logs);
-
     // Определение свободных интервалов в дне
     final occupied = <_TimeInterval>[];
     for (final b in breaks) {
@@ -480,56 +372,28 @@ class DayBuilder {
       );
     }
 
-    // Заполнение свободных промежутков частями логов
-    final segments = <Segment>[];
-    var currentIntervalIdx = 0;
-    var currentOffsetInInterval = 0;
-
-    for (final chunk in reorderedChunks) {
-      var chunkRemaining = chunk.durationSeconds;
-
-      while (chunkRemaining > 0) {
-        if (currentIntervalIdx >= freeIntervals.length) {
-          throw const DayBuilderException(
-            'Ошибка компоновки: закончились свободные промежутки дня.',
-          );
-        }
-
-        final interval = freeIntervals[currentIntervalIdx];
-        final availableInInterval =
-            interval.durationSeconds - currentOffsetInInterval;
-
-        final sliceDuration = min(chunkRemaining, availableInInterval);
-        final sliceStart = interval.startUtc.add(
-          Duration(seconds: currentOffsetInInterval),
-        );
-
-        segments.add(
-          Segment(
-            id: generateDeterministicUuid(rnd),
-            draftId: input.draftId,
-            sourceLogId: chunk.sourceLogId,
-            issueId: chunk.issueId,
-            startUtc: sliceStart,
-            durationSeconds: sliceDuration,
-            description: chunk.description,
-            sendState: SendState.pending,
-          ),
-        );
-
-        currentOffsetInInterval += sliceDuration;
-        chunkRemaining -= sliceDuration;
-
-        if (currentOffsetInInterval >= interval.durationSeconds) {
-          currentIntervalIdx++;
-          currentOffsetInInterval = 0;
-        }
-      }
-    }
+    final workSchedule = _buildWorkSchedule(
+      logs: logs,
+      maximumWorkSeconds: newWorkBudget,
+      freeIntervals: freeIntervals,
+      existingBreaks: breaks,
+      mandatoryPauseSeconds: settings.shortBreakDurationSecondsMin,
+      draftId: input.draftId,
+      seed: seed,
+    );
+    final segments = workSchedule.segments;
+    breaks.addAll(workSchedule.additionalBreaks);
+    breaks.sort((a, b) => a.startUtc.compareTo(b.startUtc));
+    final allocated = workSchedule.allocatedSecondsBySourceLogId;
 
     final totalNewWorkSeconds = segments.fold<int>(
       0,
       (sum, s) => sum + s.durationSeconds,
+    );
+
+    final actualTotalBreaksSeconds = breaks.fold<int>(
+      0,
+      (sum, b) => sum + b.durationSeconds,
     );
 
     final plan = DayPlanResult(
@@ -539,7 +403,7 @@ class DayBuilder {
       breaks: breaks,
       allocatedSecondsBySourceLogId: allocated,
       totalNewWorkSeconds: totalNewWorkSeconds,
-      totalBreaksSeconds: totalBreaksSeconds,
+      totalBreaksSeconds: actualTotalBreaksSeconds,
       totalExistingSeconds: totalExistingSeconds,
       totalDaySeconds: totalDaySeconds,
     );
@@ -551,6 +415,252 @@ class DayBuilder {
     }
 
     return plan;
+  }
+
+  static _WorkSchedule _buildWorkSchedule({
+    required List<DayBuilderLogInput> logs,
+    required int maximumWorkSeconds,
+    required List<_FreeInterval> freeIntervals,
+    required List<Break> existingBreaks,
+    required int mandatoryPauseSeconds,
+    required String draftId,
+    required int seed,
+  }) {
+    const minimumSegmentSeconds = 15 * 60;
+    final lockedLogs = logs.where((log) => log.durationLocked).toList();
+    final unlockedLogs = logs.where((log) => !log.durationLocked).toList();
+    final lockedSum = lockedLogs.fold<int>(
+      0,
+      (sum, log) => sum + log.sourceDurationSeconds,
+    );
+
+    if (lockedLogs.any(
+      (log) => log.sourceDurationSeconds < minimumSegmentSeconds,
+    )) {
+      throw const DayBuilderException(
+        'Зафиксированный лог короче минимального рабочего интервала 15 минут.',
+      );
+    }
+    if (lockedSum > maximumWorkSeconds) {
+      final reqH = lockedSum ~/ 3600;
+      final reqM = (lockedSum % 3600) ~/ 60;
+      final availH = maximumWorkSeconds ~/ 3600;
+      final availM = (maximumWorkSeconds % 3600) ~/ 60;
+      throw DayBuilderException(
+        'Фиксированные логи требуют $reqH ч $reqM мин, а доступно только $availH ч $availM мин.',
+      );
+    }
+    if (unlockedLogs.isEmpty && lockedSum != maximumWorkSeconds) {
+      final reqH = lockedSum ~/ 3600;
+      final reqM = (lockedSum % 3600) ~/ 60;
+      final availH = maximumWorkSeconds ~/ 3600;
+      final availM = (maximumWorkSeconds % 3600) ~/ 60;
+      throw DayBuilderException(
+        'Все логи зафиксированы ($reqH ч $reqM мин), но бюджет составляет $availH ч $availM мин. Разблокируйте хотя бы один лог.',
+      );
+    }
+
+    final minimumWorkSeconds =
+        lockedSum + unlockedLogs.length * minimumSegmentSeconds;
+    if (minimumWorkSeconds > maximumWorkSeconds) {
+      throw const DayBuilderException(
+        'Недостаточно времени: каждому выбранному логу требуется минимум 15 минут.',
+      );
+    }
+
+    var workSeconds = maximumWorkSeconds;
+    while (true) {
+      final allocated = _allocateWorkSeconds(
+        lockedLogs: lockedLogs,
+        unlockedLogs: unlockedLogs,
+        workSeconds: workSeconds,
+        minimumSegmentSeconds: minimumSegmentSeconds,
+      );
+      final attemptRandom = Random(seed ^ workSeconds);
+      final chunks = <_LogChunk>[];
+      for (final log in logs) {
+        for (final part in splitLargeDuration(
+          allocated[log.sourceLogId]!,
+          attemptRandom,
+        )) {
+          chunks.add(
+            _LogChunk(
+              sourceLogId: log.sourceLogId,
+              issueId: log.issueId,
+              description: log.description,
+              durationSeconds: part,
+            ),
+          );
+        }
+      }
+
+      final placement = _tryPlaceWorkChunks(
+        chunks: _interleaveChunks(chunks, logs),
+        freeIntervals: freeIntervals,
+        existingBreaks: existingBreaks,
+        mandatoryPauseSeconds: mandatoryPauseSeconds,
+        minimumSegmentSeconds: minimumSegmentSeconds,
+        draftId: draftId,
+        rnd: attemptRandom,
+      );
+      if (placement != null) {
+        return _WorkSchedule(
+          segments: placement.segments,
+          additionalBreaks: placement.additionalBreaks,
+          allocatedSecondsBySourceLogId: allocated,
+        );
+      }
+
+      if (workSeconds == minimumWorkSeconds) break;
+      workSeconds = max(minimumWorkSeconds, workSeconds - 60);
+    }
+
+    throw const DayBuilderException(
+      'Невозможно разместить рабочие интервалы от 15 минут с обязательными паузами. Измените выбор логов или настройки дня.',
+    );
+  }
+
+  static Map<String, int> _allocateWorkSeconds({
+    required List<DayBuilderLogInput> lockedLogs,
+    required List<DayBuilderLogInput> unlockedLogs,
+    required int workSeconds,
+    required int minimumSegmentSeconds,
+  }) {
+    final allocated = <String, int>{
+      for (final log in lockedLogs) log.sourceLogId: log.sourceDurationSeconds,
+    };
+    if (unlockedLogs.isEmpty) return allocated;
+
+    final lockedSum = allocated.values.fold<int>(
+      0,
+      (sum, value) => sum + value,
+    );
+    final remaining = workSeconds - lockedSum;
+    final distributable =
+        remaining - unlockedLogs.length * minimumSegmentSeconds;
+    final totalSourceSeconds = unlockedLogs.fold<int>(
+      0,
+      (sum, log) => sum + log.sourceDurationSeconds,
+    );
+    var allocatedSum = lockedSum;
+    for (final log in unlockedLogs) {
+      final extra = totalSourceSeconds == 0
+          ? distributable ~/ unlockedLogs.length
+          : log.sourceDurationSeconds * distributable ~/ totalSourceSeconds;
+      allocated[log.sourceLogId] = minimumSegmentSeconds + extra;
+      allocatedSum += minimumSegmentSeconds + extra;
+    }
+
+    var remainder = workSeconds - allocatedSum;
+    final byDuration = [...unlockedLogs]
+      ..sort(
+        (a, b) => b.sourceDurationSeconds.compareTo(a.sourceDurationSeconds),
+      );
+    var index = 0;
+    while (remainder > 0) {
+      final logId = byDuration[index % byDuration.length].sourceLogId;
+      allocated[logId] = allocated[logId]! + 1;
+      remainder--;
+      index++;
+    }
+    return allocated;
+  }
+
+  static _WorkPlacement? _tryPlaceWorkChunks({
+    required List<_LogChunk> chunks,
+    required List<_FreeInterval> freeIntervals,
+    required List<Break> existingBreaks,
+    required int mandatoryPauseSeconds,
+    required int minimumSegmentSeconds,
+    required String draftId,
+    required Random rnd,
+  }) {
+    final segments = <Segment>[];
+    final additionalBreaks = <Break>[];
+    var intervalIndex = 0;
+    var offset = 0;
+
+    bool hasBreakBetween(DateTime start, DateTime end) =>
+        [...existingBreaks, ...additionalBreaks].any(
+          (pause) =>
+              !pause.startUtc.isBefore(start) && !pause.endUtc.isAfter(end),
+        );
+
+    for (final chunk in chunks) {
+      var remaining = chunk.durationSeconds;
+      while (remaining > 0) {
+        if (intervalIndex >= freeIntervals.length) return null;
+        final interval = freeIntervals[intervalIndex];
+        var available = interval.durationSeconds - offset;
+        if (available < minimumSegmentSeconds) {
+          intervalIndex++;
+          offset = 0;
+          continue;
+        }
+
+        var start = interval.startUtc.add(Duration(seconds: offset));
+        if (segments.isNotEmpty &&
+            !hasBreakBetween(segments.last.endUtc, start)) {
+          if (available < mandatoryPauseSeconds + minimumSegmentSeconds) {
+            intervalIndex++;
+            offset = 0;
+            continue;
+          }
+          additionalBreaks.add(
+            Break(
+              id: generateDeterministicUuid(rnd),
+              draftId: draftId,
+              startUtc: start,
+              durationSeconds: mandatoryPauseSeconds,
+              kind: BreakKind.short,
+            ),
+          );
+          offset += mandatoryPauseSeconds;
+          available -= mandatoryPauseSeconds;
+          start = start.add(Duration(seconds: mandatoryPauseSeconds));
+        }
+
+        var slice = min(remaining, available);
+        if (slice < minimumSegmentSeconds) {
+          intervalIndex++;
+          offset = 0;
+          continue;
+        }
+        final tail = remaining - slice;
+        if (tail > 0 && tail < minimumSegmentSeconds) {
+          slice = remaining - minimumSegmentSeconds;
+          if (slice < minimumSegmentSeconds) {
+            intervalIndex++;
+            offset = 0;
+            continue;
+          }
+        }
+
+        segments.add(
+          Segment(
+            id: generateDeterministicUuid(rnd),
+            draftId: draftId,
+            sourceLogId: chunk.sourceLogId,
+            issueId: chunk.issueId,
+            startUtc: start,
+            durationSeconds: slice,
+            description: chunk.description,
+            sendState: SendState.pending,
+          ),
+        );
+        offset += slice;
+        remaining -= slice;
+        if (offset >= interval.durationSeconds) {
+          intervalIndex++;
+          offset = 0;
+        }
+      }
+    }
+
+    return _WorkPlacement(
+      segments: segments,
+      additionalBreaks: additionalBreaks,
+    );
   }
 
   /// Проверка полуоткрытых интервалов [start, end) и инвариантов расписания.
@@ -569,6 +679,8 @@ class DayBuilder {
     for (final s in plan.segments) {
       if (s.durationSeconds <= 0) {
         errors.add('Сегмент ${s.id} имеет неположительную длительность.');
+      } else if (s.durationSeconds < 15 * 60) {
+        errors.add('Сегмент ${s.id} короче минимальных 15 минут.');
       }
       if (s.startUtc.isBefore(plan.dayStartUtc) ||
           s.endUtc.isAfter(plan.dayEndUtc)) {
@@ -649,6 +761,24 @@ class DayBuilder {
           a.end.isAtSameMomentAs(b.start)) {
         errors.add(
           'Перерывы не должны следовать подряд без рабочего интервала между ними.',
+        );
+      }
+    }
+
+    final workSegments = [...plan.segments]
+      ..sort((a, b) => a.startUtc.compareTo(b.startUtc));
+    for (var i = 0; i < workSegments.length - 1; i++) {
+      final current = workSegments[i];
+      final next = workSegments[i + 1];
+      if (current.endUtc.isAfter(next.startUtc)) continue;
+      final hasPause = plan.breaks.any(
+        (pause) =>
+            !pause.startUtc.isBefore(current.endUtc) &&
+            !pause.endUtc.isAfter(next.startUtc),
+      );
+      if (!hasPause) {
+        errors.add(
+          'Между рабочими интервалами ${current.id} и ${next.id} отсутствует обязательная пауза.',
         );
       }
     }
@@ -1015,4 +1145,24 @@ class _FreeInterval {
   const _FreeInterval({required this.startUtc, required this.endUtc});
 
   int get durationSeconds => endUtc.difference(startUtc).inSeconds;
+}
+
+class _WorkPlacement {
+  final List<Segment> segments;
+  final List<Break> additionalBreaks;
+
+  const _WorkPlacement({
+    required this.segments,
+    required this.additionalBreaks,
+  });
+}
+
+class _WorkSchedule extends _WorkPlacement {
+  final Map<String, int> allocatedSecondsBySourceLogId;
+
+  const _WorkSchedule({
+    required super.segments,
+    required super.additionalBreaks,
+    required this.allocatedSecondsBySourceLogId,
+  });
 }

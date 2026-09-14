@@ -134,4 +134,181 @@ void main() {
       expect(find.text('Всего: 10м'), findsOneWidget);
     },
   );
+
+  testWidgets('Чекбокс свободного лога меняет выбор для сборки', (
+    WidgetTester tester,
+  ) async {
+    store.saveLogAndIssue(
+      issue: store.getIssues(scope: 'default').single,
+      log: LocalLog(
+        id: 'log-checkbox',
+        scope: 'default',
+        issueId: '10001',
+        titleSnapshot: 'Разработка фичи',
+        accumulatedSeconds: 1800,
+        createdAtUtc: currentTime,
+      ),
+    );
+    final appState = createAppState();
+
+    await tester.pumpWidget(JiraTimeTrackerApp(appState: appState));
+    await tester.pumpAndSettle();
+
+    final checkbox = find.byType(Checkbox).first;
+    await tester.tap(checkbox);
+    await tester.pump();
+
+    expect(appState.selectedLogIds, contains('log-checkbox'));
+    expect(find.text('1 лог · 30м'), findsOneWidget);
+
+    await tester.tap(checkbox);
+    await tester.pump();
+    expect(appState.selectedLogIds, isEmpty);
+  });
+
+  test(
+    'Загрузка сохранённого подключения восстанавливает черновик его scope',
+    () async {
+      const scope = 'https://example.atlassian.net#account-1';
+      const draftId = 'draft-scoped';
+      const logId = 'log-scoped';
+      final issue = Issue(
+        scope: scope,
+        issueId: '20002',
+        key: 'PROJ-2',
+        summary: 'Задача в Jira scope',
+        lastUsedAtUtc: currentTime,
+      );
+      store.saveLogAndIssue(
+        issue: issue,
+        log: LocalLog(
+          id: logId,
+          scope: scope,
+          issueId: issue.issueId,
+          titleSnapshot: issue.summary,
+          accumulatedSeconds: 1800,
+          createdAtUtc: currentTime,
+        ),
+      );
+      store.saveDayDraft(
+        draft: DayDraft(
+          id: draftId,
+          scope: scope,
+          date: '2026-09-14',
+          startUtc: DateTime.utc(2026, 9, 14, 7),
+          endUtc: DateTime.utc(2026, 9, 14, 15),
+          seed: 42,
+          settingsSnapshot: const DaySettings().toJson(),
+        ),
+        draftLogs: const [
+          DraftLog(
+            draftId: draftId,
+            sourceLogId: logId,
+            sourceDurationSeconds: 1800,
+            descriptionSnapshot: '',
+          ),
+        ],
+        segments: [
+          Segment(
+            id: 'segment-scoped',
+            draftId: draftId,
+            sourceLogId: logId,
+            issueId: issue.issueId,
+            startUtc: DateTime.utc(2026, 9, 14, 7),
+            durationSeconds: 1800,
+          ),
+        ],
+        breaks: const [],
+      );
+      await connectionStore.saveConnection(
+        const JiraConnection(
+          baseUrl: 'https://example.atlassian.net',
+          email: 'user@example.com',
+          accountId: 'account-1',
+          displayName: 'Test User',
+          route: JiraAuthRoute.direct,
+          scope: scope,
+        ),
+        'test-token',
+      );
+
+      final appState = createAppState();
+      await appState.loadSavedConnection();
+
+      expect(appState.isLogInDraft(logId), isTrue);
+      expect(appState.currentDraft?.id, draftId);
+      expect(appState.currentSegments, hasLength(1));
+    },
+  );
+
+  testWidgets('Галочка снимает лог из ещё не отправленного черновика', (
+    WidgetTester tester,
+  ) async {
+    const logId = 'log-in-draft';
+    const draftId = 'draft-checkbox';
+    store.saveLogAndIssue(
+      issue: store.getIssues(scope: 'default').single,
+      log: LocalLog(
+        id: logId,
+        scope: 'default',
+        issueId: '10001',
+        titleSnapshot: 'Разработка фичи',
+        accumulatedSeconds: 1800,
+        createdAtUtc: currentTime,
+      ),
+    );
+    store.saveDayDraft(
+      draft: DayDraft(
+        id: draftId,
+        scope: 'default',
+        date: '2026-09-14',
+        startUtc: DateTime.utc(2026, 9, 14, 7),
+        endUtc: DateTime.utc(2026, 9, 14, 15),
+        seed: 42,
+        settingsSnapshot: const DaySettings().toJson(),
+      ),
+      draftLogs: const [
+        DraftLog(
+          draftId: draftId,
+          sourceLogId: logId,
+          sourceDurationSeconds: 1800,
+          descriptionSnapshot: '',
+        ),
+      ],
+      segments: [
+        Segment(
+          id: 'segment-a',
+          draftId: draftId,
+          sourceLogId: logId,
+          issueId: '10001',
+          startUtc: DateTime.utc(2026, 9, 14, 7),
+          durationSeconds: 900,
+        ),
+        Segment(
+          id: 'segment-b',
+          draftId: draftId,
+          sourceLogId: logId,
+          issueId: '10001',
+          startUtc: DateTime.utc(2026, 9, 14, 7, 20),
+          durationSeconds: 900,
+        ),
+      ],
+      breaks: const [],
+    );
+    final appState = createAppState();
+
+    await tester.pumpWidget(JiraTimeTrackerApp(appState: appState));
+    await tester.pumpAndSettle();
+
+    final checkbox = tester.widget<Checkbox>(find.byType(Checkbox).first);
+    expect(checkbox.value, isTrue);
+    expect(checkbox.onChanged, isNotNull);
+
+    await tester.tap(find.byType(Checkbox).first);
+    await tester.pumpAndSettle();
+
+    expect(appState.isLogInDraft(logId), isFalse);
+    expect(appState.currentDraft, isNull);
+    expect(tester.widget<Checkbox>(find.byType(Checkbox).first).value, isFalse);
+  });
 }

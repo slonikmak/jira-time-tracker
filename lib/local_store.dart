@@ -647,6 +647,68 @@ class LocalStore {
     }
   }
 
+  /// Исключает из неотправленного черновика лог вместе со всеми его частями.
+  void removeLogFromDraft({
+    required String draftId,
+    required String sourceLogId,
+  }) {
+    _checkWritable();
+    _db.execute('BEGIN TRANSACTION;');
+    try {
+      final rows = _db.select(
+        '''
+        SELECT dd.status,
+               EXISTS(
+                 SELECT 1 FROM segments s
+                 WHERE s.draft_id = dl.draft_id
+                   AND s.send_state != 'pending'
+               ) AS has_started_sending
+        FROM draft_logs dl
+        JOIN day_drafts dd ON dd.id = dl.draft_id
+        WHERE dl.draft_id = ? AND dl.source_log_id = ?;
+        ''',
+        [draftId, sourceLogId],
+      );
+
+      if (rows.isEmpty) {
+        _db.execute('COMMIT;');
+        return;
+      }
+
+      final status = rows.first['status'] as String;
+      final hasStartedSending = rows.first['has_started_sending'] as int == 1;
+      if (status != DraftStatus.draft.name || hasStartedSending) {
+        throw StateError(
+          'Нельзя исключить лог после начала отправки дня в Jira.',
+        );
+      }
+
+      _db.execute(
+        'DELETE FROM segments WHERE draft_id = ? AND source_log_id = ?;',
+        [draftId, sourceLogId],
+      );
+      _db.execute(
+        'DELETE FROM draft_logs WHERE draft_id = ? AND source_log_id = ?;',
+        [draftId, sourceLogId],
+      );
+
+      final remainingSources =
+          _db.select(
+                'SELECT COUNT(*) AS count FROM draft_logs WHERE draft_id = ?;',
+                [draftId],
+              ).first['count']
+              as int;
+      if (remainingSources == 0) {
+        _db.execute('DELETE FROM day_drafts WHERE id = ?;', [draftId]);
+      }
+
+      _db.execute('COMMIT;');
+    } catch (_) {
+      _db.execute('ROLLBACK;');
+      rethrow;
+    }
+  }
+
   /// Полное удаление черновика дня (каскадно удалит draft_logs, segments, breaks).
   void deleteDayDraft(String draftId) {
     _checkWritable();

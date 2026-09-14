@@ -18,17 +18,15 @@ class DayScreen extends StatelessWidget {
     return ListenableBuilder(
       listenable: appState,
       builder: (context, _) {
+        final hasDraft = appState.currentDraft != null;
         return Scaffold(
           body: Column(
             children: [
               _buildHeader(context),
-              _buildSummaryStats(context),
-              if (appState.currentDraft != null)
+              if (hasDraft) _buildSummaryStats(context),
+              if (hasDraft)
                 Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
+                  padding: const EdgeInsets.fromLTRB(22, 0, 22, 18),
                   child: TimelineTrackBar(
                     draft: appState.currentDraft!,
                     segments: appState.currentSegments,
@@ -50,17 +48,11 @@ class DayScreen extends StatelessWidget {
               if (appState.validationErrors.isNotEmpty)
                 _buildValidationErrors(context),
               Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Левая колонка: источники времени (логи)
-                    SizedBox(width: 320, child: _buildSourcesPanel(context)),
-                    const VerticalDivider(width: 1),
-                    // Правая колонка: расписание дня
-                    Expanded(child: _buildSchedulePanel(context)),
-                  ],
-                ),
+                child: hasDraft
+                    ? _buildDayGrid(context)
+                    : _buildEmptyDay(context),
               ),
+              if (hasDraft) _buildSubmissionFooter(context),
             ],
           ),
         );
@@ -74,25 +66,40 @@ class DayScreen extends StatelessWidget {
     final dateStr =
         '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.surface(isDark),
-        border: Border(
-          bottom: BorderSide(color: AppColors.line(isDark), width: 1),
-        ),
-      ),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        alignment: WrapAlignment.spaceBetween,
-        crossAxisAlignment: WrapCrossAlignment.center,
+    final draft = appState.currentDraft;
+    final subtitle = draft == null
+        ? 'Соберите расписание из выбранных логов'
+        : draft.status == DraftStatus.completed
+        ? 'Все записи отправлены'
+        : appState.isDraftLockedFromRebuild
+        ? 'Результат отправки'
+        : 'Черновик · можно редактировать';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 18, 22, 18),
+      child: Row(
         children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('День', style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.muted(isDark),
+                  ),
+                ),
+              ],
+            ),
+          ),
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
-                icon: const Icon(Icons.chevron_left),
+                icon: const Icon(Icons.chevron_left, size: 20),
                 tooltip: 'Предыдущий день',
                 onPressed: () => appState.previousDay(),
               ),
@@ -118,16 +125,14 @@ class DayScreen extends StatelessWidget {
                 },
               ),
               IconButton(
-                icon: const Icon(Icons.chevron_right),
+                icon: const Icon(Icons.chevron_right, size: 20),
                 tooltip: 'Следующий день',
                 onPressed: () => appState.nextDay(),
               ),
-              const SizedBox(width: 4),
               TextButton(
                 onPressed: () => appState.today(),
                 child: const Text('Сегодня'),
               ),
-              const SizedBox(width: 4),
               IconButton(
                 icon: appState.isFetchingJiraWorklogs
                     ? const SizedBox(
@@ -141,89 +146,14 @@ class DayScreen extends StatelessWidget {
                     ? null
                     : () => appState.fetchJiraWorklogsForDate(),
               ),
-            ],
-          ),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (appState.currentDraft != null) ...[
+              if (draft != null) ...[
+                const SizedBox(width: 8),
                 OutlinedButton.icon(
-                  icon: const Icon(Icons.refresh, size: 18),
+                  icon: const Icon(Icons.shuffle, size: 16),
                   label: const Text('Пересобрать'),
                   onPressed: appState.isDraftLockedFromRebuild
                       ? null
                       : () => _confirmRebuild(context),
-                ),
-                const SizedBox(width: 8),
-              ] else ...[
-                FilledButton.icon(
-                  icon: const Icon(Icons.auto_awesome, size: 18),
-                  label: const Text('Собрать день'),
-                  onPressed: appState.isReadOnly
-                      ? null
-                      : () => _handleBuildDay(context),
-                ),
-                const SizedBox(width: 8),
-              ],
-              if (appState.currentDraft?.status == DraftStatus.completed) ...[
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.green.shade100,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.green.shade400),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.check_circle,
-                        size: 16,
-                        color: Colors.green.shade800,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Отправлен в Jira',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green.shade900,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ] else ...[
-                FilledButton.icon(
-                  icon: appState.isSubmittingDay
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.cloud_upload_outlined, size: 18),
-                  label: Text(
-                    appState.currentSegments.any(
-                          (s) => s.sendState == SendState.failed,
-                        )
-                        ? 'Повторить отправку'
-                        : 'Отправить в Jira',
-                  ),
-                  onPressed:
-                      (appState.currentDraft == null ||
-                          appState.validationErrors.isNotEmpty ||
-                          appState.isBuildingDay ||
-                          appState.isSubmittingDay ||
-                          appState.isReadOnly ||
-                          appState.currentSegments.isEmpty)
-                      ? null
-                      : () => _handleSendDraft(context),
                 ),
               ],
             ],
@@ -234,50 +164,109 @@ class DayScreen extends StatelessWidget {
   }
 
   Widget _buildSummaryStats(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final draft = appState.currentDraft!;
+    final start = _formatTime(draft.startUtc.toLocal());
+    final end = _formatTime(draft.endUtc.toLocal());
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      color: Theme.of(context).colorScheme.surface,
+      margin: const EdgeInsets.fromLTRB(22, 0, 22, 18),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface(isDark),
+        border: Border.all(color: AppColors.line(isDark)),
+        borderRadius: BorderRadius.circular(9),
+      ),
       child: Wrap(
-        spacing: 16,
-        runSpacing: 8,
+        spacing: 28,
+        runSpacing: 12,
         children: [
-          _StatChip(
-            label: 'Полный день',
+          _DayMetric(label: 'Границы дня', value: '$start — $end'),
+          _DayMetric(
+            label: 'Весь день',
             value: LogClock.formatHoursMinutes(
               appState.totalDayDurationSeconds,
             ),
-            icon: Icons.access_time,
           ),
-          _StatChip(
+          _DayMetric(
             label: 'Паузы',
             value: LogClock.formatHoursMinutes(
               appState.totalBreaksDurationSeconds,
             ),
-            icon: Icons.coffee,
           ),
-          _StatChip(
+          _DayMetric(
             label: 'Новое время',
             value: LogClock.formatHoursMinutes(
               appState.totalSegmentsDurationSeconds,
             ),
-            icon: Icons.timelapse,
-            color: Theme.of(context).colorScheme.primary,
+            color: AppColors.primary(isDark),
           ),
-          _StatChip(
+          _DayMetric(
             label: 'Уже в Jira',
             value: LogClock.formatHoursMinutes(
               appState.totalExistingDurationSeconds,
             ),
-            icon: Icons.cloud_done_outlined,
-            color: Colors.purple.shade700,
+            color: AppColors.muted(isDark),
           ),
-          _StatChip(
-            label: 'Всего в Jira',
-            value: LogClock.formatHoursMinutes(
-              appState.totalJiraDurationSeconds,
-            ),
-            icon: Icons.check_circle_outline,
-            color: Colors.teal.shade700,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDayGrid(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 0, 22, 18),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 830) {
+            return SingleChildScrollView(
+              child: Column(
+                children: [
+                  SizedBox(height: 420, child: _buildSchedulePanel(context)),
+                  const SizedBox(height: 20),
+                  SizedBox(height: 280, child: _buildSourcesPanel(context)),
+                ],
+              ),
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: _buildSchedulePanel(context)),
+              const SizedBox(width: 24),
+              SizedBox(width: 240, child: _buildSourcesPanel(context)),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildEmptyDay(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.calendar_today_outlined,
+            size: 30,
+            color: AppColors.muted(isDark),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'Соберите день из своих логов',
+            style: TextStyle(fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'На «Работе» выберите записи и нужную дату.',
+            style: TextStyle(fontSize: 12, color: AppColors.muted(isDark)),
+          ),
+          const SizedBox(height: 16),
+          FilledButton(
+            onPressed: () => appState.selectTab(0),
+            child: const Text('Выбрать логи'),
           ),
         ],
       ),
@@ -330,37 +319,28 @@ class DayScreen extends StatelessWidget {
   Widget _buildSourcesPanel(BuildContext context) {
     final hasDraft = appState.currentDraft != null;
     final draftLogs = appState.currentDraftLogs;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          color: Theme.of(
-            context,
-          ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-          child: Row(
-            children: [
-              const Icon(Icons.list_alt, size: 18),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  hasDraft ? 'Источники черновика' : 'Логи для включения',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                hasDraft ? 'Из выбранных логов' : 'Логи для включения',
+                style: Theme.of(context).textTheme.titleSmall,
+                overflow: TextOverflow.ellipsis,
               ),
-              if (hasDraft)
-                Text(
-                  '${draftLogs.length} шт.',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-            ],
-          ),
+            ),
+            if (hasDraft)
+              Text(
+                '${draftLogs.length} шт.',
+                style: TextStyle(fontSize: 12, color: AppColors.muted(isDark)),
+              ),
+          ],
         ),
+        const SizedBox(height: 12),
         Expanded(
           child: hasDraft
               ? _buildDraftSourcesList(context)
@@ -564,19 +544,50 @@ class DayScreen extends StatelessWidget {
 
     items.sort((a, b) => a.startUtc.compareTo(b.startUtc));
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(12),
-      itemCount: items.length,
-      itemBuilder: (context, index) {
-        final item = items[index];
-        if (item.isSegment) {
-          return _buildSegmentCard(context, item.segment!);
-        } else if (item.isBreak) {
-          return _buildBreakCard(context, item.breakItem!);
-        } else {
-          return _buildExistingWorklogCard(context, item.existingWorklog!);
-        }
-      },
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('Расписание', style: Theme.of(context).textTheme.titleSmall),
+            const Spacer(),
+            Text(
+              '${appState.currentSegments.length} новых записей',
+              style: TextStyle(fontSize: 12, color: AppColors.muted(isDark)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppColors.surface(isDark),
+              border: Border.all(color: AppColors.line(isDark)),
+              borderRadius: BorderRadius.circular(9),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: ListView.separated(
+              itemCount: items.length,
+              separatorBuilder: (_, _) =>
+                  Divider(height: 1, color: AppColors.line(isDark)),
+              itemBuilder: (context, index) {
+                final item = items[index];
+                if (item.isSegment) {
+                  return _buildSegmentCard(context, item.segment!);
+                } else if (item.isBreak) {
+                  return _buildBreakCard(context, item.breakItem!);
+                } else {
+                  return _buildExistingWorklogCard(
+                    context,
+                    item.existingWorklog!,
+                  );
+                }
+              },
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -600,21 +611,20 @@ class DayScreen extends StatelessWidget {
       ),
     );
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Card(
-      margin: const EdgeInsets.symmetric(vertical: 4),
+      margin: EdgeInsets.zero,
       elevation: 0,
-      shape: RoundedRectangleBorder(
-        side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
-        borderRadius: BorderRadius.circular(8),
-      ),
+      color: AppColors.surface(isDark),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Колонка времени
             SizedBox(
-              width: 140,
+              width: 130,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -658,9 +668,7 @@ class DayScreen extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onPrimaryContainer,
+                            color: AppColors.primary(isDark),
                           ),
                         ),
                       ),
@@ -699,8 +707,8 @@ class DayScreen extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 12,
                       color: segment.description.isNotEmpty
-                          ? Theme.of(context).colorScheme.onSurface
-                          : Colors.grey,
+                          ? AppColors.muted(isDark)
+                          : AppColors.muted(isDark),
                     ),
                   ),
                   if (segment.lastError != null &&
@@ -800,23 +808,22 @@ class DayScreen extends StatelessWidget {
         '${endLocal.hour.toString().padLeft(2, '0')}:${endLocal.minute.toString().padLeft(2, '0')}';
     final durationStr = LogClock.formatHoursMinutes(breakItem.durationSeconds);
     final isLunch = breakItem.kind == BreakKind.lunch;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final foreground = isLunch
+        ? AppColors.warn(isDark)
+        : AppColors.muted(isDark);
 
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: isLunch ? Colors.amber.shade50 : Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: isLunch ? Colors.amber.shade200 : Colors.grey.shade300,
-        ),
+        color: isLunch ? AppColors.warnBg(isDark) : AppColors.bg(isDark),
       ),
       child: Row(
         children: [
           Icon(
             isLunch ? Icons.restaurant : Icons.coffee,
             size: 16,
-            color: isLunch ? Colors.amber.shade800 : Colors.brown.shade400,
+            color: foreground,
           ),
           const SizedBox(width: 8),
           Text(
@@ -824,16 +831,13 @@ class DayScreen extends StatelessWidget {
             style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 12,
-              color: isLunch ? Colors.amber.shade900 : Colors.brown.shade700,
+              color: foreground,
             ),
           ),
           const SizedBox(width: 16),
           Text(
             '$startStr — $endStr ($durationStr)',
-            style: TextStyle(
-              fontSize: 12,
-              color: isLunch ? Colors.amber.shade900 : Colors.brown.shade600,
-            ),
+            style: TextStyle(fontSize: 12, color: foreground),
           ),
         ],
       ),
@@ -848,15 +852,13 @@ class DayScreen extends StatelessWidget {
     final endStr =
         '${endLocal.hour.toString().padLeft(2, '0')}:${endLocal.minute.toString().padLeft(2, '0')}';
     final durationStr = LogClock.formatHoursMinutes(ew.durationSeconds);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Card(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      color: Colors.purple.shade50,
+      margin: EdgeInsets.zero,
+      color: AppColors.selected(isDark),
       elevation: 0,
-      shape: RoundedRectangleBorder(
-        side: BorderSide(color: Colors.purple.shade200),
-        borderRadius: BorderRadius.circular(8),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Row(
@@ -871,14 +873,14 @@ class DayScreen extends StatelessWidget {
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 13,
-                      color: Colors.purple.shade900,
+                      color: AppColors.text(isDark),
                     ),
                   ),
                   Text(
                     durationStr,
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.purple.shade700,
+                      color: AppColors.muted(isDark),
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -898,7 +900,7 @@ class DayScreen extends StatelessWidget {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.purple.shade200,
+                          color: AppColors.trackExisting(isDark),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
@@ -906,14 +908,17 @@ class DayScreen extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
-                            color: Colors.purple.shade900,
+                            color: AppColors.text(isDark),
                           ),
                         ),
                       ),
                       const SizedBox(width: 8),
-                      const Text(
+                      Text(
                         'Уже в Jira (только чтение)',
-                        style: TextStyle(fontSize: 11, color: Colors.purple),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.muted(isDark),
+                        ),
                       ),
                     ],
                   ),
@@ -923,7 +928,7 @@ class DayScreen extends StatelessWidget {
                       ew.comment!,
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.purple.shade900,
+                        color: AppColors.text(isDark),
                       ),
                     ),
                   ],
@@ -937,34 +942,35 @@ class DayScreen extends StatelessWidget {
   }
 
   Widget _buildSendStateBadge(BuildContext context, SendState state) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     Color bg;
     Color fg;
     String text;
 
     switch (state) {
       case SendState.pending:
-        bg = Colors.grey.shade200;
-        fg = Colors.grey.shade800;
+        bg = AppColors.hover(isDark);
+        fg = AppColors.muted(isDark);
         text = 'Ожидает';
         break;
       case SendState.sending:
-        bg = Colors.blue.shade100;
-        fg = Colors.blue.shade900;
+        bg = AppColors.selected(isDark);
+        fg = AppColors.primary(isDark);
         text = 'Отправка...';
         break;
       case SendState.sent:
-        bg = Colors.green.shade100;
-        fg = Colors.green.shade900;
+        bg = AppColors.greenBg(isDark);
+        fg = AppColors.green(isDark);
         text = 'Отправлено';
         break;
       case SendState.failed:
-        bg = Colors.red.shade100;
-        fg = Colors.red.shade900;
+        bg = AppColors.warnBg(isDark);
+        fg = AppColors.error(isDark);
         text = 'Ошибка';
         break;
       case SendState.unknown:
-        bg = Colors.amber.shade100;
-        fg = Colors.amber.shade900;
+        bg = AppColors.warnBg(isDark);
+        fg = AppColors.warn(isDark);
         text = 'Не определено';
         break;
     }
@@ -981,6 +987,88 @@ class DayScreen extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildSubmissionFooter(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final segments = appState.currentSegments;
+    final isCompleted = appState.currentDraft?.status == DraftStatus.completed;
+    final hasUnknown = segments.any((s) => s.sendState == SendState.unknown);
+    final hasFailed = segments.any((s) => s.sendState == SendState.failed);
+    final total = LogClock.formatHoursMinutes(
+      appState.totalSegmentsDurationSeconds,
+    );
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface(isDark),
+        border: Border(top: BorderSide(color: AppColors.line(isDark))),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isCompleted
+                      ? 'День готов'
+                      : '${segments.length} записей · $total',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Text(
+                  hasUnknown
+                      ? 'Есть запись с неизвестным результатом'
+                      : isCompleted
+                      ? 'Логи перемещены в историю'
+                      : appState.isDraftLockedFromRebuild
+                      ? 'Подтверждённые записи повторно не отправляются'
+                      : 'Будет добавлено к существующему времени в Jira',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.muted(isDark),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (isCompleted)
+            FilledButton(
+              onPressed: () => appState.selectTab(0),
+              child: const Text('Вернуться к работе'),
+            )
+          else
+            FilledButton.icon(
+              icon: appState.isSubmittingDay
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.cloud_upload_outlined, size: 18),
+              label: Text(
+                hasFailed ? 'Повторить отправку' : 'Отправить в Jira',
+              ),
+              onPressed:
+                  (appState.validationErrors.isNotEmpty ||
+                      appState.isBuildingDay ||
+                      appState.isSubmittingDay ||
+                      appState.isReadOnly ||
+                      segments.isEmpty)
+                  ? null
+                  : () => _handleSendDraft(context),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _formatTime(DateTime date) =>
+      '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
 
   void _handleBuildDay(BuildContext context) async {
     try {
@@ -1238,50 +1326,35 @@ class DayScreen extends StatelessWidget {
   }
 }
 
-class _StatChip extends StatelessWidget {
+class _DayMetric extends StatelessWidget {
   final String label;
   final String value;
-  final IconData icon;
   final Color? color;
 
-  const _StatChip({
-    required this.label,
-    required this.value,
-    required this.icon,
-    this.color,
-  });
+  const _DayMetric({required this.label, required this.value, this.color});
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final chipColor = color ?? AppColors.text(isDark);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: chipColor.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: AppColors.line(isDark)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: chipColor),
-          const SizedBox(width: 6),
-          Text(
-            '$label: ',
-            style: TextStyle(fontSize: 12, color: AppColors.muted(isDark)),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(fontSize: 12, color: AppColors.muted(isDark)),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w500,
+            color: color ?? AppColors.text(isDark),
+            fontFeatures: const [FontFeature.tabularFigures()],
           ),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: chipColor,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

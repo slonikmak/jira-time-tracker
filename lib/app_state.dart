@@ -232,6 +232,7 @@ class AppState extends ChangeNotifier {
       _currentConnection = conn;
       await loadIssues();
       await loadLogs();
+      loadDraftForSelectedDate();
       notifyListeners();
     }
   }
@@ -248,6 +249,7 @@ class AppState extends ChangeNotifier {
     _currentConnection = connection;
     await loadIssues();
     await loadLogs();
+    loadDraftForSelectedDate();
     notifyListeners();
   }
 
@@ -256,6 +258,7 @@ class AppState extends ChangeNotifier {
     _currentConnection = null;
     await loadIssues();
     await loadLogs();
+    loadDraftForSelectedDate();
     notifyListeners();
   }
 
@@ -619,6 +622,33 @@ class AppState extends ChangeNotifier {
       _selectedLogIds.add(logId);
     }
     notifyListeners();
+  }
+
+  bool canRemoveLogFromDraft(String logId) {
+    final date = getDraftDateForLog(logId);
+    if (date == null) return false;
+    final draft = store.getDayDraft(scope: activeScope, date: date);
+    if (draft == null || draft.status != DraftStatus.draft) return false;
+    return store
+        .getSegments(draftId: draft.id)
+        .every((segment) => segment.sendState == SendState.pending);
+  }
+
+  void removeLogFromDraft(String logId) {
+    final date = getDraftDateForLog(logId);
+    if (date == null) return;
+    final draft = store.getDayDraft(scope: activeScope, date: date);
+    if (draft == null) return;
+
+    store.removeLogFromDraft(draftId: draft.id, sourceLogId: logId);
+    _activeDraftDatesBySourceLogId = store.getActiveDraftDatesBySourceLogId(
+      scope: activeScope,
+    );
+    if (date == selectedDateString) {
+      loadDraftForSelectedDate();
+    } else {
+      notifyListeners();
+    }
   }
 
   void clearLogSelection() {

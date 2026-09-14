@@ -53,18 +53,18 @@ void main() {
     expect(find.text('Jira Time Tracker'), findsOneWidget);
 
     // Вкладки
-    expect(find.text('Работа'), findsOneWidget);
-    expect(find.text('День'), findsOneWidget);
+    expect(find.text('Работа'), findsWidgets);
+    expect(find.text('День'), findsWidgets);
 
     // Начальный экран - Работа
-    expect(find.text('ID или URL задачи'), findsOneWidget);
+    expect(find.text('Ключ, ID или ссылка на задачу Jira'), findsOneWidget);
     expect(find.text('Добавить'), findsOneWidget);
     expect(find.text('Недавние задачи (0)'), findsOneWidget);
 
     // Переключение на вкладку «День»
-    await tester.tap(find.text('День'));
+    await tester.tap(find.text('День').first);
     await tester.pumpAndSettle();
-    expect(find.text('Полный день: '), findsOneWidget);
+    expect(find.text('Соберите день из своих логов'), findsOneWidget);
 
     // Кнопка настроек
     expect(find.byIcon(Icons.settings_outlined), findsOneWidget);

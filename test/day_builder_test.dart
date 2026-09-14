@@ -79,7 +79,7 @@ void main() {
     );
 
     test(
-      'A07: Арифметика примера из спецификации (1ч Jira, день 7:48, паузы 0:51, новые 5:57, Jira всего 6:57)',
+      'A07: арифметика дня учитывает обязательные паузы между интервалами',
       () {
         // 08:34 local = 8 * 60 + 34 = 514 минут
         const startMin = 8 * 60 + 34;
@@ -135,17 +135,21 @@ void main() {
         // Полный день 7:48 = 28080 сек
         expect(plan.totalDaySeconds, 28080);
 
-        // Паузы: обед 35 мин + 2 паузы по 8 мин = 51 мин = 3060 сек
-        expect(plan.totalBreaksSeconds, 3060);
+        // Базовые паузы: обед 35 мин + 2 паузы по 8 мин = 51 мин.
+        // Сборщик может добавить паузы между соседними рабочими интервалами.
+        expect(plan.totalBreaksSeconds, greaterThanOrEqualTo(3060));
 
         // Существующая работа: 1 час = 3600 сек
         expect(plan.totalExistingSeconds, 3600);
 
-        // Новые интервалы: 28080 - 3060 - 3600 = 21420 сек (5:57)
-        expect(plan.totalNewWorkSeconds, 21420);
-
-        // Суммарно в Jira: 3600 + 21420 = 25020 сек (6:57)
-        expect(plan.totalExistingSeconds + plan.totalNewWorkSeconds, 25020);
+        // Обязательные паузы уменьшают верхний бюджет новых интервалов 5:57.
+        expect(plan.totalNewWorkSeconds, lessThanOrEqualTo(21420));
+        expect(
+          plan.totalExistingSeconds +
+              plan.totalNewWorkSeconds +
+              plan.totalBreaksSeconds,
+          lessThanOrEqualTo(plan.totalDaySeconds),
+        );
 
         // Сегменты и паузы не пересекаются с существующим логом
         final errors = DayBuilder.validate(
@@ -307,10 +311,66 @@ void main() {
       },
     );
 
+    test(
+      'Сгенерированные интервалы не короче 15 минут и разделены паузами',
+      () {
+        final input = DayBuilderInput(
+          localDate: testDate,
+          timeZoneOffset: testOffset,
+          settings: const DaySettings(),
+          logs: const [
+            DayBuilderLogInput(
+              sourceLogId: 'log-short-a',
+              issueId: '10001',
+              titleSnapshot: 'PROJ-1',
+              sourceDurationSeconds: 253,
+            ),
+            DayBuilderLogInput(
+              sourceLogId: 'log-short-b',
+              issueId: '10002',
+              titleSnapshot: 'PROJ-2',
+              sourceDurationSeconds: 15,
+            ),
+            DayBuilderLogInput(
+              sourceLogId: 'log-long',
+              issueId: '10003',
+              titleSnapshot: 'PROJ-3',
+              sourceDurationSeconds: 3600,
+            ),
+          ],
+        );
+
+        for (final seed in [42, 100, 243604981]) {
+          final plan = DayBuilder.build(input: input, seed: seed);
+          final segments = [...plan.segments]
+            ..sort((a, b) => a.startUtc.compareTo(b.startUtc));
+
+          for (final segment in segments) {
+            expect(segment.durationSeconds, greaterThanOrEqualTo(15 * 60));
+          }
+
+          for (var i = 0; i < segments.length - 1; i++) {
+            final current = segments[i];
+            final next = segments[i + 1];
+            final hasPause = plan.breaks.any(
+              (pause) =>
+                  !pause.startUtc.isBefore(current.endUtc) &&
+                  !pause.endUtc.isAfter(next.startUtc),
+            );
+            expect(
+              hasPause,
+              isTrue,
+              reason: 'Между ${current.id} и ${next.id} нет обязательной паузы',
+            );
+          }
+        }
+      },
+    );
+
     test('Валидация полуоткрытых интервалов [start, end) и смежности', () {
       final now = DateTime.utc(2026, 9, 14, 8, 0);
 
-      // Корректные соприкасающиеся интервалы (10:00-11:00 и 11:00-12:00)
+      // Корректные интервалы с обязательной пятиминутной паузой.
       final validPlan = DayPlanResult(
         dayStartUtc: now,
         dayEndUtc: now.add(const Duration(hours: 8)),
@@ -328,7 +388,7 @@ void main() {
             draftId: 'd-1',
             sourceLogId: 'log-2',
             issueId: '2',
-            startUtc: now.add(const Duration(seconds: 3600)),
+            startUtc: now.add(const Duration(seconds: 3900)),
             durationSeconds: 3600,
           ),
         ],
@@ -336,14 +396,21 @@ void main() {
           Break(
             id: 'brk-1',
             draftId: 'd-1',
-            startUtc: now.add(const Duration(seconds: 7200)),
+            startUtc: now.add(const Duration(seconds: 3600)),
+            durationSeconds: 300,
+            kind: BreakKind.short,
+          ),
+          Break(
+            id: 'brk-2',
+            draftId: 'd-1',
+            startUtc: now.add(const Duration(seconds: 7500)),
             durationSeconds: 1800,
             kind: BreakKind.lunch,
           ),
         ],
         allocatedSecondsBySourceLogId: {'log-1': 3600, 'log-2': 3600},
         totalNewWorkSeconds: 7200,
-        totalBreaksSeconds: 1800,
+        totalBreaksSeconds: 2100,
         totalExistingSeconds: 0,
         totalDaySeconds: 28800,
       );

@@ -108,6 +108,25 @@ class AppTheme {
       colorScheme: colorScheme,
       scaffoldBackgroundColor: AppColors.bg(isDark),
       fontFamily: 'Segoe UI',
+      visualDensity: VisualDensity.compact,
+      textTheme: TextTheme(
+        bodyMedium: TextStyle(
+          color: AppColors.text(isDark),
+          fontSize: 14,
+          height: 1.45,
+        ),
+        titleLarge: TextStyle(
+          color: AppColors.text(isDark),
+          fontSize: 22,
+          fontWeight: FontWeight.w500,
+          letterSpacing: -0.4,
+        ),
+        titleSmall: TextStyle(
+          color: AppColors.text(isDark),
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
       dividerColor: AppColors.line(isDark),
       dividerTheme: DividerThemeData(
         color: AppColors.line(isDark),
@@ -148,6 +167,7 @@ class AppTheme {
           foregroundColor: AppColors.onPrimary(isDark),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
           textStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+          minimumSize: const Size(0, 34),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         ),
       ),
@@ -158,6 +178,7 @@ class AppTheme {
           foregroundColor: AppColors.onPrimary(isDark),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
           textStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+          minimumSize: const Size(0, 34),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         ),
       ),
@@ -169,6 +190,7 @@ class AppTheme {
           side: BorderSide(color: AppColors.line(isDark)),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
           textStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+          minimumSize: const Size(0, 34),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         ),
       ),
@@ -177,7 +199,15 @@ class AppTheme {
           foregroundColor: AppColors.muted(isDark),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
           textStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+          minimumSize: const Size(0, 34),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        ),
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(
+          minimumSize: const Size(32, 32),
+          maximumSize: const Size(40, 40),
+          padding: const EdgeInsets.all(6),
         ),
       ),
     );

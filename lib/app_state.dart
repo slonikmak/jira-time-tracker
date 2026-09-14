@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import 'connection_store.dart';
+import 'day_builder.dart';
 import 'issue_parser.dart';
 import 'jira_client.dart';
 import 'local_store.dart';
@@ -67,8 +70,60 @@ class AppState extends ChangeNotifier {
     _activeDraftDatesBySourceLogId = store.getActiveDraftDatesBySourceLogId(
       scope: activeScope,
     );
+    loadDraftForSelectedDate();
     _updateTicker();
   }
+
+  DateTime _selectedDate = DateTime(
+    DateTime.now().year,
+    DateTime.now().month,
+    DateTime.now().day,
+  );
+  DayDraft? _currentDraft;
+  List<DraftLog> _currentDraftLogs = [];
+  List<Segment> _currentSegments = [];
+  List<Break> _currentBreaks = [];
+  List<ImportedWorklog> _importedWorklogs = [];
+  DaySettings _daySettings = const DaySettings();
+  final Set<String> _lockedSourceLogIds = {};
+  List<String> _validationErrors = [];
+  bool _isBuildingDay = false;
+
+  DateTime get selectedDate => _selectedDate;
+  DayDraft? get currentDraft => _currentDraft;
+  List<DraftLog> get currentDraftLogs => List.unmodifiable(_currentDraftLogs);
+  List<Segment> get currentSegments => List.unmodifiable(_currentSegments);
+  List<Break> get currentBreaks => List.unmodifiable(_currentBreaks);
+  List<ImportedWorklog> get importedWorklogs =>
+      List.unmodifiable(_importedWorklogs);
+  DaySettings get daySettings => _daySettings;
+  Set<String> get lockedSourceLogIds => Set.unmodifiable(_lockedSourceLogIds);
+  List<String> get validationErrors => List.unmodifiable(_validationErrors);
+  bool get isBuildingDay => _isBuildingDay;
+
+  String get selectedDateString =>
+      '${_selectedDate.year.toString().padLeft(4, '0')}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
+
+  bool get isDraftLockedFromRebuild =>
+      _currentDraft != null &&
+      (_currentDraft!.status != DraftStatus.draft ||
+          _currentSegments.any((s) => s.sendState == SendState.sent));
+
+  int get totalDayDurationSeconds => _currentDraft != null
+      ? _currentDraft!.endUtc.difference(_currentDraft!.startUtc).inSeconds
+      : 0;
+
+  int get totalBreaksDurationSeconds =>
+      _currentBreaks.fold<int>(0, (sum, b) => sum + b.durationSeconds);
+
+  int get totalSegmentsDurationSeconds =>
+      _currentSegments.fold<int>(0, (sum, s) => sum + s.durationSeconds);
+
+  int get totalExistingDurationSeconds =>
+      _importedWorklogs.fold<int>(0, (sum, ew) => sum + ew.durationSeconds);
+
+  int get totalJiraDurationSeconds =>
+      totalSegmentsDurationSeconds + totalExistingDurationSeconds;
 
   Map<String, String> get activeDraftDatesBySourceLogId =>
       Map.unmodifiable(_activeDraftDatesBySourceLogId);
@@ -561,6 +616,307 @@ class AppState extends ChangeNotifier {
       _tickerTimer?.cancel();
       _tickerTimer = null;
     }
+  }
+
+  void setSelectedDate(DateTime date) {
+    _selectedDate = DateTime(date.year, date.month, date.day);
+    loadDraftForSelectedDate();
+  }
+
+  void previousDay() {
+    setSelectedDate(_selectedDate.subtract(const Duration(days: 1)));
+  }
+
+  void nextDay() {
+    setSelectedDate(_selectedDate.add(const Duration(days: 1)));
+  }
+
+  void today() {
+    final now = DateTime.now();
+    setSelectedDate(DateTime(now.year, now.month, now.day));
+  }
+
+  void updateDaySettings(DaySettings settings) {
+    _daySettings = settings;
+    notifyListeners();
+  }
+
+  void toggleLogLock(String sourceLogId) {
+    if (_lockedSourceLogIds.contains(sourceLogId)) {
+      _lockedSourceLogIds.remove(sourceLogId);
+    } else {
+      _lockedSourceLogIds.add(sourceLogId);
+    }
+    notifyListeners();
+  }
+
+  void loadDraftForSelectedDate() {
+    final draft = store.getDayDraft(
+      scope: activeScope,
+      date: selectedDateString,
+    );
+
+    if (draft != null) {
+      _currentDraft = draft;
+      _currentDraftLogs = store.getDraftLogs(draftId: draft.id);
+      _currentSegments = store.getSegments(draftId: draft.id);
+      _currentBreaks = store.getBreaks(draftId: draft.id);
+
+      _lockedSourceLogIds.clear();
+      for (final dl in _currentDraftLogs) {
+        if (dl.durationLocked) {
+          _lockedSourceLogIds.add(dl.sourceLogId);
+        }
+      }
+
+      try {
+        _daySettings = DaySettings.fromJson(draft.settingsSnapshot);
+      } catch (_) {}
+
+      try {
+        final list = jsonDecode(draft.importedWorklogsSnapshot) as List;
+        _importedWorklogs = list
+            .map((m) => ImportedWorklog.fromMap(m as Map<String, dynamic>))
+            .toList();
+      } catch (_) {
+        _importedWorklogs = [];
+      }
+
+      _revalidateCurrentPlan();
+    } else {
+      _currentDraft = null;
+      _currentDraftLogs = [];
+      _currentSegments = [];
+      _currentBreaks = [];
+      _validationErrors = [];
+    }
+    notifyListeners();
+  }
+
+  void setImportedWorklogs(List<ImportedWorklog> worklogs) {
+    _importedWorklogs = List.from(worklogs);
+    _revalidateCurrentPlan();
+    notifyListeners();
+  }
+
+  void _revalidateCurrentPlan() {
+    if (_currentDraft == null) {
+      _validationErrors = [];
+      return;
+    }
+
+    final plan = DayPlanResult(
+      dayStartUtc: _currentDraft!.startUtc,
+      dayEndUtc: _currentDraft!.endUtc,
+      segments: _currentSegments,
+      breaks: _currentBreaks,
+      allocatedSecondsBySourceLogId: {},
+      totalNewWorkSeconds: totalSegmentsDurationSeconds,
+      totalBreaksSeconds: totalBreaksDurationSeconds,
+      totalExistingSeconds: totalExistingDurationSeconds,
+      totalDaySeconds: totalDayDurationSeconds,
+    );
+
+    _validationErrors = DayBuilder.validate(
+      plan: plan,
+      existingWorklogs: _importedWorklogs,
+    );
+  }
+
+  Future<void> buildDay({int? customSeed}) async {
+    if (isDraftLockedFromRebuild) {
+      throw StateError(
+        'Нельзя пересобрать частично или полностью отправленный день.',
+      );
+    }
+
+    _isBuildingDay = true;
+    notifyListeners();
+
+    try {
+      final builderLogs = <DayBuilderLogInput>[];
+
+      if (_currentDraft != null && _currentDraftLogs.isNotEmpty) {
+        // Пересборка существующего черновика: сохраняем привязанные логи
+        for (final dl in _currentDraftLogs) {
+          final isLocked = _lockedSourceLogIds.contains(dl.sourceLogId);
+          final srcLog = _logs.firstWhere(
+            (l) => l.id == dl.sourceLogId,
+            orElse: () => LocalLog(
+              id: dl.sourceLogId,
+              scope: activeScope,
+              issueId: '',
+              titleSnapshot: '',
+              accumulatedSeconds: dl.sourceDurationSeconds,
+              createdAtUtc: DateTime.now().toUtc(),
+            ),
+          );
+          builderLogs.add(
+            DayBuilderLogInput(
+              sourceLogId: dl.sourceLogId,
+              issueId: srcLog.issueId,
+              titleSnapshot: srcLog.titleSnapshot,
+              description: dl.descriptionSnapshot,
+              sourceDurationSeconds: dl.sourceDurationSeconds,
+              durationLocked: isLocked,
+            ),
+          );
+        }
+      } else {
+        // Первая сборка: берём выбранные логи из очереди (или все незавершенные, если ничего не выбрано)
+        final candidates = _selectedLogIds.isNotEmpty
+            ? _logs.where((l) => _selectedLogIds.contains(l.id)).toList()
+            : unconsumedLogs.where((l) => !l.isRunning).toList();
+
+        if (candidates.isEmpty) {
+          throw const DayBuilderException(
+            'Не выбрано ни одного лога для сборки дня.',
+          );
+        }
+
+        for (final c in candidates) {
+          if (c.isRunning) {
+            throw const DayBuilderException(
+              'Работающий лог нельзя включить в черновик дня.',
+            );
+          }
+          if (isLogInDraft(c.id) &&
+              getDraftDateForLog(c.id) != selectedDateString) {
+            throw DayBuilderException(
+              'Лог ${c.titleSnapshot} уже включен в черновик на дату ${getDraftDateForLog(c.id)}.',
+            );
+          }
+          builderLogs.add(
+            DayBuilderLogInput(
+              sourceLogId: c.id,
+              issueId: c.issueId,
+              titleSnapshot: c.titleSnapshot,
+              description: c.description,
+              sourceDurationSeconds: c.accumulatedSeconds,
+              durationLocked: _lockedSourceLogIds.contains(c.id),
+            ),
+          );
+        }
+      }
+
+      final seed = customSeed ?? Random().nextInt(1000000000);
+      final draftId = _currentDraft?.id ?? const Uuid().v4();
+
+      final input = DayBuilderInput(
+        localDate: _selectedDate,
+        timeZoneOffset: DateTime.now().timeZoneOffset,
+        settings: _daySettings,
+        logs: builderLogs,
+        existingWorklogs: _importedWorklogs,
+        draftId: draftId,
+      );
+
+      final plan = DayBuilder.build(input: input, seed: seed);
+
+      final newDraft = DayDraft(
+        id: draftId,
+        scope: activeScope,
+        date: selectedDateString,
+        startUtc: plan.dayStartUtc,
+        endUtc: plan.dayEndUtc,
+        seed: seed,
+        settingsSnapshot: _daySettings.toJson(),
+        importedWorklogsSnapshot: jsonEncode(
+          _importedWorklogs.map((e) => e.toMap()).toList(),
+        ),
+        status: DraftStatus.draft,
+      );
+
+      final newDraftLogs = builderLogs
+          .map(
+            (b) => DraftLog(
+              draftId: draftId,
+              sourceLogId: b.sourceLogId,
+              sourceDurationSeconds: b.sourceDurationSeconds,
+              descriptionSnapshot: b.description,
+              durationLocked: b.durationLocked,
+            ),
+          )
+          .toList();
+
+      store.saveDayDraft(
+        draft: newDraft,
+        draftLogs: newDraftLogs,
+        segments: plan.segments,
+        breaks: plan.breaks,
+      );
+
+      _currentDraft = newDraft;
+      _currentDraftLogs = newDraftLogs;
+      _currentSegments = plan.segments;
+      _currentBreaks = plan.breaks;
+      _activeDraftDatesBySourceLogId = store.getActiveDraftDatesBySourceLogId(
+        scope: activeScope,
+      );
+      _revalidateCurrentPlan();
+      _selectedLogIds.clear();
+      _statusMessage = 'День успешно собран.';
+    } finally {
+      _isBuildingDay = false;
+      notifyListeners();
+    }
+  }
+
+  void updateSegment({
+    required String segmentId,
+    required DateTime startUtc,
+    required int durationSeconds,
+    required String description,
+  }) {
+    if (_currentDraft == null) return;
+    final idx = _currentSegments.indexWhere((s) => s.id == segmentId);
+    if (idx == -1) return;
+
+    final oldSegment = _currentSegments[idx];
+    final updatedSegment = oldSegment.copyWith(
+      startUtc: startUtc,
+      durationSeconds: durationSeconds,
+      description: description,
+    );
+
+    final updatedList = List<Segment>.from(_currentSegments);
+    updatedList[idx] = updatedSegment;
+    updatedList.sort((a, b) => a.startUtc.compareTo(b.startUtc));
+
+    _currentSegments = updatedList;
+
+    // Проверяем, не расширились ли границы дня
+    var newStart = _currentDraft!.startUtc;
+    var newEnd = _currentDraft!.endUtc;
+    if (updatedSegment.startUtc.isBefore(newStart)) {
+      newStart = updatedSegment.startUtc;
+    }
+    if (updatedSegment.endUtc.isAfter(newEnd)) {
+      newEnd = updatedSegment.endUtc;
+    }
+
+    if (newStart != _currentDraft!.startUtc ||
+        newEnd != _currentDraft!.endUtc) {
+      _currentDraft = _currentDraft!.copyWith(
+        startUtc: newStart,
+        endUtc: newEnd,
+      );
+      store.updateDayDraft(_currentDraft!);
+    }
+
+    store.updateSegment(updatedSegment);
+    _revalidateCurrentPlan();
+    notifyListeners();
+  }
+
+  void deleteSegment(String segmentId) {
+    if (_currentDraft == null) return;
+    store.deleteSegment(draftId: _currentDraft!.id, segmentId: segmentId);
+    loadDraftForSelectedDate();
+    _activeDraftDatesBySourceLogId = store.getActiveDraftDatesBySourceLogId(
+      scope: activeScope,
+    );
+    notifyListeners();
   }
 
   void setStatusMessage(String? message) {

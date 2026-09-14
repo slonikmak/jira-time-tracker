@@ -64,7 +64,7 @@ void main() {
     // Переключение на вкладку «День»
     await tester.tap(find.text('День'));
     await tester.pumpAndSettle();
-    expect(find.text('Экран «День»'), findsOneWidget);
+    expect(find.text('Полный день: '), findsOneWidget);
 
     // Кнопка настроек
     expect(find.byIcon(Icons.settings_outlined), findsOneWidget);

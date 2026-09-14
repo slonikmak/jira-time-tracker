@@ -314,10 +314,10 @@ class LocalStore {
     _checkWritable();
     _db.execute('BEGIN TRANSACTION;');
     try {
+      upsertIssue(issue);
       for (final log in logs) {
         upsertLocalLog(log);
       }
-      upsertIssue(issue);
       _db.execute('COMMIT;');
     } catch (e) {
       _db.execute('ROLLBACK;');
@@ -344,6 +344,305 @@ class LocalStore {
       _db.execute('ROLLBACK;');
       rethrow;
     }
+  }
+
+  /// Сохранение/замена черновика дня со всеми привязками логов, сегментами и паузами (транзакционно).
+  void saveDayDraft({
+    required DayDraft draft,
+    required List<DraftLog> draftLogs,
+    required List<Segment> segments,
+    required List<Break> breaks,
+  }) {
+    _checkWritable();
+    _db.execute('BEGIN TRANSACTION;');
+    try {
+      // Проверка: один активный незавершенный черновик на (scope, date)
+      final existingDraft = getDayDraft(scope: draft.scope, date: draft.date);
+      if (existingDraft != null && existingDraft.id != draft.id) {
+        _db.execute('DELETE FROM day_drafts WHERE id = ?;', [existingDraft.id]);
+      }
+
+      // Проверка: лог не может быть включен в черновик на другую незавершенную дату (A04, A11)
+      final activeDates = getActiveDraftDatesBySourceLogId(scope: draft.scope);
+      for (final dl in draftLogs) {
+        final existingDate = activeDates[dl.sourceLogId];
+        if (existingDate != null && existingDate != draft.date) {
+          throw StateError(
+            'Лог ${dl.sourceLogId} уже включен в черновик на дату $existingDate.',
+          );
+        }
+      }
+
+      // Upsert day_drafts
+      _db.execute(
+        '''
+        INSERT OR REPLACE INTO day_drafts (id, scope, date, start_utc, end_utc, seed, settings_snapshot, imported_worklogs_snapshot, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+      ''',
+        [
+          draft.id,
+          draft.scope,
+          draft.date,
+          draft.startUtc.toIso8601String(),
+          draft.endUtc.toIso8601String(),
+          draft.seed,
+          draft.settingsSnapshot,
+          draft.importedWorklogsSnapshot,
+          draft.status.name,
+        ],
+      );
+
+      // Очищаем старые связанные записи этого черновика
+      _db.execute('DELETE FROM draft_logs WHERE draft_id = ?;', [draft.id]);
+      _db.execute('DELETE FROM segments WHERE draft_id = ?;', [draft.id]);
+      _db.execute('DELETE FROM breaks WHERE draft_id = ?;', [draft.id]);
+
+      // Вставляем draft_logs
+      for (final dl in draftLogs) {
+        _db.execute(
+          '''
+          INSERT INTO draft_logs (draft_id, source_log_id, source_duration_seconds, description_snapshot, duration_locked)
+          VALUES (?, ?, ?, ?, ?);
+        ''',
+          [
+            draft.id,
+            dl.sourceLogId,
+            dl.sourceDurationSeconds,
+            dl.descriptionSnapshot,
+            dl.durationLocked ? 1 : 0,
+          ],
+        );
+      }
+
+      // Вставляем segments
+      for (final s in segments) {
+        _db.execute(
+          '''
+          INSERT INTO segments (id, draft_id, source_log_id, issue_id, start_utc, duration_seconds, description, send_state, jira_worklog_id, last_error, frozen_payload)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        ''',
+          [
+            s.id,
+            draft.id,
+            s.sourceLogId,
+            s.issueId,
+            s.startUtc.toIso8601String(),
+            s.durationSeconds,
+            s.description,
+            s.sendState.name,
+            s.jiraWorklogId,
+            s.lastError,
+            s.frozenPayload,
+          ],
+        );
+      }
+
+      // Вставляем breaks
+      for (final b in breaks) {
+        _db.execute(
+          '''
+          INSERT INTO breaks (id, draft_id, start_utc, duration_seconds, kind)
+          VALUES (?, ?, ?, ?, ?);
+        ''',
+          [
+            b.id,
+            draft.id,
+            b.startUtc.toIso8601String(),
+            b.durationSeconds,
+            b.kind.name,
+          ],
+        );
+      }
+
+      _db.execute('COMMIT;');
+    } catch (e) {
+      _db.execute('ROLLBACK;');
+      rethrow;
+    }
+  }
+
+  /// Получение черновика по scope и дате.
+  DayDraft? getDayDraft({required String scope, required String date}) {
+    final stmt = _db.prepare('''
+      SELECT id, scope, date, start_utc, end_utc, seed, settings_snapshot, imported_worklogs_snapshot, status
+      FROM day_drafts
+      WHERE scope = ? AND date = ?;
+    ''');
+    try {
+      final rows = stmt.select([scope, date]);
+      if (rows.isEmpty) return null;
+      return DayDraft.fromMap(rows.first);
+    } finally {
+      stmt.close();
+    }
+  }
+
+  /// Получение черновика по ID.
+  DayDraft? getDayDraftById(String draftId) {
+    final stmt = _db.prepare('''
+      SELECT id, scope, date, start_utc, end_utc, seed, settings_snapshot, imported_worklogs_snapshot, status
+      FROM day_drafts
+      WHERE id = ?;
+    ''');
+    try {
+      final rows = stmt.select([draftId]);
+      if (rows.isEmpty) return null;
+      return DayDraft.fromMap(rows.first);
+    } finally {
+      stmt.close();
+    }
+  }
+
+  /// Получение списка DraftLog для черновика.
+  List<DraftLog> getDraftLogs({required String draftId}) {
+    final stmt = _db.prepare('''
+      SELECT draft_id, source_log_id, source_duration_seconds, description_snapshot, duration_locked
+      FROM draft_logs
+      WHERE draft_id = ?;
+    ''');
+    try {
+      final rows = stmt.select([draftId]);
+      return rows.map((r) => DraftLog.fromMap(r)).toList();
+    } finally {
+      stmt.close();
+    }
+  }
+
+  /// Получение списка Segment для черновика, отсортированных по start_utc.
+  List<Segment> getSegments({required String draftId}) {
+    final stmt = _db.prepare('''
+      SELECT id, draft_id, source_log_id, issue_id, start_utc, duration_seconds, description, send_state, jira_worklog_id, last_error, frozen_payload
+      FROM segments
+      WHERE draft_id = ?
+      ORDER BY start_utc ASC;
+    ''');
+    try {
+      final rows = stmt.select([draftId]);
+      return rows.map((r) => Segment.fromMap(r)).toList();
+    } finally {
+      stmt.close();
+    }
+  }
+
+  /// Получение списка Break для черновика, отсортированных по start_utc.
+  List<Break> getBreaks({required String draftId}) {
+    final stmt = _db.prepare('''
+      SELECT id, draft_id, start_utc, duration_seconds, kind
+      FROM breaks
+      WHERE draft_id = ?
+      ORDER BY start_utc ASC;
+    ''');
+    try {
+      final rows = stmt.select([draftId]);
+      return rows.map((r) => Break.fromMap(r)).toList();
+    } finally {
+      stmt.close();
+    }
+  }
+
+  /// Обновление одного сегмента в базе данных.
+  void updateSegment(Segment segment) {
+    _checkWritable();
+    _db.execute(
+      '''
+      UPDATE segments
+      SET start_utc = ?, duration_seconds = ?, description = ?, send_state = ?, jira_worklog_id = ?, last_error = ?, frozen_payload = ?
+      WHERE id = ?;
+    ''',
+      [
+        segment.startUtc.toIso8601String(),
+        segment.durationSeconds,
+        segment.description,
+        segment.sendState.name,
+        segment.jiraWorklogId,
+        segment.lastError,
+        segment.frozenPayload,
+        segment.id,
+      ],
+    );
+  }
+
+  /// Обновление черновика (например, границ начала/конца или статуса).
+  void updateDayDraft(DayDraft draft) {
+    _checkWritable();
+    _db.execute(
+      '''
+      UPDATE day_drafts
+      SET start_utc = ?, end_utc = ?, seed = ?, settings_snapshot = ?, imported_worklogs_snapshot = ?, status = ?
+      WHERE id = ?;
+    ''',
+      [
+        draft.startUtc.toIso8601String(),
+        draft.endUtc.toIso8601String(),
+        draft.seed,
+        draft.settingsSnapshot,
+        draft.importedWorklogsSnapshot,
+        draft.status.name,
+        draft.id,
+      ],
+    );
+  }
+
+  /// Удаление сегмента. Если для sourceLogId больше не осталось сегментов,
+  /// удаляет привязку draft_logs, освобождая исходный лог обратно в очередь (A10, A13).
+  void deleteSegment({required String draftId, required String segmentId}) {
+    _checkWritable();
+    _db.execute('BEGIN TRANSACTION;');
+    try {
+      // Находим sourceLogId удаляемого сегмента
+      final stmt = _db.prepare(
+        'SELECT source_log_id FROM segments WHERE id = ?;',
+      );
+      final rows = stmt.select([segmentId]);
+      final sourceLogId = rows.isNotEmpty
+          ? rows.first['source_log_id'] as String
+          : null;
+      stmt.close();
+
+      _db.execute('DELETE FROM segments WHERE id = ?;', [segmentId]);
+
+      if (sourceLogId != null) {
+        // Проверяем, остались ли ещё сегменты с этим sourceLogId в этом черновике
+        final countStmt = _db.prepare(
+          'SELECT COUNT(*) as cnt FROM segments WHERE draft_id = ? AND source_log_id = ?;',
+        );
+        final countRows = countStmt.select([draftId, sourceLogId]);
+        final count = countRows.first['cnt'] as int;
+        countStmt.close();
+
+        if (count == 0) {
+          // Больше нет частей этого лога - освобождаем лог из черновика
+          _db.execute(
+            'DELETE FROM draft_logs WHERE draft_id = ? AND source_log_id = ?;',
+            [draftId, sourceLogId],
+          );
+        }
+      }
+
+      // Проверяем, остались ли вообще сегменты в черновике
+      final totalSegmentsStmt = _db.prepare(
+        'SELECT COUNT(*) as cnt FROM segments WHERE draft_id = ?;',
+      );
+      final totalSegments =
+          totalSegmentsStmt.select([draftId]).first['cnt'] as int;
+      totalSegmentsStmt.close();
+
+      if (totalSegments == 0) {
+        // Черновик пуст - удаляем его полностью
+        _db.execute('DELETE FROM day_drafts WHERE id = ?;', [draftId]);
+      }
+
+      _db.execute('COMMIT;');
+    } catch (e) {
+      _db.execute('ROLLBACK;');
+      rethrow;
+    }
+  }
+
+  /// Полное удаление черновика дня (каскадно удалит draft_logs, segments, breaks).
+  void deleteDayDraft(String draftId) {
+    _checkWritable();
+    _db.execute('DELETE FROM day_drafts WHERE id = ?;', [draftId]);
   }
 
   void close() {

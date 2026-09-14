@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../app_state.dart';
+import 'day_screen.dart';
 import 'settings_dialog.dart';
 import 'work_screen.dart';
 
@@ -72,7 +73,7 @@ class ShellScreen extends StatelessWidget {
                   child: TabBarView(
                     children: [
                       WorkScreen(appState: appState),
-                      _buildDayTabPlaceholder(context),
+                      DayScreen(appState: appState),
                     ],
                   ),
                 ),
@@ -81,27 +82,6 @@ class ShellScreen extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-
-  Widget _buildDayTabPlaceholder(BuildContext context) {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.calendar_today_outlined, size: 64, color: Colors.grey),
-          SizedBox(height: 16),
-          Text(
-            'Экран «День»',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-          ),
-          SizedBox(height: 8),
-          Text(
-            'Здесь будут генерация черновика дня, расписание и отправка в Jira.',
-            style: TextStyle(color: Colors.grey),
-          ),
-        ],
-      ),
     );
   }
 

@@ -335,6 +335,31 @@ class DayDraft {
       status: DraftStatus.fromString(map['status'] as String),
     );
   }
+
+  DayDraft copyWith({
+    String? id,
+    String? scope,
+    String? date,
+    DateTime? startUtc,
+    DateTime? endUtc,
+    int? seed,
+    String? settingsSnapshot,
+    String? importedWorklogsSnapshot,
+    DraftStatus? status,
+  }) {
+    return DayDraft(
+      id: id ?? this.id,
+      scope: scope ?? this.scope,
+      date: date ?? this.date,
+      startUtc: startUtc ?? this.startUtc,
+      endUtc: endUtc ?? this.endUtc,
+      seed: seed ?? this.seed,
+      settingsSnapshot: settingsSnapshot ?? this.settingsSnapshot,
+      importedWorklogsSnapshot:
+          importedWorklogsSnapshot ?? this.importedWorklogsSnapshot,
+      status: status ?? this.status,
+    );
+  }
 }
 
 /// Привязка исходного лога к черновику.
@@ -352,6 +377,23 @@ class DraftLog {
     required this.descriptionSnapshot,
     this.durationLocked = false,
   });
+
+  DraftLog copyWith({
+    String? draftId,
+    String? sourceLogId,
+    int? sourceDurationSeconds,
+    String? descriptionSnapshot,
+    bool? durationLocked,
+  }) {
+    return DraftLog(
+      draftId: draftId ?? this.draftId,
+      sourceLogId: sourceLogId ?? this.sourceLogId,
+      sourceDurationSeconds:
+          sourceDurationSeconds ?? this.sourceDurationSeconds,
+      descriptionSnapshot: descriptionSnapshot ?? this.descriptionSnapshot,
+      durationLocked: durationLocked ?? this.durationLocked,
+    );
+  }
 
   Map<String, dynamic> toMap() {
     return {

@@ -135,10 +135,18 @@ class LocalStore {
 
   /// Восстановление после аварии: переводит зависшие sending в unknown (сценарий A19).
   void recoverUnfinishedSending() {
-    _checkWritable();
-    _db.execute(
-      "UPDATE segments SET send_state = 'unknown' WHERE send_state = 'sending';",
-    );
+    if (isReadOnly) return;
+    _db.execute('''
+      UPDATE segments
+      SET send_state = 'unknown',
+          last_error = 'Прервано до получения подтверждения (восстановлено при запуске)'
+      WHERE send_state = 'sending';
+    ''');
+    _db.execute('''
+      UPDATE day_drafts
+      SET status = 'draft'
+      WHERE status = 'sending';
+    ''');
   }
 
   // --- Операции с задачами (Issue) ---
@@ -643,6 +651,41 @@ class LocalStore {
   void deleteDayDraft(String draftId) {
     _checkWritable();
     _db.execute('DELETE FROM day_drafts WHERE id = ?;', [draftId]);
+  }
+
+  /// Пометка исходного лога как использованного (consumedAtUtc) (A10, A14).
+  void markLocalLogConsumed(String logId, DateTime consumedAtUtc) {
+    _checkWritable();
+    _db.execute('UPDATE local_logs SET consumed_at_utc = ? WHERE id = ?;', [
+      consumedAtUtc.toIso8601String(),
+      logId,
+    ]);
+  }
+
+  /// Проверяет, переведены ли ВСЕ сегменты данного исходного лога в статус sent (A10, A14).
+  bool areAllSegmentsSentForLog(String draftId, String sourceLogId) {
+    final stmt = _db.prepare(
+      "SELECT COUNT(*) as cnt FROM segments WHERE draft_id = ? AND source_log_id = ? AND send_state != 'sent';",
+    );
+    try {
+      final rows = stmt.select([draftId, sourceLogId]);
+      return (rows.first['cnt'] as int) == 0;
+    } finally {
+      stmt.close();
+    }
+  }
+
+  /// Проверяет, переведены ли ВСЕ сегменты черновика в статус sent.
+  bool areAllSegmentsSentForDraft(String draftId) {
+    final stmt = _db.prepare(
+      "SELECT COUNT(*) as cnt FROM segments WHERE draft_id = ? AND send_state != 'sent';",
+    );
+    try {
+      final rows = stmt.select([draftId]);
+      return (rows.first['cnt'] as int) == 0;
+    } finally {
+      stmt.close();
+    }
   }
 
   void close() {

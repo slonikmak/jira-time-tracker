@@ -661,6 +661,7 @@ class ImportedWorklog {
   final int durationSeconds;
   final String authorAccountId;
   final String? comment;
+  final String? segmentPropertyId;
 
   const ImportedWorklog({
     required this.id,
@@ -670,6 +671,7 @@ class ImportedWorklog {
     required this.durationSeconds,
     required this.authorAccountId,
     this.comment,
+    this.segmentPropertyId,
   });
 
   DateTime get endUtc => startUtc.add(Duration(seconds: durationSeconds));
@@ -683,6 +685,7 @@ class ImportedWorklog {
       'duration_seconds': durationSeconds,
       'author_account_id': authorAccountId,
       'comment': comment,
+      'segment_property_id': segmentPropertyId,
     };
   }
 
@@ -695,6 +698,7 @@ class ImportedWorklog {
       durationSeconds: map['duration_seconds'] as int,
       authorAccountId: map['author_account_id'] as String,
       comment: map['comment'] as String?,
+      segmentPropertyId: map['segment_property_id'] as String?,
     );
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../app_state.dart';
 import '../log_clock.dart';
 import '../models.dart';
+import '../worklog_sender.dart';
 import 'edit_segment_dialog.dart';
 
 /// Экран «День»: календарь, сборщик расписания, инспекция пауз и редактирование сегментов.
@@ -139,24 +140,67 @@ class DayScreen extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
               ],
-              FilledButton.icon(
-                icon: const Icon(Icons.cloud_upload_outlined, size: 18),
-                label: const Text('Отправить в Jira'),
-                onPressed:
-                    (appState.currentDraft == null ||
-                        appState.validationErrors.isNotEmpty ||
-                        appState.isBuildingDay)
-                    ? null
-                    : () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Отправка в Jira будет доступна на этапе 4.',
-                            ),
+              if (appState.currentDraft?.status == DraftStatus.completed) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade100,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.green.shade400),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.check_circle,
+                        size: 16,
+                        color: Colors.green.shade800,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Отправлен в Jira',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green.shade900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ] else ...[
+                FilledButton.icon(
+                  icon: appState.isSubmittingDay
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
                           ),
-                        );
-                      },
-              ),
+                        )
+                      : const Icon(Icons.cloud_upload_outlined, size: 18),
+                  label: Text(
+                    appState.currentSegments.any(
+                          (s) => s.sendState == SendState.failed,
+                        )
+                        ? 'Повторить отправку'
+                        : 'Отправить в Jira',
+                  ),
+                  onPressed:
+                      (appState.currentDraft == null ||
+                          appState.validationErrors.isNotEmpty ||
+                          appState.isBuildingDay ||
+                          appState.isSubmittingDay ||
+                          appState.isReadOnly ||
+                          appState.currentSegments.isEmpty)
+                      ? null
+                      : () => _handleSendDraft(context),
+                ),
+              ],
             ],
           ),
         ],
@@ -607,7 +651,19 @@ class DayScreen extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      const SizedBox(width: 8),
                       _buildSendStateBadge(context, segment.sendState),
+                      if (segment.jiraWorklogId != null) ...[
+                        const SizedBox(width: 6),
+                        Text(
+                          '#${segment.jiraWorklogId}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 4),
@@ -622,6 +678,60 @@ class DayScreen extends StatelessWidget {
                           : Colors.grey,
                     ),
                   ),
+                  if (segment.lastError != null &&
+                      segment.lastError!.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      segment.lastError!,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: segment.sendState == SendState.unknown
+                            ? Colors.amber.shade900
+                            : Colors.red.shade800,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                  if (segment.sendState == SendState.unknown) ...[
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        OutlinedButton.icon(
+                          icon: const Icon(Icons.sync, size: 14),
+                          label: const Text(
+                            'Сверить результат (A15)',
+                            style: TextStyle(fontSize: 11),
+                          ),
+                          onPressed: () =>
+                              _handleReconcileSegment(context, segment),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                        TextButton.icon(
+                          icon: const Icon(Icons.help_outline, size: 14),
+                          label: const Text(
+                            'Разрешить вручную (A15)',
+                            style: TextStyle(fontSize: 11),
+                          ),
+                          onPressed: () =>
+                              _openManualResolveDialog(context, segment),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -631,14 +741,22 @@ class DayScreen extends StatelessWidget {
               children: [
                 IconButton(
                   icon: const Icon(Icons.edit_outlined, size: 18),
-                  tooltip: 'Редактировать интервал (A13)',
-                  onPressed: () =>
-                      _openEditSegmentDialog(context, segment, issue.key),
+                  tooltip: segment.sendState == SendState.sent
+                      ? 'Уже отправлено в Jira'
+                      : 'Редактировать интервал (A13)',
+                  onPressed: segment.sendState == SendState.sent
+                      ? null
+                      : () =>
+                            _openEditSegmentDialog(context, segment, issue.key),
                 ),
                 IconButton(
                   icon: const Icon(Icons.delete_outline, size: 18),
-                  tooltip: 'Удалить интервал (A13)',
-                  onPressed: () => _confirmDeleteSegment(context, segment),
+                  tooltip: segment.sendState == SendState.sent
+                      ? 'Уже отправлено в Jira'
+                      : 'Удалить интервал (A13)',
+                  onPressed: segment.sendState == SendState.sent
+                      ? null
+                      : () => _confirmDeleteSegment(context, segment),
                 ),
               ],
             ),
@@ -930,6 +1048,166 @@ class DayScreen extends StatelessWidget {
             child: const Text('Удалить'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _handleSendDraft(BuildContext context) async {
+    final result = await appState.submitCurrentDraft();
+    if (!context.mounted) return;
+    if (result != null) {
+      if (result.isSuccess) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Успешно отправлено ${result.sent} записей в Jira!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else if (result.errorMessage != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.errorMessage!),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Отправлено: ${result.sent}, Ошибок: ${result.failed}, Не определено: ${result.unknown}',
+            ),
+            backgroundColor: Colors.amber.shade800,
+          ),
+        );
+      }
+    }
+  }
+
+  void _handleReconcileSegment(BuildContext context, Segment segment) async {
+    final res = await appState.reconcileSegment(segment);
+    if (!context.mounted) return;
+    if (res != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(res.message),
+          backgroundColor: res.status == ReconcileStatus.recovered
+              ? Colors.green
+              : (res.status == ReconcileStatus.conflict
+                    ? Colors.red
+                    : Colors.amber.shade800),
+        ),
+      );
+    }
+  }
+
+  void _openManualResolveDialog(BuildContext context, Segment segment) {
+    final idController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text('Разрешение неизвестного статуса (A15)'),
+            content: SizedBox(
+              width: 480,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Сегмент находится в состоянии «Не определено» (ответ Jira был потерян или прерван). Слепой повтор запрещён.',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Вариант 1: Указать ID созданной записи в Jira',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Приложение проверит автора, дату и длительность записи перед подтверждением:',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: idController,
+                          decoration: const InputDecoration(
+                            labelText: 'Worklog ID (например: 10042)',
+                            isDense: true,
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton(
+                        onPressed: () async {
+                          final text = idController.text.trim();
+                          if (text.isEmpty) return;
+                          Navigator.of(dialogCtx).pop();
+                          final res = await appState.manuallyLinkWorklog(
+                            segment,
+                            text,
+                          );
+                          if (!context.mounted) return;
+                          if (res != null) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  res.isSuccess
+                                      ? 'Запись успешно подтверждена и связана!'
+                                      : (res.errorMessage ?? 'Ошибка привязки'),
+                                ),
+                                backgroundColor: res.isSuccess
+                                    ? Colors.green
+                                    : Theme.of(context).colorScheme.error,
+                              ),
+                            );
+                          }
+                        },
+                        child: const Text('Связать'),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 32),
+                  const Text(
+                    'Вариант 2: Подтвердить отсутствие записи',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Если вы открыли Jira в браузере и точно убедились, что в задаче нет этой записи, вы можете вернуть интервал в статус ожидания для повторной отправки.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.replay, size: 16),
+                    label: const Text('Записи нет в Jira, разрешить повтор'),
+                    onPressed: () {
+                      Navigator.of(dialogCtx).pop();
+                      appState.manuallyConfirmAbsenceAndAllowRetry(segment);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Интервал переведён в статус ожидания для повторной отправки.',
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogCtx).pop(),
+                child: const Text('Отмена'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

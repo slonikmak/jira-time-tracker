@@ -10,6 +10,7 @@ import 'jira_client.dart';
 import 'local_store.dart';
 import 'log_clock.dart';
 import 'models.dart';
+import 'worklog_sender.dart';
 
 /// Период фильтрации задач по времени последнего использования.
 enum IssueFilterPeriod {
@@ -34,6 +35,7 @@ class AppState extends ChangeNotifier {
   final LocalStore store;
   final ConnectionStore connectionStore;
   final JiraClient jiraClient;
+  final WorklogSender worklogSender;
   final bool isReadOnly;
   final DateTime Function() nowProvider;
 
@@ -55,10 +57,18 @@ class AppState extends ChangeNotifier {
     required this.connectionStore,
     required this.jiraClient,
     required this.isReadOnly,
+    WorklogSender? worklogSender,
     JiraConnection? initialConnection,
     DateTime Function()? nowProvider,
   }) : _currentConnection = initialConnection,
-       nowProvider = nowProvider ?? (() => DateTime.now().toUtc()) {
+       nowProvider = nowProvider ?? (() => DateTime.now().toUtc()),
+       worklogSender =
+           worklogSender ??
+           WorklogSender(
+             store: store,
+             jiraClient: jiraClient,
+             nowProvider: nowProvider,
+           ) {
     _initData();
   }
 
@@ -89,6 +99,7 @@ class AppState extends ChangeNotifier {
   List<String> _validationErrors = [];
   bool _isBuildingDay = false;
   bool _isFetchingJiraWorklogs = false;
+  bool _isSubmittingDay = false;
 
   DateTime get selectedDate => _selectedDate;
   DayDraft? get currentDraft => _currentDraft;
@@ -98,6 +109,7 @@ class AppState extends ChangeNotifier {
   List<ImportedWorklog> get importedWorklogs =>
       List.unmodifiable(_importedWorklogs);
   bool get isFetchingJiraWorklogs => _isFetchingJiraWorklogs;
+  bool get isSubmittingDay => _isSubmittingDay;
   DaySettings get daySettings => _daySettings;
   Set<String> get lockedSourceLogIds => Set.unmodifiable(_lockedSourceLogIds);
   List<String> get validationErrors => List.unmodifiable(_validationErrors);
@@ -962,6 +974,114 @@ class AppState extends ChangeNotifier {
     _activeDraftDatesBySourceLogId = store.getActiveDraftDatesBySourceLogId(
       scope: activeScope,
     );
+    notifyListeners();
+  }
+
+  /// Отправка текущего черновика дня в Jira (сценарии A14, A17).
+  Future<SendDraftResult?> submitCurrentDraft() async {
+    final draft = _currentDraft;
+    final conn = _currentConnection;
+    if (draft == null || conn == null) return null;
+    final token = await connectionStore.getSavedToken();
+    if (token == null || token.isEmpty) {
+      _statusMessage = 'Токен Jira не найден в защищённом хранилище';
+      notifyListeners();
+      return null;
+    }
+
+    _isSubmittingDay = true;
+    _statusMessage = 'Отправка записей в Jira...';
+    notifyListeners();
+
+    try {
+      final result = await worklogSender.sendDraft(
+        draft: draft,
+        connection: conn,
+        token: token,
+        onSegmentProgress: (seg) {
+          _currentSegments = store.getSegments(draftId: draft.id);
+          notifyListeners();
+        },
+      );
+
+      loadDraftForSelectedDate();
+      _logs = store.getLocalLogs(scope: activeScope);
+
+      if (result.isSuccess) {
+        _statusMessage =
+            'Все записи (${result.sent}) успешно отправлены в Jira!';
+      } else if (result.errorMessage != null) {
+        _statusMessage = 'Ошибка отправки: ${result.errorMessage}';
+      } else {
+        _statusMessage =
+            'Отправка завершена: отправлено ${result.sent}, ошибок ${result.failed}, неизвестно ${result.unknown}.';
+      }
+      return result;
+    } catch (e) {
+      _statusMessage = 'Ошибка отправки в Jira: $e';
+      return null;
+    } finally {
+      _isSubmittingDay = false;
+      notifyListeners();
+    }
+  }
+
+  /// Сверка сегмента со статусом unknown через Jira properties (сценарий A15).
+  Future<ReconcileResult?> reconcileSegment(Segment segment) async {
+    final conn = _currentConnection;
+    if (conn == null) return null;
+    final token = await connectionStore.getSavedToken();
+    if (token == null || token.isEmpty) return null;
+
+    try {
+      final res = await worklogSender.reconcileSegment(
+        segment: segment,
+        connection: conn,
+        token: token,
+      );
+      loadDraftForSelectedDate();
+      _logs = store.getLocalLogs(scope: activeScope);
+      _statusMessage = res.message;
+      notifyListeners();
+      return res;
+    } catch (e) {
+      _statusMessage = 'Ошибка сверки: $e';
+      notifyListeners();
+      return null;
+    }
+  }
+
+  /// Ручная привязка ID записи в Jira (сценарий A15).
+  Future<ManualResolveResult?> manuallyLinkWorklog(
+    Segment segment,
+    String worklogId,
+  ) async {
+    final conn = _currentConnection;
+    if (conn == null) return null;
+    final token = await connectionStore.getSavedToken();
+    if (token == null || token.isEmpty) return null;
+
+    final res = await worklogSender.manuallyLinkWorklog(
+      segment: segment,
+      worklogId: worklogId,
+      connection: conn,
+      token: token,
+    );
+    loadDraftForSelectedDate();
+    _logs = store.getLocalLogs(scope: activeScope);
+    _statusMessage = res.isSuccess
+        ? 'Worklog успешно привязан!'
+        : (res.errorMessage ?? 'Ошибка привязки worklog');
+    notifyListeners();
+    return res;
+  }
+
+  /// Пользователь подтвердил отсутствие записи и разрешил повтор (сценарий A15).
+  void manuallyConfirmAbsenceAndAllowRetry(Segment segment) {
+    worklogSender.manuallyConfirmAbsenceAndAllowRetry(segment: segment);
+    loadDraftForSelectedDate();
+    _statusMessage =
+        'Статус сегмента сброшен на «В очереди». Разрешена повторная отправка.';
     notifyListeners();
   }
 

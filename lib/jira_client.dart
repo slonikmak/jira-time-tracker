@@ -13,6 +13,48 @@ class JiraApiException implements Exception {
   String toString() => message;
 }
 
+/// Классификация результата выполнения POST запроса worklog в Jira.
+enum JiraPostResultKind { success, failed, unknown }
+
+/// Результат отправки интервала в Jira.
+class JiraPostWorklogResult {
+  final JiraPostResultKind kind;
+  final String? worklogId;
+  final int? statusCode;
+  final String? errorMessage;
+
+  const JiraPostWorklogResult({
+    required this.kind,
+    this.worklogId,
+    this.statusCode,
+    this.errorMessage,
+  });
+
+  factory JiraPostWorklogResult.success(String worklogId) =>
+      JiraPostWorklogResult(
+        kind: JiraPostResultKind.success,
+        worklogId: worklogId,
+      );
+
+  factory JiraPostWorklogResult.failed({
+    int? statusCode,
+    String? errorMessage,
+  }) => JiraPostWorklogResult(
+    kind: JiraPostResultKind.failed,
+    statusCode: statusCode,
+    errorMessage: errorMessage,
+  );
+
+  factory JiraPostWorklogResult.unknown({
+    int? statusCode,
+    String? errorMessage,
+  }) => JiraPostWorklogResult(
+    kind: JiraPostResultKind.unknown,
+    statusCode: statusCode,
+    errorMessage: errorMessage,
+  );
+}
+
 /// Клиент для работы с Jira Cloud REST API.
 class JiraClient {
   final http.Client _client;
@@ -315,7 +357,7 @@ class JiraClient {
     while (isFirst || startAt < total) {
       isFirst = false;
       final uri = Uri.parse(
-        '${connection.apiBaseUrl}/rest/api/3/issue/$issueIdOrKey/worklog?startAt=$startAt&maxResults=$maxResults',
+        '${connection.apiBaseUrl}/rest/api/3/issue/$issueIdOrKey/worklog?startAt=$startAt&maxResults=$maxResults&expand=properties',
       );
       final response = await _client.get(
         uri,
@@ -342,6 +384,19 @@ class JiraClient {
         final timeSpentSec = (m['timeSpentSeconds'] as int?) ?? 0;
         final commentText = _extractTextFromComment(m['comment']);
 
+        String? segmentProp;
+        final props = m['properties'] as List?;
+        if (props != null) {
+          for (final p in props) {
+            if (p is Map && p['key'] == 'jira-time-tracker.segment') {
+              final val = p['value'];
+              if (val is Map) {
+                segmentProp = val['id']?.toString();
+              }
+            }
+          }
+        }
+
         DateTime? startUtc;
         try {
           startUtc = DateTime.parse(startedStr).toUtc();
@@ -357,6 +412,7 @@ class JiraClient {
               durationSeconds: timeSpentSec,
               authorAccountId: authorAccountId,
               comment: commentText,
+              segmentPropertyId: segmentProp,
             ),
           );
         }
@@ -438,6 +494,181 @@ class JiraClient {
     final result = filtered.values.toList()
       ..sort((a, b) => a.startUtc.compareTo(b.startUtc));
     return result;
+  }
+
+  /// Отправка интервала времени (worklog) в Jira с параметром adjustEstimate=leave (сценарий A14).
+  ///
+  /// Чётко классифицирует результат:
+  /// - 201 Created -> success(worklogId)
+  /// - 4xx Client error -> failed(statusCode, error)
+  /// - 5xx Server error, обрыв связи, таймаут -> unknown(statusCode, error)
+  Future<JiraPostWorklogResult> postWorklog({
+    required String issueIdOrKey,
+    required Map<String, dynamic> payload,
+    required JiraConnection connection,
+    required String token,
+  }) async {
+    final base = connection.apiBaseUrl;
+    final uri = Uri.parse(
+      '$base/rest/api/3/issue/$issueIdOrKey/worklog?adjustEstimate=leave',
+    );
+    final authHeader = buildBasicAuthHeader(connection.email, token);
+
+    try {
+      final response = await _client.post(
+        uri,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': authHeader,
+        },
+        body: jsonEncode(payload),
+      );
+
+      if (response.statusCode == 201) {
+        try {
+          final data = jsonDecode(response.body) as Map<String, dynamic>;
+          final id = (data['id'] as String?) ?? data['id']?.toString();
+          if (id != null && id.isNotEmpty) {
+            return JiraPostWorklogResult.success(id);
+          }
+          return JiraPostWorklogResult.unknown(
+            statusCode: response.statusCode,
+            errorMessage: 'Ответ Jira 201 не содержит ID созданного worklog',
+          );
+        } catch (e) {
+          return JiraPostWorklogResult.unknown(
+            statusCode: response.statusCode,
+            errorMessage: 'Некорректный JSON в ответе Jira 201: $e',
+          );
+        }
+      }
+
+      if (response.statusCode >= 400 && response.statusCode < 500) {
+        var msg = 'Отказ Jira (код ${response.statusCode})';
+        try {
+          final errData = jsonDecode(response.body);
+          if (errData is Map && errData['errorMessages'] is List) {
+            final list = errData['errorMessages'] as List;
+            if (list.isNotEmpty) {
+              msg = list.join(', ');
+            }
+          } else if (errData is Map && errData['errors'] is Map) {
+            final errors = (errData['errors'] as Map).values.join(', ');
+            if (errors.isNotEmpty) {
+              msg = errors;
+            }
+          }
+        } catch (_) {}
+        return JiraPostWorklogResult.failed(
+          statusCode: response.statusCode,
+          errorMessage: msg,
+        );
+      }
+
+      return JiraPostWorklogResult.unknown(
+        statusCode: response.statusCode,
+        errorMessage: 'Серверная ошибка Jira (код ${response.statusCode})',
+      );
+    } catch (e) {
+      return JiraPostWorklogResult.unknown(
+        statusCode: null,
+        errorMessage: 'Обрыв связи или таймаут: $e',
+      );
+    }
+  }
+
+  /// Загрузка конкретной записи worklog по ID (для ручного разрешения unknown, сценарий A15).
+  Future<ImportedWorklog?> getWorklogById({
+    required String issueIdOrKey,
+    required String worklogId,
+    required JiraConnection connection,
+    required String token,
+  }) async {
+    final base = connection.apiBaseUrl;
+    final uri = Uri.parse(
+      '$base/rest/api/3/issue/$issueIdOrKey/worklog/$worklogId?expand=properties',
+    );
+    final authHeader = buildBasicAuthHeader(connection.email, token);
+
+    try {
+      final response = await _client.get(
+        uri,
+        headers: {'Accept': 'application/json', 'Authorization': authHeader},
+      );
+
+      if (response.statusCode == 200) {
+        final m = jsonDecode(response.body) as Map<String, dynamic>;
+        final id = (m['id'] as String?) ?? m['id'].toString();
+        final author = (m['author'] as Map<String, dynamic>?) ?? {};
+        final authorAccountId = (author['accountId'] as String?) ?? '';
+        final startedStr = (m['started'] as String?) ?? '';
+        final timeSpentSec = (m['timeSpentSeconds'] as int?) ?? 0;
+        final commentText = _extractTextFromComment(m['comment']);
+
+        String? segmentProp;
+        final props = m['properties'] as List?;
+        if (props != null) {
+          for (final p in props) {
+            if (p is Map && p['key'] == 'jira-time-tracker.segment') {
+              final val = p['value'];
+              if (val is Map) {
+                segmentProp = val['id']?.toString();
+              }
+            }
+          }
+        }
+
+        DateTime? startUtc;
+        try {
+          startUtc = DateTime.parse(startedStr).toUtc();
+        } catch (_) {}
+
+        if (startUtc != null) {
+          return ImportedWorklog(
+            id: id,
+            issueId: issueIdOrKey,
+            startUtc: startUtc,
+            durationSeconds: timeSpentSec,
+            authorAccountId: authorAccountId,
+            comment: commentText,
+            segmentPropertyId: segmentProp,
+          );
+        }
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Получение свойства worklog (для сверки unknown через /properties, сценарий A15).
+  Future<Map<String, dynamic>?> getWorklogProperty({
+    required String issueIdOrKey,
+    required String worklogId,
+    required String propertyKey,
+    required JiraConnection connection,
+    required String token,
+  }) async {
+    final base = connection.apiBaseUrl;
+    final uri = Uri.parse(
+      '$base/rest/api/3/issue/$issueIdOrKey/worklog/$worklogId/properties/$propertyKey',
+    );
+    final authHeader = buildBasicAuthHeader(connection.email, token);
+
+    try {
+      final response = await _client.get(
+        uri,
+        headers: {'Accept': 'application/json', 'Authorization': authHeader},
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 
   static String? _extractTextFromComment(dynamic comment) {

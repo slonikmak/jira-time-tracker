@@ -101,6 +101,20 @@ class DayScreen extends StatelessWidget {
                 onPressed: () => appState.today(),
                 child: const Text('Сегодня'),
               ),
+              const SizedBox(width: 4),
+              IconButton(
+                icon: appState.isFetchingJiraWorklogs
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.sync, size: 18),
+                tooltip: 'Обновить записи из Jira',
+                onPressed: appState.isFetchingJiraWorklogs
+                    ? null
+                    : () => appState.fetchJiraWorklogsForDate(),
+              ),
             ],
           ),
           Row(

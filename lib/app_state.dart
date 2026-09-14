@@ -88,6 +88,7 @@ class AppState extends ChangeNotifier {
   final Set<String> _lockedSourceLogIds = {};
   List<String> _validationErrors = [];
   bool _isBuildingDay = false;
+  bool _isFetchingJiraWorklogs = false;
 
   DateTime get selectedDate => _selectedDate;
   DayDraft? get currentDraft => _currentDraft;
@@ -96,6 +97,7 @@ class AppState extends ChangeNotifier {
   List<Break> get currentBreaks => List.unmodifiable(_currentBreaks);
   List<ImportedWorklog> get importedWorklogs =>
       List.unmodifiable(_importedWorklogs);
+  bool get isFetchingJiraWorklogs => _isFetchingJiraWorklogs;
   DaySettings get daySettings => _daySettings;
   Set<String> get lockedSourceLogIds => Set.unmodifiable(_lockedSourceLogIds);
   List<String> get validationErrors => List.unmodifiable(_validationErrors);
@@ -621,6 +623,50 @@ class AppState extends ChangeNotifier {
   void setSelectedDate(DateTime date) {
     _selectedDate = DateTime(date.year, date.month, date.day);
     loadDraftForSelectedDate();
+    fetchJiraWorklogsForDate();
+  }
+
+  Future<void> fetchJiraWorklogsForDate() async {
+    final conn = _currentConnection;
+    if (conn == null) return;
+    final token = await connectionStore.getSavedToken();
+    if (token == null || token.isEmpty) return;
+
+    _isFetchingJiraWorklogs = true;
+    notifyListeners();
+
+    try {
+      final additionalIds = <String>[
+        ..._issues.map((i) => i.issueId),
+        ..._logs.map((l) => l.issueId),
+      ];
+
+      final logs = await jiraClient.fetchDayWorklogs(
+        date: _selectedDate,
+        timeZoneOffset: DateTime.now().timeZoneOffset,
+        connection: conn,
+        token: token,
+        additionalIssueIds: additionalIds,
+      );
+
+      _importedWorklogs = logs;
+
+      if (_currentDraft != null) {
+        _currentDraft = _currentDraft!.copyWith(
+          importedWorklogsSnapshot: jsonEncode(
+            _importedWorklogs.map((e) => e.toMap()).toList(),
+          ),
+        );
+        store.updateDayDraft(_currentDraft!);
+      }
+
+      _revalidateCurrentPlan();
+    } catch (e) {
+      _statusMessage = 'Ошибка загрузки записей Jira: $e';
+    } finally {
+      _isFetchingJiraWorklogs = false;
+      notifyListeners();
+    }
   }
 
   void previousDay() {

@@ -227,6 +227,251 @@ class JiraClient {
     }
   }
 
+  /// Поиск задач с worklogs за диапазон дат через POST /rest/api/3/search/jql с пагинацией (A12).
+  Future<List<Map<String, String>>> searchIssuesWithWorklogs({
+    required DateTime date,
+    required JiraConnection connection,
+    required String token,
+  }) async {
+    final fromDate = date.subtract(const Duration(days: 1));
+    final toDate = date.add(const Duration(days: 1));
+    final fromDateStr =
+        '${fromDate.year.toString().padLeft(4, '0')}-${fromDate.month.toString().padLeft(2, '0')}-${fromDate.day.toString().padLeft(2, '0')}';
+    final toDateStr =
+        '${toDate.year.toString().padLeft(4, '0')}-${toDate.month.toString().padLeft(2, '0')}-${toDate.day.toString().padLeft(2, '0')}';
+    final jql = "worklogDate >= '$fromDateStr' AND worklogDate <= '$toDateStr'";
+
+    final uri = Uri.parse('${connection.apiBaseUrl}/rest/api/3/search/jql');
+    final authHeader = buildBasicAuthHeader(connection.email, token);
+
+    final issues = <Map<String, String>>[];
+    String? nextPageToken;
+    var isLast = false;
+
+    while (!isLast) {
+      final body = <String, dynamic>{
+        'jql': jql,
+        'fields': ['summary'],
+      };
+      if (nextPageToken != null) {
+        body['nextPageToken'] = nextPageToken;
+      }
+
+      final response = await _client.post(
+        uri,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': authHeader,
+        },
+        body: jsonEncode(body),
+      );
+
+      if (response.statusCode != 200) {
+        throw JiraApiException(
+          'Ошибка поиска задач с worklogs в Jira (код: ${response.statusCode})',
+          statusCode: response.statusCode,
+        );
+      }
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final rawIssues = (data['issues'] as List?) ?? [];
+
+      for (final item in rawIssues) {
+        final m = item as Map<String, dynamic>;
+        final id = (m['id'] as String?) ?? m['id'].toString();
+        final key = (m['key'] as String?) ?? id;
+        final fields = (m['fields'] as Map<String, dynamic>?) ?? {};
+        final summary = (fields['summary'] as String?) ?? '';
+        issues.add({'id': id, 'key': key, 'summary': summary});
+      }
+
+      nextPageToken = data['nextPageToken'] as String?;
+      isLast =
+          (data['isLast'] as bool?) ??
+          (nextPageToken == null || nextPageToken.isEmpty);
+      if (nextPageToken == null || nextPageToken.isEmpty) {
+        isLast = true;
+      }
+    }
+
+    return issues;
+  }
+
+  /// Загрузка всех страниц worklogs задачи через GET /rest/api/3/issue/{id}/worklog (A12).
+  Future<List<ImportedWorklog>> getIssueWorklogs({
+    required String issueIdOrKey,
+    String? issueKey,
+    required JiraConnection connection,
+    required String token,
+  }) async {
+    final authHeader = buildBasicAuthHeader(connection.email, token);
+    final worklogs = <ImportedWorklog>[];
+    var startAt = 0;
+    const maxResults = 50;
+    var total = 0;
+    var isFirst = true;
+
+    while (isFirst || startAt < total) {
+      isFirst = false;
+      final uri = Uri.parse(
+        '${connection.apiBaseUrl}/rest/api/3/issue/$issueIdOrKey/worklog?startAt=$startAt&maxResults=$maxResults',
+      );
+      final response = await _client.get(
+        uri,
+        headers: {'Accept': 'application/json', 'Authorization': authHeader},
+      );
+
+      if (response.statusCode != 200) {
+        throw JiraApiException(
+          'Ошибка загрузки worklogs для задачи "$issueIdOrKey" (код: ${response.statusCode})',
+          statusCode: response.statusCode,
+        );
+      }
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      total = (data['total'] as int?) ?? 0;
+      final rawList = (data['worklogs'] as List?) ?? [];
+
+      for (final raw in rawList) {
+        final m = raw as Map<String, dynamic>;
+        final id = (m['id'] as String?) ?? m['id'].toString();
+        final author = (m['author'] as Map<String, dynamic>?) ?? {};
+        final authorAccountId = (author['accountId'] as String?) ?? '';
+        final startedStr = (m['started'] as String?) ?? '';
+        final timeSpentSec = (m['timeSpentSeconds'] as int?) ?? 0;
+        final commentText = _extractTextFromComment(m['comment']);
+
+        DateTime? startUtc;
+        try {
+          startUtc = DateTime.parse(startedStr).toUtc();
+        } catch (_) {}
+
+        if (startUtc != null && timeSpentSec > 0) {
+          worklogs.add(
+            ImportedWorklog(
+              id: id,
+              issueId: issueIdOrKey,
+              issueKey: issueKey,
+              startUtc: startUtc,
+              durationSeconds: timeSpentSec,
+              authorAccountId: authorAccountId,
+              comment: commentText,
+            ),
+          );
+        }
+      }
+
+      startAt += rawList.length;
+      if (rawList.isEmpty) break;
+    }
+
+    return worklogs;
+  }
+
+  /// Полная загрузка существующих записей дня из Jira с фильтрацией по accountId и дате (сценарий A12).
+  Future<List<ImportedWorklog>> fetchDayWorklogs({
+    required DateTime date,
+    required Duration timeZoneOffset,
+    required JiraConnection connection,
+    required String token,
+    List<String> additionalIssueIds = const [],
+  }) async {
+    // 1. Поиск задач с записями с буфером +-1 день
+    final foundIssues = await searchIssuesWithWorklogs(
+      date: date,
+      connection: connection,
+      token: token,
+    );
+
+    // 2. Объединяем найденные задачи и локально известные задачи
+    final issueMap = <String, String>{}; // id -> key
+    for (final fi in foundIssues) {
+      final id = fi['id']!;
+      final key = fi['key']!;
+      issueMap[id] = key;
+    }
+    for (final addId in additionalIssueIds) {
+      if (!issueMap.containsKey(addId)) {
+        issueMap[addId] = addId;
+      }
+    }
+
+    // 3. Загружаем все страницы worklogs для всех задач
+    final allRawWorklogs = <ImportedWorklog>[];
+    for (final entry in issueMap.entries) {
+      final logs = await getIssueWorklogs(
+        issueIdOrKey: entry.key,
+        issueKey: entry.value,
+        connection: connection,
+        token: token,
+      );
+      allRawWorklogs.addAll(logs);
+    }
+
+    // 4. Фильтруем строго по accountId пользователя и пересечению с локальным днем
+    final localDayStartUtc = DateTime.utc(
+      date.year,
+      date.month,
+      date.day,
+    ).subtract(timeZoneOffset);
+    final localDayEndUtc = localDayStartUtc.add(const Duration(days: 1));
+
+    final filtered =
+        <String, ImportedWorklog>{}; // id -> worklog (deduplication)
+
+    for (final w in allRawWorklogs) {
+      if (w.authorAccountId != connection.accountId) {
+        continue;
+      }
+
+      // Проверяем пересечение с локальными календарными сутками
+      final intersects =
+          w.startUtc.isBefore(localDayEndUtc) &&
+          w.endUtc.isAfter(localDayStartUtc);
+
+      if (intersects) {
+        filtered[w.id] = w;
+      }
+    }
+
+    final result = filtered.values.toList()
+      ..sort((a, b) => a.startUtc.compareTo(b.startUtc));
+    return result;
+  }
+
+  static String? _extractTextFromComment(dynamic comment) {
+    if (comment == null) return null;
+    if (comment is String) return comment;
+    if (comment is Map<String, dynamic>) {
+      final buffer = StringBuffer();
+      void extract(dynamic node) {
+        if (node is Map<String, dynamic>) {
+          if (node['type'] == 'text' && node['text'] != null) {
+            buffer.write(node['text']);
+          }
+          if (node['content'] is List) {
+            for (final child in node['content'] as List) {
+              extract(child);
+            }
+            if (node['type'] == 'paragraph') {
+              buffer.writeln();
+            }
+          }
+        } else if (node is List) {
+          for (final item in node) {
+            extract(item);
+          }
+        }
+      }
+
+      extract(comment);
+      final res = buffer.toString().trim();
+      return res.isEmpty ? null : res;
+    }
+    return null;
+  }
+
   void close() {
     _client.close();
   }

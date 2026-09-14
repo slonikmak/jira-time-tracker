@@ -3,6 +3,7 @@ import '../app_state.dart';
 import '../log_clock.dart';
 import '../models.dart';
 import 'add_time_dialog.dart';
+import 'app_theme.dart';
 import 'edit_log_dialog.dart';
 
 /// Режим отображения правой колонки экрана «Работа».
@@ -82,6 +83,7 @@ class _WorkScreenState extends State<WorkScreen> {
     return ListenableBuilder(
       listenable: widget.appState,
       builder: (context, _) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
         return LayoutBuilder(
           builder: (context, constraints) {
             final isNarrow = constraints.maxWidth < 750;
@@ -90,14 +92,45 @@ class _WorkScreenState extends State<WorkScreen> {
             final queueCol = _buildQueueColumn(context);
 
             return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Заголовок экрана «Работа» (.jt-heading)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
+                  child: Row(
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Рабочее пространство',
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: -0.4,
+                                  fontSize: 20,
+                                ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Записывайте время сейчас. Распределяйте по дням позже.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.muted(isDark),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
                 Expanded(
                   child: isNarrow
                       ? SingleChildScrollView(
                           child: Column(
                             children: [
                               tasksCol,
-                              const Divider(height: 1),
+                              Divider(height: 1, color: AppColors.line(isDark)),
                               queueCol,
                             ],
                           ),
@@ -106,7 +139,10 @@ class _WorkScreenState extends State<WorkScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Expanded(flex: 5, child: tasksCol),
-                            const VerticalDivider(width: 1),
+                            VerticalDivider(
+                              width: 1,
+                              color: AppColors.line(isDark),
+                            ),
                             Expanded(flex: 5, child: queueCol),
                           ],
                         ),
@@ -314,19 +350,23 @@ class _WorkScreenState extends State<WorkScreen> {
                             ).elapsedSeconds
                           : 0;
 
+                      final isDark =
+                          Theme.of(context).brightness == Brightness.dark;
                       return Card(
                         elevation: 0,
                         margin: const EdgeInsets.symmetric(vertical: 4),
+                        color: AppColors.surface(isDark),
                         shape: RoundedRectangleBorder(
                           side: BorderSide(
                             color: isRunning
-                                ? Colors.green.withValues(alpha: 0.5)
-                                : Theme.of(context).colorScheme.outlineVariant,
+                                ? AppColors.green(isDark).withValues(alpha: 0.6)
+                                : AppColors.line(isDark),
+                            width: isRunning ? 1.5 : 1,
                           ),
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(9),
                         ),
                         child: Padding(
-                          padding: const EdgeInsets.all(8),
+                          padding: const EdgeInsets.all(10),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -343,23 +383,23 @@ class _WorkScreenState extends State<WorkScreen> {
                                   ],
                                   Container(
                                     padding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
+                                      horizontal: 7,
                                       vertical: 2,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.primaryContainer,
-                                      borderRadius: BorderRadius.circular(4),
+                                      color: isRunning
+                                          ? AppColors.greenBg(isDark)
+                                          : AppColors.selected(isDark),
+                                      borderRadius: BorderRadius.circular(5),
                                     ),
                                     child: Text(
                                       issue.key,
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 12,
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.onPrimaryContainer,
+                                        color: isRunning
+                                            ? AppColors.green(isDark)
+                                            : AppColors.primary(isDark),
                                       ),
                                     ),
                                   ),
@@ -371,40 +411,48 @@ class _WorkScreenState extends State<WorkScreen> {
                                       overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(
                                         fontWeight: FontWeight.w500,
+                                        fontSize: 13,
                                       ),
                                     ),
                                   ),
-                                  IconButton(
-                                    visualDensity: VisualDensity.compact,
-                                    icon: Icon(
-                                      isRunning
-                                          ? Icons.stop_circle
-                                          : Icons.play_circle_filled,
+                                  const SizedBox(width: 4),
+                                  Container(
+                                    decoration: BoxDecoration(
                                       color: isRunning
-                                          ? Colors.redAccent
-                                          : Theme.of(
-                                              context,
-                                            ).colorScheme.primary,
-                                      size: 26,
+                                          ? AppColors.greenBg(isDark)
+                                          : AppColors.selected(isDark),
+                                      borderRadius: BorderRadius.circular(6),
                                     ),
-                                    tooltip: isRunning
-                                        ? 'Остановить таймер'
-                                        : 'Запустить таймер',
-                                    onPressed: () {
-                                      if (isRunning) {
-                                        widget.appState.pauseTimer(
-                                          issue.issueId,
-                                        );
-                                      } else {
-                                        widget.appState.playTimer(
-                                          issue.issueId,
-                                        );
-                                      }
-                                    },
+                                    child: IconButton(
+                                      visualDensity: VisualDensity.compact,
+                                      icon: Icon(
+                                        isRunning
+                                            ? Icons.pause_circle_filled
+                                            : Icons.play_circle_filled,
+                                        color: isRunning
+                                            ? AppColors.green(isDark)
+                                            : AppColors.primary(isDark),
+                                        size: 24,
+                                      ),
+                                      tooltip: isRunning
+                                          ? 'Остановить таймер'
+                                          : 'Запустить таймер',
+                                      onPressed: () {
+                                        if (isRunning) {
+                                          widget.appState.pauseTimer(
+                                            issue.issueId,
+                                          );
+                                        } else {
+                                          widget.appState.playTimer(
+                                            issue.issueId,
+                                          );
+                                        }
+                                      },
+                                    ),
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 4),
+                              const SizedBox(height: 6),
 
                               // Нижняя строка: активность/таймер и вспомогательные действия
                               Row(
@@ -415,13 +463,13 @@ class _WorkScreenState extends State<WorkScreen> {
                                     child: Wrap(
                                       crossAxisAlignment:
                                           WrapCrossAlignment.center,
-                                      spacing: 6,
+                                      spacing: 8,
                                       children: [
                                         Text(
                                           'Активность: ${_formatDateTime(issue.lastUsedAtUtc)}',
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontSize: 11,
-                                            color: Colors.grey,
+                                            color: AppColors.muted(isDark),
                                           ),
                                         ),
                                         if (isRunning)
@@ -431,29 +479,37 @@ class _WorkScreenState extends State<WorkScreen> {
                                               vertical: 1,
                                             ),
                                             decoration: BoxDecoration(
-                                              color: Colors.green.withValues(
-                                                alpha: 0.2,
-                                              ),
+                                              color: AppColors.greenBg(isDark),
                                               borderRadius:
                                                   BorderRadius.circular(4),
                                             ),
                                             child: Row(
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
-                                                const Icon(
-                                                  Icons.fiber_manual_record,
-                                                  size: 8,
-                                                  color: Colors.green,
+                                                Container(
+                                                  width: 6,
+                                                  height: 6,
+                                                  decoration: BoxDecoration(
+                                                    color: AppColors.green(
+                                                      isDark,
+                                                    ),
+                                                    shape: BoxShape.circle,
+                                                  ),
                                                 ),
                                                 const SizedBox(width: 4),
                                                 Text(
                                                   LogClock.formatDigital(
                                                     elapsedSeconds,
                                                   ),
-                                                  style: const TextStyle(
+                                                  style: TextStyle(
                                                     fontSize: 11,
                                                     fontWeight: FontWeight.bold,
-                                                    color: Colors.green,
+                                                    color: AppColors.green(
+                                                      isDark,
+                                                    ),
+                                                    fontFeatures: const [
+                                                      FontFeature.tabularFigures(),
+                                                    ],
                                                   ),
                                                 ),
                                               ],
@@ -462,9 +518,9 @@ class _WorkScreenState extends State<WorkScreen> {
                                         else if (elapsedSeconds > 0)
                                           Text(
                                             '(${LogClock.formatHoursMinutes(elapsedSeconds)})',
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               fontSize: 11,
-                                              color: Colors.blueGrey,
+                                              color: AppColors.muted(isDark),
                                             ),
                                           ),
                                       ],
@@ -499,6 +555,7 @@ class _WorkScreenState extends State<WorkScreen> {
   // --- Правая колонка: очередь логов и история ---
 
   Widget _buildQueueColumn(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final unconsumed = widget.appState.unconsumedLogs;
     final consumed = widget.appState.consumedLogs;
     final hasRunningTimers = unconsumed.any((l) => l.isRunning);
@@ -540,14 +597,49 @@ class _WorkScreenState extends State<WorkScreen> {
               ),
               if (hasRunningTimers &&
                   _currentQueueTab == WorkScreenQueueTab.queue)
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    foregroundColor: Colors.orange,
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
                   ),
-                  onPressed: () => widget.appState.pauseAllTimers(),
-                  icon: const Icon(Icons.pause, size: 16),
-                  label: const Text('Пауза для всех'),
+                  decoration: BoxDecoration(
+                    color: AppColors.greenBg(isDark),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: AppColors.green(isDark).withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: AppColors.green(isDark),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          foregroundColor: AppColors.green(isDark),
+                          padding: EdgeInsets.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        onPressed: () => widget.appState.pauseAllTimers(),
+                        icon: const Icon(Icons.pause, size: 14),
+                        label: const Text(
+                          'Пауза для всех',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
             ],
           ),
@@ -566,9 +658,10 @@ class _WorkScreenState extends State<WorkScreen> {
                 ),
                 Text(
                   'Всего: ${LogClock.formatHoursMinutes(widget.appState.totalUnconsumedSeconds)}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: Colors.blueGrey,
+                    color: AppColors.muted(isDark),
+                    fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
               ],
@@ -579,7 +672,7 @@ class _WorkScreenState extends State<WorkScreen> {
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ],
-          const Divider(),
+          Divider(color: AppColors.line(isDark)),
 
           // Содержимое
           Expanded(
@@ -628,19 +721,26 @@ class _WorkScreenState extends State<WorkScreen> {
         final isInDraft = widget.appState.isLogInDraft(log.id);
         final draftDate = widget.appState.getDraftDateForLog(log.id);
 
+        final isDark = Theme.of(context).brightness == Brightness.dark;
         return Card(
           elevation: 0,
           margin: const EdgeInsets.symmetric(vertical: 4),
+          color: isSelected
+              ? AppColors.selected(isDark)
+              : AppColors.surface(isDark),
           shape: RoundedRectangleBorder(
             side: BorderSide(
               color: log.isRunning
-                  ? Colors.green.withValues(alpha: 0.5)
-                  : Theme.of(context).colorScheme.outlineVariant,
+                  ? AppColors.green(isDark).withValues(alpha: 0.6)
+                  : isSelected
+                  ? AppColors.primary(isDark).withValues(alpha: 0.4)
+                  : AppColors.line(isDark),
+              width: log.isRunning ? 1.5 : 1,
             ),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(9),
           ),
           child: Padding(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -661,20 +761,23 @@ class _WorkScreenState extends State<WorkScreen> {
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 5,
-                        vertical: 1,
+                        horizontal: 6,
+                        vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.surfaceContainerHighest,
+                        color: log.isRunning
+                            ? AppColors.greenBg(isDark)
+                            : AppColors.selected(isDark),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
                         _getIssueKey(log.issueId),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 11,
+                          color: log.isRunning
+                              ? AppColors.green(isDark)
+                              : AppColors.primary(isDark),
                         ),
                       ),
                     ),
@@ -827,10 +930,12 @@ class _WorkScreenState extends State<WorkScreen> {
                                 LogClock.formatDigital(
                                   clockResult.elapsedSeconds,
                                 ),
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.green,
-                                  fontFamily: 'monospace',
+                                  color: AppColors.green(isDark),
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
+                                  ],
                                 ),
                               ),
                             ],
@@ -844,6 +949,7 @@ class _WorkScreenState extends State<WorkScreen> {
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 13,
+                            fontFeatures: [FontFeature.tabularFigures()],
                           ),
                         ),
                     ],
@@ -867,6 +973,7 @@ class _WorkScreenState extends State<WorkScreen> {
       );
     }
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return ListView.builder(
       itemCount: logs.length,
       itemBuilder: (context, index) {
@@ -874,16 +981,25 @@ class _WorkScreenState extends State<WorkScreen> {
         return Card(
           elevation: 0,
           margin: const EdgeInsets.symmetric(vertical: 4),
+          color: AppColors.surface(isDark),
+          shape: RoundedRectangleBorder(
+            side: BorderSide(color: AppColors.line(isDark)),
+            borderRadius: BorderRadius.circular(9),
+          ),
           child: ListTile(
             dense: true,
-            leading: const Icon(
+            leading: Icon(
               Icons.check_circle,
-              color: Colors.green,
+              color: AppColors.green(isDark),
               size: 20,
             ),
-            title: Text(log.titleSnapshot),
+            title: Text(
+              log.titleSnapshot,
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
             subtitle: Text(
               '${LogClock.formatHoursMinutes(log.accumulatedSeconds)} • Отправлен: ${_formatDateTime(log.consumedAtUtc ?? log.createdAtUtc)}',
+              style: TextStyle(color: AppColors.muted(isDark)),
             ),
           ),
         );
@@ -892,31 +1008,40 @@ class _WorkScreenState extends State<WorkScreen> {
   }
 
   Widget _buildBottomAssemblyBar(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final count = widget.appState.selectedLogIds.length;
     final totalSec = widget.appState.totalSelectedSeconds;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHigh,
-        boxShadow: const [
-          BoxShadow(
-            color: Colors.black12,
-            blurRadius: 4,
-            offset: Offset(0, -1),
-          ),
-        ],
+        color: AppColors.surface(isDark),
+        border: Border(top: BorderSide(color: AppColors.line(isDark))),
       ),
       child: Row(
         children: [
           Icon(
             Icons.check_box_outlined,
-            color: Theme.of(context).colorScheme.primary,
+            color: AppColors.primary(isDark),
+            size: 20,
           ),
-          const SizedBox(width: 8),
-          Text(
-            'Выбрано для сборки дня: $count (${LogClock.formatHoursMinutes(totalSec)})',
-            style: const TextStyle(fontWeight: FontWeight.bold),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Выбрано для сборки дня: $count (${LogClock.formatHoursMinutes(totalSec)})',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+              Text(
+                'Выбрано для сборки · исходное время',
+                style: TextStyle(fontSize: 11, color: AppColors.muted(isDark)),
+              ),
+            ],
           ),
           const Spacer(),
           TextButton(
@@ -925,11 +1050,19 @@ class _WorkScreenState extends State<WorkScreen> {
           ),
           const SizedBox(width: 12),
           FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.primary(isDark),
+              foregroundColor: AppColors.onPrimary(isDark),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            ),
             onPressed: () {
               // Переход на экран «День»
               widget.appState.selectTab(1);
             },
-            icon: const Icon(Icons.auto_awesome),
+            icon: const Icon(Icons.arrow_forward, size: 16),
             label: const Text('Собрать день'),
           ),
         ],

@@ -3,7 +3,9 @@ import '../app_state.dart';
 import '../log_clock.dart';
 import '../models.dart';
 import '../worklog_sender.dart';
+import 'app_theme.dart';
 import 'edit_segment_dialog.dart';
+import 'timeline_track_bar.dart';
 
 /// Экран «День»: календарь, сборщик расписания, инспекция пауз и редактирование сегментов.
 class DayScreen extends StatelessWidget {
@@ -21,6 +23,30 @@ class DayScreen extends StatelessWidget {
             children: [
               _buildHeader(context),
               _buildSummaryStats(context),
+              if (appState.currentDraft != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: TimelineTrackBar(
+                    draft: appState.currentDraft!,
+                    segments: appState.currentSegments,
+                    breaks: appState.currentBreaks,
+                    issueKeys: {
+                      for (final i in appState.issues) i.issueId: i.key,
+                    },
+                    onEditSegment: (seg) {
+                      final key =
+                          appState.issues
+                              .where((i) => i.issueId == seg.issueId)
+                              .firstOrNull
+                              ?.key ??
+                          'Задача';
+                      _openEditSegmentDialog(context, seg, key);
+                    },
+                  ),
+                ),
               if (appState.validationErrors.isNotEmpty)
                 _buildValidationErrors(context),
               Expanded(
@@ -43,6 +69,7 @@ class DayScreen extends StatelessWidget {
   }
 
   Widget _buildHeader(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final date = appState.selectedDate;
     final dateStr =
         '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';
@@ -50,11 +77,9 @@ class DayScreen extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: Theme.of(
-          context,
-        ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        color: AppColors.surface(isDark),
         border: Border(
-          bottom: BorderSide(color: Theme.of(context).dividerColor, width: 1),
+          bottom: BorderSide(color: AppColors.line(isDark), width: 1),
         ),
       ),
       child: Wrap(
@@ -1228,13 +1253,14 @@ class _StatChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final chipColor = color ?? Theme.of(context).colorScheme.onSurface;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final chipColor = color ?? AppColors.text(isDark);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: chipColor.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: chipColor.withValues(alpha: 0.2)),
+        border: Border.all(color: AppColors.line(isDark)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1243,10 +1269,7 @@ class _StatChip extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             '$label: ',
-            style: TextStyle(
-              fontSize: 12,
-              color: chipColor.withValues(alpha: 0.8),
-            ),
+            style: TextStyle(fontSize: 12, color: AppColors.muted(isDark)),
           ),
           Text(
             value,
@@ -1254,6 +1277,7 @@ class _StatChip extends StatelessWidget {
               fontSize: 12,
               fontWeight: FontWeight.bold,
               color: chipColor,
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
         ],

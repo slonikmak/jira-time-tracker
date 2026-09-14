@@ -8,6 +8,7 @@ import 'jira_client.dart';
 import 'local_store.dart';
 import 'secure_storage.dart';
 import 'single_instance_lock.dart';
+import 'ui/app_theme.dart';
 import 'ui/shell_screen.dart';
 
 void main() async {
@@ -56,20 +57,8 @@ class JiraTimeTrackerApp extends StatelessWidget {
     return MaterialApp(
       title: 'Jira Time Tracker',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF0C66E4), // Atlassian Blue accent
-          brightness: Brightness.light,
-        ),
-        useMaterial3: true,
-      ),
-      darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF0C66E4),
-          brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
       home: ShellScreen(appState: appState),
     );
   }

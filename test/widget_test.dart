@@ -57,7 +57,9 @@ void main() {
     expect(find.text('День'), findsOneWidget);
 
     // Начальный экран - Работа
-    expect(find.text('Экран «Работа»'), findsOneWidget);
+    expect(find.text('ID или URL задачи'), findsOneWidget);
+    expect(find.text('Добавить'), findsOneWidget);
+    expect(find.text('Недавние задачи (0)'), findsOneWidget);
 
     // Переключение на вкладку «День»
     await tester.tap(find.text('День'));

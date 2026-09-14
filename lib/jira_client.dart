@@ -173,6 +173,60 @@ class JiraClient {
     }
   }
 
+  /// Получает данные задачи (id, canonical key, summary) по ID или ключу.
+  Future<Issue> getIssue(
+    String idOrKey, {
+    required JiraConnection connection,
+    required String token,
+  }) async {
+    final cleanIdOrKey = idOrKey.trim();
+    final uri = Uri.parse(
+      '${connection.apiBaseUrl}/rest/api/3/issue/$cleanIdOrKey?fields=summary',
+    );
+    final authHeader = buildBasicAuthHeader(connection.email, token);
+
+    final response = await _client.get(
+      uri,
+      headers: {'Accept': 'application/json', 'Authorization': authHeader},
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final fields = data['fields'] as Map<String, dynamic>? ?? {};
+      final summary = (fields['summary'] as String?) ?? '';
+      final canonicalKey = (data['key'] as String?) ?? cleanIdOrKey;
+      final issueId = (data['id'] as String?) ?? cleanIdOrKey;
+
+      return Issue(
+        scope: connection.scope,
+        issueId: issueId,
+        key: canonicalKey,
+        summary: summary,
+        lastUsedAtUtc: DateTime.now().toUtc(),
+      );
+    } else if (response.statusCode == 404) {
+      throw JiraApiException(
+        'Задача "$cleanIdOrKey" не найдена в Jira (404 Not Found)',
+        statusCode: 404,
+      );
+    } else if (response.statusCode == 401) {
+      throw const JiraApiException(
+        'Ошибка авторизации Jira (401 Unauthorized)',
+        statusCode: 401,
+      );
+    } else if (response.statusCode == 403) {
+      throw const JiraApiException(
+        'Нет доступа к задаче в Jira (403 Forbidden)',
+        statusCode: 403,
+      );
+    } else {
+      throw JiraApiException(
+        'Ошибка загрузки задачи "$cleanIdOrKey": ${response.statusCode} ${response.reasonPhrase ?? ''}',
+        statusCode: response.statusCode,
+      );
+    }
+  }
+
   void close() {
     _client.close();
   }

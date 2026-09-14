@@ -484,3 +484,109 @@ class Break {
     );
   }
 }
+
+/// Тип маршрута авторизации в Jira Cloud.
+enum JiraAuthRoute {
+  direct,
+  scoped;
+
+  static JiraAuthRoute fromString(String value) {
+    return JiraAuthRoute.values.firstWhere(
+      (e) => e.name == value,
+      orElse: () => JiraAuthRoute.direct,
+    );
+  }
+}
+
+/// Сведения об аккаунте Jira пользователя.
+class JiraAccountInfo {
+  final String accountId;
+  final String displayName;
+  final String email;
+
+  const JiraAccountInfo({
+    required this.accountId,
+    required this.displayName,
+    this.email = '',
+  });
+}
+
+/// Подтверждённое рабочее подключение к Jira.
+class JiraConnection {
+  final String baseUrl;
+  final String email;
+  final String accountId;
+  final String displayName;
+  final JiraAuthRoute route;
+  final String? cloudId;
+  final String scope;
+
+  const JiraConnection({
+    required this.baseUrl,
+    required this.email,
+    required this.accountId,
+    required this.displayName,
+    required this.route,
+    this.cloudId,
+    required this.scope,
+  });
+
+  /// Базовый URL для REST API запросов в зависимости от маршрута.
+  String get apiBaseUrl {
+    if (route == JiraAuthRoute.scoped &&
+        cloudId != null &&
+        cloudId!.isNotEmpty) {
+      return 'https://api.atlassian.com/ex/jira/$cloudId';
+    }
+    return baseUrl.replaceAll(RegExp(r'/+$'), '');
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'base_url': baseUrl,
+      'email': email,
+      'account_id': accountId,
+      'display_name': displayName,
+      'route': route.name,
+      'cloud_id': cloudId,
+      'scope': scope,
+    };
+  }
+
+  factory JiraConnection.fromMap(Map<String, dynamic> map) {
+    return JiraConnection(
+      baseUrl: map['base_url'] as String,
+      email: map['email'] as String,
+      accountId: map['account_id'] as String,
+      displayName: map['display_name'] as String,
+      route: JiraAuthRoute.fromString(map['route'] as String),
+      cloudId: map['cloud_id'] as String?,
+      scope: map['scope'] as String,
+    );
+  }
+
+  String toJson() => jsonEncode(toMap());
+  factory JiraConnection.fromJson(String source) =>
+      JiraConnection.fromMap(jsonDecode(source) as Map<String, dynamic>);
+}
+
+/// Данные формы подключения к Jira.
+class JiraConnectionForm {
+  final String baseUrl;
+  final String email;
+  final String token;
+
+  const JiraConnectionForm({
+    this.baseUrl = 'https://esprowteam.atlassian.net',
+    this.email = '',
+    this.token = '',
+  });
+
+  JiraConnectionForm copyWith({String? baseUrl, String? email, String? token}) {
+    return JiraConnectionForm(
+      baseUrl: baseUrl ?? this.baseUrl,
+      email: email ?? this.email,
+      token: token ?? this.token,
+    );
+  }
+}

@@ -3,7 +3,10 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'app_state.dart';
+import 'connection_store.dart';
+import 'jira_client.dart';
 import 'local_store.dart';
+import 'secure_storage.dart';
 import 'single_instance_lock.dart';
 import 'ui/shell_screen.dart';
 
@@ -28,7 +31,17 @@ void main() async {
     store.recoverUnfinishedSending();
   }
 
-  final appState = AppState(store: store, isReadOnly: !isPrimary);
+  final secureStorage = WindowsCredentialStorage();
+  final connectionStore = ConnectionStore(secureStorage: secureStorage);
+  final jiraClient = JiraClient();
+
+  final appState = AppState(
+    store: store,
+    connectionStore: connectionStore,
+    jiraClient: jiraClient,
+    isReadOnly: !isPrimary,
+  );
+  await appState.loadSavedConnection();
 
   runApp(JiraTimeTrackerApp(appState: appState));
 }

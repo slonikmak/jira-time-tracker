@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../app_state.dart';
+import 'settings_dialog.dart';
 
 /// Главный экран-оболочка с верхней панелью, навигацией и переключением вкладок.
 class ShellScreen extends StatelessWidget {
@@ -125,20 +126,6 @@ class ShellScreen extends StatelessWidget {
   }
 
   void _openSettingsDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Настройки'),
-        content: const Text(
-          'Подключение к Jira и параметры сборщика дня (будут настроены в тикете 02).',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Закрыть'),
-          ),
-        ],
-      ),
-    );
+    SettingsDialog.show(context, appState);
   }
 }

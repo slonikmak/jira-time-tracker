@@ -100,6 +100,17 @@ class Issue {
       currentLogId: currentLogId ?? this.currentLogId,
     );
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Issue &&
+          runtimeType == other.runtimeType &&
+          scope == other.scope &&
+          issueId == other.issueId;
+
+  @override
+  int get hashCode => Object.hash(scope, issueId);
 }
 
 /// Исходная локальная запись о затраченном времени.
@@ -187,6 +198,14 @@ class LocalLog {
       consumedAtUtc: consumedAtUtc ?? this.consumedAtUtc,
     );
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LocalLog && runtimeType == other.runtimeType && id == other.id;
+
+  @override
+  int get hashCode => id.hashCode;
 }
 
 /// Настройки сборки рабочего дня.

@@ -286,13 +286,40 @@ class LocalStore {
     }
   }
 
+  /// Транзакционное сохранение нескольких логов и задачи (сценарии A01-A04).
+  void saveLogsAndIssue({required List<LocalLog> logs, required Issue issue}) {
+    _checkWritable();
+    _db.execute('BEGIN TRANSACTION;');
+    try {
+      for (final log in logs) {
+        upsertLocalLog(log);
+      }
+      upsertIssue(issue);
+      _db.execute('COMMIT;');
+    } catch (e) {
+      _db.execute('ROLLBACK;');
+      rethrow;
+    }
+  }
+
+  /// Транзакционное сохранение лога и задачи (сценарии A01-A04).
+  void saveLogAndIssue({required LocalLog log, required Issue issue}) {
+    saveLogsAndIssue(logs: [log], issue: issue);
+  }
+
   void deleteLocalLog(String id) {
     _checkWritable();
-    final stmt = _db.prepare('DELETE FROM local_logs WHERE id = ?;');
+    _db.execute('BEGIN TRANSACTION;');
     try {
-      stmt.execute([id]);
-    } finally {
-      stmt.close();
+      _db.execute(
+        'UPDATE issues SET current_log_id = NULL WHERE current_log_id = ?;',
+        [id],
+      );
+      _db.execute('DELETE FROM local_logs WHERE id = ?;', [id]);
+      _db.execute('COMMIT;');
+    } catch (e) {
+      _db.execute('ROLLBACK;');
+      rethrow;
     }
   }
 

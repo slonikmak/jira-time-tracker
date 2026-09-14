@@ -90,6 +90,7 @@ class Issue {
     String? summary,
     DateTime? lastUsedAtUtc,
     String? currentLogId,
+    bool clearCurrentLogId = false,
   }) {
     return Issue(
       scope: scope ?? this.scope,
@@ -97,7 +98,9 @@ class Issue {
       key: key ?? this.key,
       summary: summary ?? this.summary,
       lastUsedAtUtc: lastUsedAtUtc ?? this.lastUsedAtUtc,
-      currentLogId: currentLogId ?? this.currentLogId,
+      currentLogId: clearCurrentLogId
+          ? null
+          : (currentLogId ?? this.currentLogId),
     );
   }
 

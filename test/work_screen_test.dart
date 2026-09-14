@@ -98,36 +98,40 @@ void main() {
     },
   );
 
-  testWidgets('Play и Pause таймера на карточке задачи в UI (A03)', (
-    WidgetTester tester,
-  ) async {
-    final appState = createAppState();
+  testWidgets(
+    'Запуск (Start) и остановка (Stop) таймера на карточке задачи в UI (A03)',
+    (WidgetTester tester) async {
+      final appState = createAppState();
 
-    await tester.pumpWidget(JiraTimeTrackerApp(appState: appState));
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(JiraTimeTrackerApp(appState: appState));
+      await tester.pumpAndSettle();
 
-    // Кликаем Play
-    final playBtn = find.byTooltip('Запустить таймер').first;
-    await tester.tap(playBtn);
-    await tester.pumpAndSettle();
+      // Кнопка «Новый лог на задаче» (playlist_add) убрана за ненадобностью
+      expect(find.byIcon(Icons.playlist_add), findsNothing);
 
-    // Таймер запустился: иконка сменилась на Pause
-    expect(find.byTooltip('Поставить на паузу'), findsWidgets);
-    expect(appState.unconsumedLogs.first.isRunning, isTrue);
+      // Кликаем Play (Запустить таймер)
+      final playBtn = find.byTooltip('Запустить таймер').first;
+      await tester.tap(playBtn);
+      await tester.pumpAndSettle();
 
-    // Перематываем время на 10 минут
-    currentTime = currentTime.add(const Duration(minutes: 10));
-    await tester.pump();
+      // Таймер запустился: иконка сменилась на Stop
+      expect(find.byTooltip('Остановить таймер'), findsWidgets);
+      expect(appState.unconsumedLogs.first.isRunning, isTrue);
 
-    // Кликаем Pause
-    final pauseBtn = find.byTooltip('Поставить на паузу').first;
-    await tester.tap(pauseBtn);
-    await tester.pumpAndSettle();
+      // Перематываем время на 10 минут
+      currentTime = currentTime.add(const Duration(minutes: 10));
+      await tester.pump();
 
-    // Таймер остановлен, зафиксировано 10 минут
-    expect(find.byTooltip('Запустить таймер'), findsWidgets);
-    expect(appState.unconsumedLogs.first.isRunning, isFalse);
-    expect(appState.unconsumedLogs.first.accumulatedSeconds, 600);
-    expect(find.text('Всего: 10м'), findsOneWidget);
-  });
+      // Кликаем Stop (Остановить таймер)
+      final stopBtn = find.byTooltip('Остановить таймер').first;
+      await tester.tap(stopBtn);
+      await tester.pumpAndSettle();
+
+      // Таймер остановлен, зафиксировано 10 минут, карточка сброшена на 00:00:00
+      expect(find.byTooltip('Запустить таймер'), findsWidgets);
+      expect(appState.unconsumedLogs.first.isRunning, isFalse);
+      expect(appState.unconsumedLogs.first.accumulatedSeconds, 600);
+      expect(find.text('Всего: 10м'), findsOneWidget);
+    },
+  );
 }

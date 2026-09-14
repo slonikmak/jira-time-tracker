@@ -378,17 +378,17 @@ class _WorkScreenState extends State<WorkScreen> {
                                     visualDensity: VisualDensity.compact,
                                     icon: Icon(
                                       isRunning
-                                          ? Icons.pause_circle_filled
+                                          ? Icons.stop_circle
                                           : Icons.play_circle_filled,
                                       color: isRunning
-                                          ? Colors.orange
+                                          ? Colors.redAccent
                                           : Theme.of(
                                               context,
                                             ).colorScheme.primary,
                                       size: 26,
                                     ),
                                     tooltip: isRunning
-                                        ? 'Поставить на паузу'
+                                        ? 'Остановить таймер'
                                         : 'Запустить таймер',
                                     onPressed: () {
                                       if (isRunning) {
@@ -470,47 +470,17 @@ class _WorkScreenState extends State<WorkScreen> {
                                       ],
                                     ),
                                   ),
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      IconButton(
-                                        visualDensity: VisualDensity.compact,
-                                        icon: const Icon(
-                                          Icons.playlist_add,
-                                          size: 18,
-                                        ),
-                                        tooltip: 'Новый лог на задаче',
-                                        onPressed: () {
-                                          widget.appState.createNewLogForIssue(
-                                            issue.issueId,
-                                          );
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
-                                            SnackBar(
-                                              content: Text(
-                                                'Создан новый лог для ${issue.key}',
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                      IconButton(
-                                        visualDensity: VisualDensity.compact,
-                                        icon: const Icon(
-                                          Icons.more_time,
-                                          size: 18,
-                                        ),
-                                        tooltip: 'Добавить время вручную',
-                                        onPressed: () {
-                                          AddTimeDialog.show(
-                                            context,
-                                            appState: widget.appState,
-                                            issue: issue,
-                                          );
-                                        },
-                                      ),
-                                    ],
+                                  IconButton(
+                                    visualDensity: VisualDensity.compact,
+                                    icon: const Icon(Icons.more_time, size: 18),
+                                    tooltip: 'Добавить время вручную',
+                                    onPressed: () {
+                                      AddTimeDialog.show(
+                                        context,
+                                        appState: widget.appState,
+                                        issue: issue,
+                                      );
+                                    },
                                   ),
                                 ],
                               ),

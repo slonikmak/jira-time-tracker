@@ -160,7 +160,7 @@ class LocalStore {
         key = excluded.key,
         summary = excluded.summary,
         last_used_at_utc = excluded.last_used_at_utc,
-        current_log_id = COALESCE(excluded.current_log_id, issues.current_log_id);
+        current_log_id = excluded.current_log_id;
     ''');
     try {
       stmt.execute([

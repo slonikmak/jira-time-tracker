@@ -233,34 +233,31 @@ void main() {
     });
 
     test(
-      'A03: Play -> pause -> play; сохранение при рестарте и сне Windows',
+      'A03: Start -> stop -> start создаёт отдельные логи; сохранение при рестарте и сне Windows',
       () async {
         final appState1 = createAppState();
 
-        // Старт в T0
-        await appState1.playTimer('10001');
+        // Старт в T0 (создаёт лог 1)
+        final log1 = await appState1.playTimer('10001');
 
-        // Через 10 минут ставим на паузу
+        // Через 10 минут останавливаем (Stop)
         currentTime = currentTime.add(const Duration(minutes: 10));
-        final pausedLog = await appState1.pauseTimer('10001');
-        expect(pausedLog!.isRunning, isFalse);
-        expect(pausedLog.accumulatedSeconds, 600);
+        final stoppedLog1 = await appState1.pauseTimer('10001');
+        expect(stoppedLog1!.isRunning, isFalse);
+        expect(stoppedLog1.accumulatedSeconds, 600);
+        expect(appState1.getCurrentLogForIssue('10001'), isNull);
 
-        // Прошло 20 минут в паузе (время паузы исключено!)
+        // Прошло 20 минут в паузе
         currentTime = currentTime.add(const Duration(minutes: 20));
-        final currentLog = appState1.getCurrentLogForIssue('10001')!;
-        final elapsedWhilePaused = LogClock.calculateElapsed(
-          log: currentLog,
-          nowUtc: currentTime,
-        );
-        expect(elapsedWhilePaused.elapsedSeconds, 600);
 
-        // Снова Play
-        await appState1.playTimer('10001');
+        // Снова Play (создаёт отдельный лог 2 с нуля)
+        final log2 = await appState1.playTimer('10001');
+        expect(log2.id, isNot(log1.id));
+        expect(log2.accumulatedSeconds, 0);
+        expect(log2.isRunning, isTrue);
 
-        // Работаем 15 минут
+        // Работаем 15 минут (900 секунд)
         currentTime = currentTime.add(const Duration(minutes: 15));
-        // Итого сейчас: 600с + 900с = 1500с
 
         // Имитируем закрытие приложения / сон Windows на 2 часа (7200 секунд)
         // Данные сохраняются в SQLite с runningSinceUtc!
@@ -270,24 +267,29 @@ void main() {
         final appState2 = createAppState();
         final restoredLog = appState2.getCurrentLogForIssue('10001')!;
 
+        expect(restoredLog.id, log2.id);
         expect(restoredLog.isRunning, isTrue);
         final totalElapsed = LogClock.calculateElapsed(
           log: restoredLog,
           nowUtc: currentTime,
         );
 
-        // Прошедшие 2 часа сна корректно учтены: 1500 + 7200 = 8700 секунд
-        expect(totalElapsed.elapsedSeconds, 1500 + 7200);
+        // Прошедшие 2 часа сна корректно учтены для активного лога: 900 + 7200 = 8100 секунд
+        expect(totalElapsed.elapsedSeconds, 8100);
 
-        // Ставим на паузу после открытия
-        final finallyPaused = await appState2.pauseTimer('10001');
-        expect(finallyPaused!.isRunning, isFalse);
-        expect(finallyPaused.accumulatedSeconds, 8700);
+        // Останавливаем после открытия
+        final finallyStopped = await appState2.pauseTimer('10001');
+        expect(finallyStopped!.isRunning, isFalse);
+        expect(finallyStopped.accumulatedSeconds, 8100);
+
+        // В итоге в очереди два независимых лога: 600с и 8100с (всего 8700с)
+        expect(appState2.unconsumedLogs.length, 2);
+        expect(appState2.totalUnconsumedSeconds, 8700);
       },
     );
 
     test(
-      'A04: Новый лог на той же задаче и ручной ввод при активном таймере',
+      'A04: Каждый старт создаёт новый лог, ручной ввод не затрагивает активный таймер',
       () async {
         final appState = createAppState();
 
@@ -312,26 +314,18 @@ void main() {
         expect(activeLog.id, log1.id);
         expect(activeLog.isRunning, isTrue);
 
-        // Теперь вызываем «Новый лог» на PROJ-1
+        // Останавливаем таймер на PROJ-1
         currentTime = currentTime.add(
           const Duration(minutes: 5),
         ); // ещё 300 секунд, итого 900
-        final newLog = await appState.createNewLogForIssue('10001');
+        final stoppedLog1 = await appState.pauseTimer('10001');
+        expect(stoppedLog1!.accumulatedSeconds, 900);
+        expect(appState.getCurrentLogForIssue('10001'), isNull);
 
-        // Предыдущий лог должен быть автоматически остановлен и зафиксирован на 900 секунд
-        final stoppedLog1 = store.getLocalLog(log1.id)!;
-        expect(stoppedLog1.isRunning, isFalse);
-        expect(stoppedLog1.accumulatedSeconds, 900);
-
-        // Новый лог создан пустым и остановленным
-        expect(newLog.id, isNot(log1.id));
-        expect(newLog.accumulatedSeconds, 0);
-        expect(newLog.isRunning, isFalse);
-        expect(appState.getCurrentLogForIssue('10001')!.id, newLog.id);
-
-        // Запускаем новый лог
+        // Следующий запуск таймера сразу создаёт новый отдельный лог
         final startedNewLog = await appState.playTimer('10001');
-        expect(startedNewLog.id, newLog.id);
+        expect(startedNewLog.id, isNot(log1.id));
+        expect(startedNewLog.accumulatedSeconds, 0);
         expect(startedNewLog.isRunning, isTrue);
       },
     );

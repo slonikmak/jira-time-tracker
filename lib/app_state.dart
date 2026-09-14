@@ -301,10 +301,14 @@ class AppState extends ChangeNotifier {
       token: token,
     );
 
-    // Сохраняем в базу данных (upsert поднимает lastUsedAtUtc)
-    store.upsertIssue(issue);
+    // Сохраняем в базу данных (upsert поднимает lastUsedAtUtc, сохраняя currentLogId если был)
+    final existing = store.getIssue(issue.scope, issue.issueId);
+    final issueToSave = existing != null && existing.currentLogId != null
+        ? issue.copyWith(currentLogId: existing.currentLogId)
+        : issue;
+    store.upsertIssue(issueToSave);
     await loadIssues();
-    return issue;
+    return issueToSave;
   }
 
   void setIssueSearchQuery(String query) {
@@ -369,34 +373,22 @@ class AppState extends ChangeNotifier {
     return log;
   }
 
-  /// Запуск или продолжение таймера для задачи (Play, сценарии A02, A03).
+  /// Запуск таймера для задачи (Start, сценарии A02, A03).
+  ///
+  /// Каждый запуск начинает отдельную новую запись с нуля (упрощённая модель старт/стоп).
+  /// Если на этой задаче таймер уже работает, повторный вызов не создаёт дубликат.
   Future<LocalLog> playTimer(String issueId) async {
     final issue = _issues.where((i) => i.issueId == issueId).firstOrNull;
     if (issue == null) {
       throw StateError('Задача с ID $issueId не найдена в локальном каталоге');
     }
 
+    final currentLog = getCurrentLogForIssue(issueId);
+    if (currentLog != null && currentLog.isRunning) {
+      return currentLog; // Уже запущен
+    }
+
     final now = nowProvider();
-    LocalLog? existingLog;
-    if (issue.currentLogId != null) {
-      existingLog = _logs.where((l) => l.id == issue.currentLogId).firstOrNull;
-    }
-
-    // Если есть текущий неиспользованный лог задачи
-    if (existingLog != null && !existingLog.isConsumed) {
-      if (existingLog.isRunning) {
-        return existingLog; // Уже запущен
-      }
-      final startedLog = LogClock.start(log: existingLog, nowUtc: now);
-      final updatedIssue = issue.copyWith(lastUsedAtUtc: now);
-      store.saveLogAndIssue(log: startedLog, issue: updatedIssue);
-
-      await loadIssues();
-      await loadLogs();
-      return startedLog;
-    }
-
-    // Создаём новый запущенный лог
     final logId = const Uuid().v4();
     final newLog = LocalLog(
       id: logId,
@@ -419,7 +411,10 @@ class AppState extends ChangeNotifier {
     return newLog;
   }
 
-  /// Остановка таймера задачи (Pause, сценарий A03).
+  /// Остановка таймера задачи (Stop, сценарий A03).
+  ///
+  /// Завершает текущий лог, фиксирует накопленное время в очереди логов
+  /// и отвязывает лог от карточки задачи (счётчик карточки сбрасывается в 00:00:00).
   Future<LocalLog?> pauseTimer(String issueId) async {
     final issue = _issues.where((i) => i.issueId == issueId).firstOrNull;
     if (issue == null) return null;
@@ -434,7 +429,10 @@ class AppState extends ChangeNotifier {
       setStatusMessage(result.errorMessage);
     }
 
-    final updatedIssue = issue.copyWith(lastUsedAtUtc: now);
+    final updatedIssue = issue.copyWith(
+      clearCurrentLogId: true,
+      lastUsedAtUtc: now,
+    );
     store.saveLogAndIssue(log: pausedLog, issue: updatedIssue);
 
     await loadIssues();
@@ -456,7 +454,11 @@ class AppState extends ChangeNotifier {
     }
 
     if (issue != null) {
-      final updatedIssue = issue.copyWith(lastUsedAtUtc: now);
+      final shouldClearCurrent = issue.currentLogId == log.id;
+      final updatedIssue = issue.copyWith(
+        clearCurrentLogId: shouldClearCurrent,
+        lastUsedAtUtc: now,
+      );
       store.saveLogAndIssue(log: pausedLog, issue: updatedIssue);
       await loadIssues();
     } else {
@@ -480,9 +482,13 @@ class AppState extends ChangeNotifier {
       }
       final issue = _issues.where((i) => i.issueId == log.issueId).firstOrNull;
       if (issue != null) {
+        final shouldClearCurrent = issue.currentLogId == log.id;
         store.saveLogAndIssue(
           log: pausedLog,
-          issue: issue.copyWith(lastUsedAtUtc: now),
+          issue: issue.copyWith(
+            clearCurrentLogId: shouldClearCurrent,
+            lastUsedAtUtc: now,
+          ),
         );
       } else {
         store.upsertLocalLog(pausedLog);

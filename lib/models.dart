@@ -609,3 +609,54 @@ class JiraConnectionForm {
     );
   }
 }
+
+/// Существующая запись о затраченном времени, загруженная из Jira.
+class ImportedWorklog {
+  final String id;
+  final String issueId;
+  final String? issueKey;
+  final DateTime startUtc;
+  final int durationSeconds;
+  final String authorAccountId;
+  final String? comment;
+
+  const ImportedWorklog({
+    required this.id,
+    required this.issueId,
+    this.issueKey,
+    required this.startUtc,
+    required this.durationSeconds,
+    required this.authorAccountId,
+    this.comment,
+  });
+
+  DateTime get endUtc => startUtc.add(Duration(seconds: durationSeconds));
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'issue_id': issueId,
+      'issue_key': issueKey,
+      'start_utc': startUtc.toIso8601String(),
+      'duration_seconds': durationSeconds,
+      'author_account_id': authorAccountId,
+      'comment': comment,
+    };
+  }
+
+  factory ImportedWorklog.fromMap(Map<String, dynamic> map) {
+    return ImportedWorklog(
+      id: map['id'] as String,
+      issueId: map['issue_id'] as String,
+      issueKey: map['issue_key'] as String?,
+      startUtc: DateTime.parse(map['start_utc'] as String),
+      durationSeconds: map['duration_seconds'] as int,
+      authorAccountId: map['author_account_id'] as String,
+      comment: map['comment'] as String?,
+    );
+  }
+
+  String toJson() => jsonEncode(toMap());
+  factory ImportedWorklog.fromJson(String source) =>
+      ImportedWorklog.fromMap(jsonDecode(source) as Map<String, dynamic>);
+}

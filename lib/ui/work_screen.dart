@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../app_state.dart';
 import '../log_clock.dart';
 import '../models.dart';
+import '../service_tickets.dart';
 import 'add_time_dialog.dart';
 import 'app_theme.dart';
 import 'edit_log_dialog.dart';
@@ -87,6 +88,7 @@ class _WorkScreenState extends State<WorkScreen> {
         return LayoutBuilder(
           builder: (context, constraints) {
             final isNarrow = constraints.maxWidth < 650;
+            final taskWidth = constraints.maxWidth < 1000 ? 320.0 : 380.0;
 
             final tasksCol = _buildTasksColumn(context);
             final queueCol = _buildQueueColumn(context);
@@ -134,7 +136,7 @@ class _WorkScreenState extends State<WorkScreen> {
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              SizedBox(width: 260, child: tasksCol),
+                              SizedBox(width: taskWidth, child: tasksCol),
                               const SizedBox(width: 22),
                               Expanded(child: queueCol),
                             ],
@@ -153,6 +155,8 @@ class _WorkScreenState extends State<WorkScreen> {
   // --- Левая колонка: задачи ---
 
   Widget _buildAddIssueRow(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Row(
       children: [
         Expanded(
@@ -177,6 +181,104 @@ class _WorkScreenState extends State<WorkScreen> {
                 )
               : const Icon(Icons.add, size: 18),
           label: const Text('Добавить'),
+        ),
+        const SizedBox(width: 8),
+        PopupMenuButton<ServiceTicket>(
+          tooltip: 'Выбрать служебный тикет (EG Project)',
+          offset: const Offset(0, 36),
+          onSelected: (ticket) async {
+            final issue = await widget.appState.addServiceTicket(ticket);
+            if (context.mounted) {
+              await AddTimeDialog.show(
+                context,
+                appState: widget.appState,
+                issue: issue,
+              );
+            }
+          },
+          itemBuilder: (context) {
+            return kServiceTickets.map((t) {
+              return PopupMenuItem<ServiceTicket>(
+                value: t,
+                child: SizedBox(
+                  width: 380,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 1,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.selected(isDark),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              t.key,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 11,
+                                color: AppColors.primary(isDark),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              t.category,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        t.description,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.muted(isDark),
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList();
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: BoxDecoration(
+              border: Border.all(color: AppColors.line(isDark)),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.bookmark_outline,
+                  size: 16,
+                  color: AppColors.primary(isDark),
+                ),
+                const SizedBox(width: 6),
+                const Text(
+                  'Служебный тикет',
+                  style: TextStyle(fontSize: 13),
+                ),
+                const SizedBox(width: 4),
+                const Icon(Icons.arrow_drop_down, size: 18),
+              ],
+            ),
+          ),
         ),
         const SizedBox(width: 8),
         TextButton.icon(
@@ -359,91 +461,85 @@ class _WorkScreenState extends State<WorkScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Верхняя строка: чекбокс/ключ, название, кнопка Play/Pause
+                            // Верхняя строка: чекбокс и ключ задачи слева, статус задачи у правого края
                             Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                if (_isSelectionMode) ...[
-                                  Checkbox(
-                                    value: isSelected,
-                                    onChanged: (_) => widget.appState
-                                        .toggleIssueSelection(issue.issueId),
-                                  ),
-                                  const SizedBox(width: 4),
-                                ],
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 7,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: isRunning
-                                        ? AppColors.greenBg(isDark)
-                                        : AppColors.selected(isDark),
-                                    borderRadius: BorderRadius.circular(5),
-                                  ),
-                                  child: Text(
-                                    issue.key,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                      color: isRunning
-                                          ? AppColors.green(isDark)
-                                          : AppColors.primary(isDark),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (_isSelectionMode) ...[
+                                      Checkbox(
+                                        value: isSelected,
+                                        onChanged: (_) => widget.appState
+                                            .toggleIssueSelection(issue.issueId),
+                                      ),
+                                      const SizedBox(width: 4),
+                                    ],
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 7,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: isRunning
+                                            ? AppColors.greenBg(isDark)
+                                            : AppColors.selected(isDark),
+                                        borderRadius: BorderRadius.circular(5),
+                                      ),
+                                      child: Text(
+                                        issue.key,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                          color: isRunning
+                                              ? AppColors.green(isDark)
+                                              : AppColors.primary(isDark),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (issue.status != null &&
+                                    issue.status!.isNotEmpty)
+                                  Flexible(
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(left: 8),
+                                      child: _buildStatusBadge(
+                                        issue.status!,
+                                        isDark,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    issue.summary,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w500,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                Container(
-                                  decoration: BoxDecoration(
-                                    color: isRunning
-                                        ? AppColors.greenBg(isDark)
-                                        : AppColors.selected(isDark),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: IconButton(
-                                    visualDensity: VisualDensity.compact,
-                                    icon: Icon(
-                                      isRunning
-                                          ? Icons.pause_circle_filled
-                                          : Icons.play_circle_filled,
-                                      color: isRunning
-                                          ? AppColors.green(isDark)
-                                          : AppColors.primary(isDark),
-                                      size: 24,
-                                    ),
-                                    tooltip: isRunning
-                                        ? 'Остановить таймер'
-                                        : 'Запустить таймер',
-                                    onPressed: () {
-                                      if (isRunning) {
-                                        widget.appState.pauseTimer(
-                                          issue.issueId,
-                                        );
-                                      } else {
-                                        widget.appState.playTimer(
-                                          issue.issueId,
-                                        );
-                                      }
-                                    },
-                                  ),
-                                ),
                               ],
                             ),
                             const SizedBox(height: 6),
 
-                            // Нижняя строка: активность/таймер и вспомогательные действия
+                            // Средняя строка: название задачи
+                            Text(
+                              issue.summary,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w500,
+                                fontSize: 13,
+                              ),
+                            ),
+                            if (findServiceTicket(issue.key) != null) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                findServiceTicket(issue.key)!.description,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.muted(isDark),
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 6),
+
+                            // Нижняя строка: активность и кнопки действий (запуск таймера и добавление времени)
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
@@ -452,6 +548,7 @@ class _WorkScreenState extends State<WorkScreen> {
                                     crossAxisAlignment:
                                         WrapCrossAlignment.center,
                                     spacing: 8,
+                                    runSpacing: 4,
                                     children: [
                                       Text(
                                         'Активность: ${_formatDateTime(issue.lastUsedAtUtc)}',
@@ -464,13 +561,11 @@ class _WorkScreenState extends State<WorkScreen> {
                                         Container(
                                           padding: const EdgeInsets.symmetric(
                                             horizontal: 6,
-                                            vertical: 1,
+                                            vertical: 2,
                                           ),
                                           decoration: BoxDecoration(
                                             color: AppColors.greenBg(isDark),
-                                            borderRadius: BorderRadius.circular(
-                                              4,
-                                            ),
+                                            borderRadius: BorderRadius.circular(4),
                                           ),
                                           child: Row(
                                             mainAxisSize: MainAxisSize.min,
@@ -479,9 +574,7 @@ class _WorkScreenState extends State<WorkScreen> {
                                                 width: 6,
                                                 height: 6,
                                                 decoration: BoxDecoration(
-                                                  color: AppColors.green(
-                                                    isDark,
-                                                  ),
+                                                  color: AppColors.green(isDark),
                                                   shape: BoxShape.circle,
                                                 ),
                                               ),
@@ -493,9 +586,7 @@ class _WorkScreenState extends State<WorkScreen> {
                                                 style: TextStyle(
                                                   fontSize: 11,
                                                   fontWeight: FontWeight.bold,
-                                                  color: AppColors.green(
-                                                    isDark,
-                                                  ),
+                                                  color: AppColors.green(isDark),
                                                   fontFeatures: const [
                                                     FontFeature.tabularFigures(),
                                                   ],
@@ -515,17 +606,60 @@ class _WorkScreenState extends State<WorkScreen> {
                                     ],
                                   ),
                                 ),
-                                IconButton(
-                                  visualDensity: VisualDensity.compact,
-                                  icon: const Icon(Icons.more_time, size: 18),
-                                  tooltip: 'Добавить время вручную',
-                                  onPressed: () {
-                                    AddTimeDialog.show(
-                                      context,
-                                      appState: widget.appState,
-                                      issue: issue,
-                                    );
-                                  },
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      decoration: BoxDecoration(
+                                        color: isRunning
+                                            ? AppColors.greenBg(isDark)
+                                            : AppColors.selected(isDark),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: IconButton(
+                                        visualDensity: VisualDensity.compact,
+                                        icon: Icon(
+                                          isRunning
+                                              ? Icons.pause_circle_filled
+                                              : Icons.play_circle_filled,
+                                          color: isRunning
+                                              ? AppColors.green(isDark)
+                                              : AppColors.primary(isDark),
+                                          size: 22,
+                                        ),
+                                        tooltip: isRunning
+                                            ? 'Остановить таймер'
+                                            : 'Запустить таймер',
+                                        onPressed: () {
+                                          if (isRunning) {
+                                            widget.appState.pauseTimer(
+                                              issue.issueId,
+                                            );
+                                          } else {
+                                            widget.appState.playTimer(
+                                              issue.issueId,
+                                            );
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    IconButton(
+                                      visualDensity: VisualDensity.compact,
+                                      icon: const Icon(
+                                        Icons.more_time,
+                                        size: 18,
+                                      ),
+                                      tooltip: 'Добавить время вручную',
+                                      onPressed: () {
+                                        AddTimeDialog.show(
+                                          context,
+                                          appState: widget.appState,
+                                          issue: issue,
+                                        );
+                                      },
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -808,23 +942,27 @@ class _WorkScreenState extends State<WorkScreen> {
                   ),
                   if (isInDraft && draftDate != null) ...[
                     const SizedBox(width: 6),
-                    Tooltip(
-                      message: 'Открыть черновик за $draftDate',
-                      child: TextButton.icon(
-                        key: ValueKey('open-draft-${log.id}'),
-                        style: TextButton.styleFrom(
-                          visualDensity: VisualDensity.compact,
-                          padding: const EdgeInsets.symmetric(horizontal: 7),
-                          foregroundColor: AppColors.primary(isDark),
-                          backgroundColor: AppColors.selected(isDark),
-                        ),
-                        onPressed: () => _openDraft(draftDate),
-                        icon: const Icon(Icons.open_in_new, size: 13),
-                        label: Text(
-                          'Открыть день · ${_formatDraftDate(draftDate)}',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
+                    Flexible(
+                      child: Tooltip(
+                        message: 'Открыть черновик за $draftDate',
+                        child: TextButton.icon(
+                          key: ValueKey('open-draft-${log.id}'),
+                          style: TextButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 7),
+                            foregroundColor: AppColors.primary(isDark),
+                            backgroundColor: AppColors.selected(isDark),
+                          ),
+                          onPressed: () => _openDraft(draftDate),
+                          icon: const Icon(Icons.open_in_new, size: 13),
+                          label: Text(
+                            'Открыть день · ${_formatDraftDate(draftDate)}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ),
@@ -1166,5 +1304,58 @@ class _WorkScreenState extends State<WorkScreen> {
     final day = local.day.toString().padLeft(2, '0');
     final mon = local.month.toString().padLeft(2, '0');
     return '$day.$mon $h:$m';
+  }
+
+  Widget _buildStatusBadge(String status, bool isDark) {
+    final lower = status.toLowerCase();
+    Color bg;
+    Color fg;
+    Color border;
+
+    if (lower.contains('done') ||
+        lower.contains('готов') ||
+        lower.contains('закрыт') ||
+        lower.contains('resolved')) {
+      bg = AppColors.greenBg(isDark);
+      fg = AppColors.green(isDark);
+      border = AppColors.green(isDark).withValues(alpha: 0.3);
+    } else if (lower.contains('progress') ||
+        lower.contains('работ') ||
+        lower.contains('in dev') ||
+        lower.contains('development')) {
+      bg = AppColors.selected(isDark);
+      fg = AppColors.primary(isDark);
+      border = AppColors.primary(isDark).withValues(alpha: 0.3);
+    } else if (lower.contains('review') ||
+        lower.contains('тест') ||
+        lower.contains('test') ||
+        lower.contains('qa')) {
+      bg = AppColors.warnBg(isDark);
+      fg = AppColors.warn(isDark);
+      border = AppColors.warn(isDark).withValues(alpha: 0.3);
+    } else {
+      bg = AppColors.hover(isDark);
+      fg = AppColors.muted(isDark);
+      border = AppColors.line(isDark);
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: border),
+      ),
+      child: Text(
+        status,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: fg,
+        ),
+      ),
+    );
   }
 }

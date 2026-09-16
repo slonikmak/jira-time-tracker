@@ -48,9 +48,10 @@ flowchart TD
 | lib/secure_storage.dart | Реализован | SecureStorage: защищенное хранилище | Нативное хранение через Windows Credential Manager FFI, `InMemorySecureStorage` для тестов |
 | lib/connection_store.dart | Реализован | ConnectionStore: загрузка формы из saved/env и сохранение подключения | Подстановка окружения, защищённое хранение credentials и сохранение проверенного маршрута подключения |
 | lib/issue_parser.dart | Реализован | IssueParser: разбор ввода ключа, numeric ID и URL browse задачи | Извлечение идентификатора, очистка URL, поддержка разных форматов ввода |
+| lib/service_tickets.dart | Реализован | ServiceTicket: каталог служебных тикетов EG Project с описанием | 18 служебных тикетов, регистронезависимый поиск, интеграция с выпадающим меню и карточками задач |
 | lib/jira_client.dart | Реализован | JiraClient: проверить подключение, получить задачу/день, создать интервал, сверить запись | Авторизация (прямой и scoped маршруты), ADF, properties, обработка HTTP-ответов и ошибок |
 | lib/log_clock.dart | Реализован | LogClock: чистый Dart расчёт длительности по состоянию лога и nowUtc | Вычисление прошедшего времени, переходы start/pause, обнаружение отрицательной разницы часов |
-| lib/day_builder.dart | Реализован | DayBuilder: build(input, seed) и validate(plan, existingWorklogs) | Распределение времени, размещение пауз, разбиение и проверка ограничений из спецификации |
+| lib/day_builder.dart | Реализован | DayBuilder: buildAsRecorded(input), build(input, seed) и validate(plan, existingWorklogs, {requirePauses}) | Прямой перенос как записано, алгоритмическое распределение времени (Smart Rebuild), размещение пауз, деление задач > 1ч и валидация |
 | lib/worklog_sender.dart | Реализован | WorklogSender: sendDraft, reconcileUnknown, разрешение unknown по явному действию | Порядок записи журнала и POST, частичный успех, восстановление после обрыва, запрет слепого повтора |
 | lib/app_state.dart | Реализован | AppState: координация состояния экрана и пользовательские действия | Последовательность вызовов модулей, активный scope, состояние занятости, таймеры и очередь логов |
 | lib/ui/shell_screen.dart | Реализован | ShellScreen: общая оболочка, табы «Работа» и «День», настройки | Виджеты, баннер read-only, навигация |
@@ -59,6 +60,7 @@ flowchart TD
 | lib/ui/add_time_dialog.dart | Реализован | AddTimeDialog: диалог ручного добавления времени (A01) | Ввод часов/минут, выбор задачи, опциональное описание, валидация |
 | lib/ui/edit_log_dialog.dart | Реализован | EditLogDialog: редактирование свободного остановленного лога | Изменение часов, минут и описания работы |
 | lib/ui/edit_segment_dialog.dart | Реализован | EditSegmentDialog: редактирование отдельного интервала расписания | Изменение времени начала и длительности интервала |
+| lib/ui/gap_actions_dialog.dart | Реализован | GapActionsDialog: быстрые целевые действия над свободным промежутком расписания | Схлопывание зазора (snap), растягивание задачи (fill) и точная длительность с выталкиванием волной (ripple push) |
 | lib/ui/settings_dialog.dart | Реализован | SettingsDialog: диалог настроек подключения | Форма ввода, маскирование токена, тестирование подключения и сохранение |
 
 Пути — ориентир для навигации, а не требование создать пустые заготовки заранее. Начинай с нужных файлов; разделяй файл, когда в нём появляется самостоятельная ответственность. Интерфейс здесь означает доступные операции и их условия, а не обязательный Dart interface или abstract class.
@@ -77,8 +79,8 @@ flowchart TD
 
 | Сущность | Минимальные поля | Назначение |
 |---|---|---|
-| Issue | scope, issueId, key, summary, lastUsedAtUtc, currentLogId? | Кэш задачи и ссылка на текущий локальный лог |
-| LocalLog | id, scope, issueId, titleSnapshot, description, accumulatedSeconds, runningSinceUtc?, createdAtUtc, consumedAtUtc? | Исходная запись пользователя; хранится независимо от результата сборки |
+| Issue | scope, issueId, key, summary, status?, lastUsedAtUtc, currentLogId? | Кэш задачи, статус и ссылка на текущий локальный лог |
+| LocalLog | id, scope, issueId, titleSnapshot, description, accumulatedSeconds, runningSinceUtc?, createdAtUtc, consumedAtUtc?, isManual | Исходная запись пользователя (таймер или ручной ввод); хранится независимо от результата сборки |
 | DayDraft | id, scope, date, startUtc, endUtc, seed, settingsSnapshot, importedWorklogsSnapshot, status | Сохранённый план одной даты и сведения, на которых он построен |
 | DraftLog | draftId, sourceLogId, sourceDurationSeconds, descriptionSnapshot, durationLocked | Привязка источника к черновику и снимок исходных данных |
 | Segment | id, draftId, sourceLogId, issueId, startUtc, durationSeconds, description, sendState, jiraWorklogId?, lastError?, frozenPayload? | Отдельная отправляемая часть и её устойчивое состояние доставки |

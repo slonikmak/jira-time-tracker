@@ -41,6 +41,7 @@ class LocalStore {
             issue_id TEXT NOT NULL,
             key TEXT NOT NULL,
             summary TEXT NOT NULL,
+            status TEXT,
             last_used_at_utc TEXT NOT NULL,
             current_log_id TEXT,
             PRIMARY KEY (scope, issue_id)
@@ -59,6 +60,7 @@ class LocalStore {
             running_since_utc TEXT,
             created_at_utc TEXT NOT NULL,
             consumed_at_utc TEXT,
+            is_manual INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY (scope, issue_id) REFERENCES issues (scope, issue_id) ON DELETE CASCADE
           );
 
@@ -125,6 +127,22 @@ class LocalStore {
         rethrow;
       }
     }
+
+    // Для существующих баз гарантируем наличие колонки status
+    final columns = _db.select('PRAGMA table_info(issues);');
+    final hasStatus = columns.any((c) => c['name'] == 'status');
+    if (!hasStatus) {
+      _db.execute('ALTER TABLE issues ADD COLUMN status TEXT;');
+    }
+
+    // Для существующих баз гарантируем наличие колонки is_manual
+    final logColumns = _db.select('PRAGMA table_info(local_logs);');
+    final hasIsManual = logColumns.any((c) => c['name'] == 'is_manual');
+    if (!hasIsManual) {
+      _db.execute(
+        'ALTER TABLE local_logs ADD COLUMN is_manual INTEGER NOT NULL DEFAULT 0;',
+      );
+    }
   }
 
   void _checkWritable() {
@@ -154,11 +172,12 @@ class LocalStore {
   void upsertIssue(Issue issue) {
     _checkWritable();
     final stmt = _db.prepare('''
-      INSERT INTO issues (scope, issue_id, key, summary, last_used_at_utc, current_log_id)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO issues (scope, issue_id, key, summary, status, last_used_at_utc, current_log_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(scope, issue_id) DO UPDATE SET
         key = excluded.key,
         summary = excluded.summary,
+        status = excluded.status,
         last_used_at_utc = excluded.last_used_at_utc,
         current_log_id = excluded.current_log_id;
     ''');
@@ -168,6 +187,7 @@ class LocalStore {
         issue.issueId,
         issue.key,
         issue.summary,
+        issue.status,
         issue.lastUsedAtUtc.toIso8601String(),
         issue.currentLogId,
       ]);
@@ -178,7 +198,7 @@ class LocalStore {
 
   List<Issue> getIssues({required String scope}) {
     final stmt = _db.prepare('''
-      SELECT scope, issue_id, key, summary, last_used_at_utc, current_log_id
+      SELECT scope, issue_id, key, summary, status, last_used_at_utc, current_log_id
       FROM issues
       WHERE scope = ?
       ORDER BY last_used_at_utc DESC;
@@ -193,7 +213,7 @@ class LocalStore {
 
   Issue? getIssue(String scope, String issueId) {
     final stmt = _db.prepare('''
-      SELECT scope, issue_id, key, summary, last_used_at_utc, current_log_id
+      SELECT scope, issue_id, key, summary, status, last_used_at_utc, current_log_id
       FROM issues
       WHERE scope = ? AND issue_id = ?;
     ''');
@@ -208,7 +228,7 @@ class LocalStore {
 
   Issue? getIssueByKey(String scope, String key) {
     final stmt = _db.prepare('''
-      SELECT scope, issue_id, key, summary, last_used_at_utc, current_log_id
+      SELECT scope, issue_id, key, summary, status, last_used_at_utc, current_log_id
       FROM issues
       WHERE scope = ? AND UPPER(key) = UPPER(?);
     ''');
@@ -226,14 +246,15 @@ class LocalStore {
   void upsertLocalLog(LocalLog log) {
     _checkWritable();
     final stmt = _db.prepare('''
-      INSERT INTO local_logs (id, scope, issue_id, title_snapshot, description, accumulated_seconds, running_since_utc, created_at_utc, consumed_at_utc)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO local_logs (id, scope, issue_id, title_snapshot, description, accumulated_seconds, running_since_utc, created_at_utc, consumed_at_utc, is_manual)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         title_snapshot = excluded.title_snapshot,
         description = excluded.description,
         accumulated_seconds = excluded.accumulated_seconds,
         running_since_utc = excluded.running_since_utc,
-        consumed_at_utc = excluded.consumed_at_utc;
+        consumed_at_utc = excluded.consumed_at_utc,
+        is_manual = excluded.is_manual;
     ''');
     try {
       stmt.execute([
@@ -246,6 +267,7 @@ class LocalStore {
         log.runningSinceUtc?.toIso8601String(),
         log.createdAtUtc.toIso8601String(),
         log.consumedAtUtc?.toIso8601String(),
+        log.isManual ? 1 : 0,
       ]);
     } finally {
       stmt.close();
@@ -254,7 +276,7 @@ class LocalStore {
 
   LocalLog? getLocalLog(String id) {
     final stmt = _db.prepare('''
-      SELECT id, scope, issue_id, title_snapshot, description, accumulated_seconds, running_since_utc, created_at_utc, consumed_at_utc
+      SELECT id, scope, issue_id, title_snapshot, description, accumulated_seconds, running_since_utc, created_at_utc, consumed_at_utc, is_manual
       FROM local_logs
       WHERE id = ?;
     ''');
@@ -273,13 +295,13 @@ class LocalStore {
   }) {
     final sql = onlyUnconsumed
         ? '''
-          SELECT id, scope, issue_id, title_snapshot, description, accumulated_seconds, running_since_utc, created_at_utc, consumed_at_utc
+          SELECT id, scope, issue_id, title_snapshot, description, accumulated_seconds, running_since_utc, created_at_utc, consumed_at_utc, is_manual
           FROM local_logs
           WHERE scope = ? AND consumed_at_utc IS NULL
           ORDER BY created_at_utc DESC;
         '''
         : '''
-          SELECT id, scope, issue_id, title_snapshot, description, accumulated_seconds, running_since_utc, created_at_utc, consumed_at_utc
+          SELECT id, scope, issue_id, title_snapshot, description, accumulated_seconds, running_since_utc, created_at_utc, consumed_at_utc, is_manual
           FROM local_logs
           WHERE scope = ?
           ORDER BY created_at_utc DESC;
@@ -545,6 +567,37 @@ class LocalStore {
       return rows.map((r) => Break.fromMap(r)).toList();
     } finally {
       stmt.close();
+    }
+  }
+
+  /// Полная замена списка перерывов черновика в базе данных.
+  void replaceBreaks({
+    required String draftId,
+    required List<Break> breaks,
+  }) {
+    _checkWritable();
+    _db.execute('BEGIN TRANSACTION;');
+    try {
+      _db.execute('DELETE FROM breaks WHERE draft_id = ?;', [draftId]);
+      for (final b in breaks) {
+        _db.execute(
+          '''
+          INSERT INTO breaks (id, draft_id, start_utc, duration_seconds, kind)
+          VALUES (?, ?, ?, ?, ?);
+          ''',
+          [
+            b.id,
+            draftId,
+            b.startUtc.toIso8601String(),
+            b.durationSeconds,
+            b.kind.name,
+          ],
+        );
+      }
+      _db.execute('COMMIT;');
+    } catch (e) {
+      _db.execute('ROLLBACK;');
+      rethrow;
     }
   }
 

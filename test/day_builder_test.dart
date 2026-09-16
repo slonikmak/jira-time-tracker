@@ -451,5 +451,77 @@ void main() {
       expect(errors, isNotEmpty);
       expect(errors.first, contains('Обнаружено пересечение'));
     });
+
+    test('День свыше 8 часов (например, 9 часов с обедом) валиден и не блокируется', () {
+      final now = DateTime.utc(2026, 9, 14, 9, 0);
+      final plan9h = DayPlanResult(
+        dayStartUtc: now,
+        dayEndUtc: now.add(const Duration(hours: 9)), // 09:00 - 18:00 (9 часов)
+        segments: [
+          Segment(
+            id: 'seg-1',
+            draftId: 'd-1',
+            sourceLogId: 'log-1',
+            issueId: '1',
+            startUtc: now,
+            durationSeconds: 4 * 3600, // 09:00 - 13:00 (4 часа)
+          ),
+          Segment(
+            id: 'seg-2',
+            draftId: 'd-1',
+            sourceLogId: 'log-2',
+            issueId: '2',
+            startUtc: now.add(const Duration(hours: 5)), // 14:00 - 18:00 (4 часа)
+            durationSeconds: 4 * 3600,
+          ),
+        ],
+        breaks: [
+          Break(
+            id: 'lunch',
+            draftId: 'd-1',
+            startUtc: now.add(const Duration(hours: 4)), // 13:00 - 14:00 (обед 1 час)
+            durationSeconds: 3600,
+            kind: BreakKind.lunch,
+          ),
+        ],
+        allocatedSecondsBySourceLogId: {'log-1': 14400, 'log-2': 14400},
+        totalNewWorkSeconds: 8 * 3600,
+        totalBreaksSeconds: 3600,
+        totalExistingSeconds: 0,
+        totalDaySeconds: 9 * 3600, // 32400 сек (9 часов)
+      );
+
+      final errors = DayBuilder.validate(plan: plan9h);
+      expect(errors, isEmpty);
+    });
+
+    test('День свыше 24 часов блокируется валидатором', () {
+      final now = DateTime.utc(2026, 9, 14, 9, 0);
+      final plan25h = DayPlanResult(
+        dayStartUtc: now,
+        dayEndUtc: now.add(const Duration(hours: 25)),
+        segments: [
+          Segment(
+            id: 'seg-1',
+            draftId: 'd-1',
+            sourceLogId: 'log-1',
+            issueId: '1',
+            startUtc: now,
+            durationSeconds: 3600,
+          ),
+        ],
+        breaks: [],
+        allocatedSecondsBySourceLogId: {'log-1': 3600},
+        totalNewWorkSeconds: 3600,
+        totalBreaksSeconds: 0,
+        totalExistingSeconds: 0,
+        totalDaySeconds: 25 * 3600,
+      );
+
+      final errors = DayBuilder.validate(plan: plan25h);
+      expect(errors, isNotEmpty);
+      expect(errors.first, contains('превышает 24 часа'));
+    });
   });
 }
+

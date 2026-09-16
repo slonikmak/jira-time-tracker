@@ -108,12 +108,20 @@ class _EditSegmentDialogState extends State<EditSegmentDialog> {
       return;
     }
 
-    widget.onSave(
-      startUtc: _computedStartUtc,
-      durationSeconds: durationSec,
-      description: _descriptionController.text.trim(),
-    );
-    Navigator.of(context).pop();
+    try {
+      widget.onSave(
+        startUtc: _computedStartUtc,
+        durationSeconds: durationSec,
+        description: _descriptionController.text.trim(),
+      );
+      Navigator.of(context).pop();
+    } catch (e) {
+      setState(() {
+        _errorMessage = e is ArgumentError
+            ? (e.message?.toString() ?? e.toString())
+            : e.toString();
+      });
+    }
   }
 
   @override

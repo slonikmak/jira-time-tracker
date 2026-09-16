@@ -223,7 +223,7 @@ class JiraClient {
   }) async {
     final cleanIdOrKey = idOrKey.trim();
     final uri = Uri.parse(
-      '${connection.apiBaseUrl}/rest/api/3/issue/$cleanIdOrKey?fields=summary',
+      '${connection.apiBaseUrl}/rest/api/3/issue/$cleanIdOrKey?fields=summary,status',
     );
     final authHeader = buildBasicAuthHeader(connection.email, token);
 
@@ -239,11 +239,20 @@ class JiraClient {
       final canonicalKey = (data['key'] as String?) ?? cleanIdOrKey;
       final issueId = (data['id'] as String?) ?? cleanIdOrKey;
 
+      String? statusName;
+      final statusField = fields['status'];
+      if (statusField is Map<String, dynamic>) {
+        statusName = statusField['name'] as String?;
+      } else if (statusField is String) {
+        statusName = statusField;
+      }
+
       return Issue(
         scope: connection.scope,
         issueId: issueId,
         key: canonicalKey,
         summary: summary,
+        status: statusName,
         lastUsedAtUtc: DateTime.now().toUtc(),
       );
     } else if (response.statusCode == 404) {

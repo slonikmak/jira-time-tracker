@@ -617,5 +617,89 @@ void main() {
         expect(find.text('Моя отредактированная работа'), findsOneWidget);
       },
     );
+
+    test(
+      'При повторной сборке дня с новыми выбранными логами черновик пересобирается именно из них',
+      () async {
+        final now = DateTime.utc(2026, 9, 14, 8, 0);
+        final issue = Issue(
+          scope: testScope,
+          issueId: '1001',
+          key: 'PROJ-1',
+          summary: 'Фича',
+          lastUsedAtUtc: now,
+        );
+        final log1 = LocalLog(
+          id: 'log-1',
+          scope: testScope,
+          issueId: '1001',
+          titleSnapshot: 'Лог 1',
+          accumulatedSeconds: 3600,
+          createdAtUtc: now,
+        );
+        final log2 = LocalLog(
+          id: 'log-2',
+          scope: testScope,
+          issueId: '1001',
+          titleSnapshot: 'Лог 2',
+          accumulatedSeconds: 3600,
+          createdAtUtc: now,
+        );
+        store.saveLogAndIssue(log: log1, issue: issue);
+        store.saveLogAndIssue(log: log2, issue: issue);
+
+        final connectionStore = ConnectionStore(
+          secureStorage: InMemorySecureStorage(),
+        );
+        final appState = AppState(
+          store: store,
+          connectionStore: connectionStore,
+          jiraClient: JiraClient(),
+          isReadOnly: false,
+          initialConnection: const JiraConnection(
+            baseUrl: 'https://test.atlassian.net',
+            email: 'test@example.com',
+            accountId: 'acc-123',
+            displayName: 'Tester',
+            route: JiraAuthRoute.direct,
+            scope: testScope,
+          ),
+        );
+
+        appState.setSelectedDate(DateTime(2026, 9, 14));
+
+        // 1. Собираем день с log-1
+        appState.toggleLogSelection('log-1');
+        await appState.buildDay(customSeed: 42);
+
+        expect(
+          appState.currentDraftLogs.map((d) => d.sourceLogId).toList(),
+          ['log-1'],
+        );
+        expect(appState.isLogInDraft('log-1'), isTrue);
+        expect(appState.isLogInDraft('log-2'), isFalse);
+
+        // 2. Выбираем log-2 и повторно нажимаем собрать день (оба лога теперь выбраны)
+        appState.toggleLogSelection('log-2');
+        await appState.buildDay(customSeed: 42);
+
+        expect(
+          appState.currentDraftLogs.map((d) => d.sourceLogId).toSet(),
+          {'log-1', 'log-2'},
+        );
+        expect(appState.isLogInDraft('log-1'), isTrue);
+        expect(appState.isLogInDraft('log-2'), isTrue);
+
+        // 3. Исключаем log-1 из черновика
+        appState.removeLogFromDraft('log-1');
+        expect(
+          appState.currentDraftLogs.map((d) => d.sourceLogId).toList(),
+          ['log-2'],
+        );
+        expect(appState.isLogInDraft('log-1'), isFalse);
+        expect(appState.isLogInDraft('log-2'), isTrue);
+        expect(appState.selectedLogIds, {'log-2'});
+      },
+    );
   });
 }

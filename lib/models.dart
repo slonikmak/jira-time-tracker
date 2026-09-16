@@ -49,6 +49,7 @@ class Issue {
   final String issueId;
   final String key;
   final String summary;
+  final String? status;
   final DateTime lastUsedAtUtc;
   final String? currentLogId;
 
@@ -57,6 +58,7 @@ class Issue {
     required this.issueId,
     required this.key,
     required this.summary,
+    this.status,
     required this.lastUsedAtUtc,
     this.currentLogId,
   });
@@ -67,6 +69,7 @@ class Issue {
       'issue_id': issueId,
       'key': key,
       'summary': summary,
+      'status': status,
       'last_used_at_utc': lastUsedAtUtc.toIso8601String(),
       'current_log_id': currentLogId,
     };
@@ -78,6 +81,7 @@ class Issue {
       issueId: map['issue_id'] as String,
       key: map['key'] as String,
       summary: map['summary'] as String,
+      status: map['status'] as String?,
       lastUsedAtUtc: DateTime.parse(map['last_used_at_utc'] as String),
       currentLogId: map['current_log_id'] as String?,
     );
@@ -88,6 +92,7 @@ class Issue {
     String? issueId,
     String? key,
     String? summary,
+    String? status,
     DateTime? lastUsedAtUtc,
     String? currentLogId,
     bool clearCurrentLogId = false,
@@ -97,6 +102,7 @@ class Issue {
       issueId: issueId ?? this.issueId,
       key: key ?? this.key,
       summary: summary ?? this.summary,
+      status: status ?? this.status,
       lastUsedAtUtc: lastUsedAtUtc ?? this.lastUsedAtUtc,
       currentLogId: clearCurrentLogId
           ? null
@@ -127,6 +133,7 @@ class LocalLog {
   final DateTime? runningSinceUtc;
   final DateTime createdAtUtc;
   final DateTime? consumedAtUtc;
+  final bool isManual;
 
   const LocalLog({
     required this.id,
@@ -138,6 +145,7 @@ class LocalLog {
     this.runningSinceUtc,
     required this.createdAtUtc,
     this.consumedAtUtc,
+    this.isManual = false,
   });
 
   bool get isRunning => runningSinceUtc != null;
@@ -154,6 +162,7 @@ class LocalLog {
       'running_since_utc': runningSinceUtc?.toIso8601String(),
       'created_at_utc': createdAtUtc.toIso8601String(),
       'consumed_at_utc': consumedAtUtc?.toIso8601String(),
+      'is_manual': isManual ? 1 : 0,
     };
   }
 
@@ -172,6 +181,7 @@ class LocalLog {
       consumedAtUtc: map['consumed_at_utc'] != null
           ? DateTime.parse(map['consumed_at_utc'] as String)
           : null,
+      isManual: (map['is_manual'] as int? ?? 0) == 1,
     );
   }
 
@@ -186,6 +196,7 @@ class LocalLog {
     bool clearRunningSince = false,
     DateTime? createdAtUtc,
     DateTime? consumedAtUtc,
+    bool? isManual,
   }) {
     return LocalLog(
       id: id ?? this.id,
@@ -199,6 +210,7 @@ class LocalLog {
           : (runningSinceUtc ?? this.runningSinceUtc),
       createdAtUtc: createdAtUtc ?? this.createdAtUtc,
       consumedAtUtc: consumedAtUtc ?? this.consumedAtUtc,
+      isManual: isManual ?? this.isManual,
     );
   }
 
@@ -528,6 +540,22 @@ class Break {
 
   DateTime get endUtc => startUtc.add(Duration(seconds: durationSeconds));
 
+  Break copyWith({
+    String? id,
+    String? draftId,
+    DateTime? startUtc,
+    int? durationSeconds,
+    BreakKind? kind,
+  }) {
+    return Break(
+      id: id ?? this.id,
+      draftId: draftId ?? this.draftId,
+      startUtc: startUtc ?? this.startUtc,
+      durationSeconds: durationSeconds ?? this.durationSeconds,
+      kind: kind ?? this.kind,
+    );
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -548,6 +576,43 @@ class Break {
     );
   }
 }
+
+/// Описание смежных элементов расписания, прилегающих к вычисляемому промежутку (Timeline Gap).
+class GapNeighbors {
+  final Segment? leftSegment;
+  final ImportedWorklog? leftExisting;
+  final Segment? rightSegment;
+  final ImportedWorklog? rightExisting;
+  final bool isStartOfDay;
+  final bool isEndOfDay;
+
+  const GapNeighbors({
+    this.leftSegment,
+    this.leftExisting,
+    this.rightSegment,
+    this.rightExisting,
+    this.isStartOfDay = false,
+    this.isEndOfDay = false,
+  });
+
+  bool get isLeftLocked => leftExisting != null;
+  bool get isRightLocked => rightExisting != null;
+
+  String? get leftTitle {
+    if (leftSegment != null) return 'Сегмент расписания';
+    if (leftExisting != null) return 'Jira: ${leftExisting!.issueKey}';
+    if (isStartOfDay) return 'Начало дня';
+    return null;
+  }
+
+  String? get rightTitle {
+    if (rightSegment != null) return 'Сегмент расписания';
+    if (rightExisting != null) return 'Jira: ${rightExisting!.issueKey}';
+    if (isEndOfDay) return 'Конец дня';
+    return null;
+  }
+}
+
 
 /// Тип маршрута авторизации в Jira Cloud.
 enum JiraAuthRoute {

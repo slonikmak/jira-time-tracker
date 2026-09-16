@@ -3,6 +3,24 @@ import 'package:flutter/services.dart';
 import '../app_state.dart';
 import '../log_clock.dart';
 import '../models.dart';
+import '../service_tickets.dart';
+import 'app_theme.dart';
+
+class _TicketOption {
+  final String id;
+  final String key;
+  final String title;
+  final String? description;
+  final bool isService;
+
+  const _TicketOption({
+    required this.id,
+    required this.key,
+    required this.title,
+    this.description,
+    this.isService = false,
+  });
+}
 
 /// Диалог ручного ввода времени для задачи (сценарий A01).
 class AddTimeDialog extends StatefulWidget {
@@ -38,14 +56,53 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
   String? _errorMessage;
   bool _isSaving = false;
 
+  List<_TicketOption> _getTicketOptions() {
+    final List<_TicketOption> options = [];
+    final existingIssues = widget.appState.issues;
+    final Set<String> existingKeys = {};
+
+    for (final issue in existingIssues) {
+      existingKeys.add(issue.key.toUpperCase());
+      final service = findServiceTicket(issue.key);
+      options.add(
+        _TicketOption(
+          id: issue.issueId,
+          key: issue.key,
+          title: issue.summary,
+          description: service?.description,
+          isService: service != null,
+        ),
+      );
+    }
+
+    // Добавляем все предопределённые служебные тикеты, которых ещё нет в списке недавних
+    for (final service in kServiceTickets) {
+      if (!existingKeys.contains(service.key.toUpperCase())) {
+        options.add(
+          _TicketOption(
+            id: service.key,
+            key: service.key,
+            title: service.category,
+            description: service.description,
+            isService: true,
+          ),
+        );
+      }
+    }
+
+    return options;
+  }
+
   @override
   void initState() {
     super.initState();
-    _selectedIssueId =
-        widget.initialIssue?.issueId ??
-        (widget.appState.issues.isNotEmpty
-            ? widget.appState.issues.first.issueId
-            : null);
+    final initialId = widget.initialIssue?.issueId;
+    if (initialId != null) {
+      _selectedIssueId = initialId;
+    } else {
+      final options = _getTicketOptions();
+      _selectedIssueId = options.isNotEmpty ? options.first.id : null;
+    }
   }
 
   @override
@@ -68,9 +125,18 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
       return;
     }
 
-    final selectedIssue = widget.appState.issues
-        .where((i) => i.issueId == _selectedIssueId)
+    Issue? selectedIssue = widget.appState.issues
+        .where((i) => i.issueId == _selectedIssueId || i.key == _selectedIssueId)
         .firstOrNull;
+
+    if (selectedIssue == null && _selectedIssueId != null) {
+      final ticket = findServiceTicket(_selectedIssueId!);
+      if (ticket != null) {
+        selectedIssue = await widget.appState.addServiceTicket(ticket);
+        _selectedIssueId = selectedIssue.issueId;
+      }
+    }
+
     if (selectedIssue == null) {
       setState(() {
         _errorMessage = 'Выбранная задача не найдена';
@@ -122,12 +188,23 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final issues = widget.appState.issues;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final options = _getTicketOptions();
+    if (options.isNotEmpty &&
+        !options.any((o) => o.id == _selectedIssueId)) {
+      final matchedByKey = options
+          .where((o) => o.key.toUpperCase() == _selectedIssueId?.toUpperCase())
+          .firstOrNull;
+      _selectedIssueId = matchedByKey?.id ?? options.first.id;
+    }
+    final selectedOpt = options
+        .where((o) => o.id == _selectedIssueId)
+        .firstOrNull;
 
     return AlertDialog(
       title: const Text('Добавить время'),
       content: SizedBox(
-        width: 440,
+        width: 460,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -139,77 +216,211 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
               ),
               const SizedBox(height: 6),
-              if (widget.initialIssue != null)
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primaryContainer,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          widget.initialIssue!.key,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onPrimaryContainer,
+              if (widget.initialIssue != null) ...[
+                Builder(
+                  builder: (context) {
+                    final service = findServiceTicket(widget.initialIssue!.key);
+                    return Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.hover(isDark),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: AppColors.line(isDark)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.selected(isDark),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  widget.initialIssue!.key,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                    color: AppColors.primary(isDark),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  widget.initialIssue!.summary,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
+                          if (service != null) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              service.description,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: AppColors.muted(isDark),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          widget.initialIssue!.summary,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              else if (issues.isEmpty)
+                    );
+                  },
+                ),
+              ] else if (options.isEmpty)
                 const Text(
                   'Нет доступных задач. Сначала добавьте задачу.',
                   style: TextStyle(color: Colors.red),
                 )
-              else
+              else ...[
                 DropdownButtonFormField<String>(
                   initialValue: _selectedIssueId,
                   isExpanded: true,
+                  itemHeight: null,
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
                     isDense: true,
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
                   ),
-                  items: issues.map((i) {
-                    return DropdownMenuItem(
-                      value: i.issueId,
-                      child: Text(
-                        '${i.key}: ${i.summary}',
+                  selectedItemBuilder: (context) {
+                    return options.map((opt) {
+                      final descPart = opt.description != null
+                          ? ' — ${opt.description}'
+                          : '';
+                      return Text(
+                        '${opt.key}: ${opt.title}$descPart',
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 13),
+                      );
+                    }).toList();
+                  },
+                  items: options.map((opt) {
+                    return DropdownMenuItem<String>(
+                      value: opt.id,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 5,
+                                    vertical: 1,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: opt.isService
+                                        ? AppColors.selected(isDark)
+                                        : AppColors.hover(isDark),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    opt.key,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 11,
+                                      color: opt.isService
+                                          ? AppColors.primary(isDark)
+                                          : null,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    opt.title,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (opt.description != null &&
+                                opt.description!.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                opt.description!,
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 2,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.muted(isDark),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
                     );
                   }).toList(),
                   onChanged: (val) {
                     setState(() {
                       _selectedIssueId = val;
+                      final selected = options
+                          .where((o) => o.id == val)
+                          .firstOrNull;
+                      if (selected?.description != null &&
+                          _descController.text.trim().isEmpty) {
+                        _descController.text = selected!.description!;
+                      }
                     });
                   },
                 ),
+                if (selectedOpt?.description != null) ...[
+                  const SizedBox(height: 6),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.hover(isDark),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: AppColors.line(isDark)),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.info_outline,
+                          size: 15,
+                          color: AppColors.primary(isDark),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            selectedOpt!.description!,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.muted(isDark),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
               const SizedBox(height: 16),
 
               // Поля длительности (часы и минуты)

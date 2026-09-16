@@ -4,6 +4,7 @@ import '../log_clock.dart';
 import '../models.dart';
 import '../worklog_sender.dart';
 import 'app_theme.dart';
+import 'gap_actions_dialog.dart';
 import 'edit_segment_dialog.dart';
 import 'timeline_track_bar.dart';
 
@@ -43,8 +44,39 @@ class DayScreen extends StatelessWidget {
                           'Задача';
                       _openEditSegmentDialog(context, seg, key);
                     },
+                    onEditBreak: (breakItem) {
+                      _openGapActionsDialog(context, breakItem);
+                    },
+                    isReadOnly: appState.isReadOnly || appState.isDraftLockedFromRebuild,
+                    onResizeSegmentRight: (seg, newDur) {
+                      try {
+                        appState.resizeSegmentRight(seg, newDur);
+                      } catch (e) {
+                        final msg = e is ArgumentError ? (e.message?.toString() ?? e.toString()) : e.toString();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(msg),
+                            backgroundColor: Theme.of(context).colorScheme.error,
+                          ),
+                        );
+                      }
+                    },
+                    onResizeSegmentLeft: (seg, newStart) {
+                      try {
+                        appState.resizeSegmentLeft(seg, newStart);
+                      } catch (e) {
+                        final msg = e is ArgumentError ? (e.message?.toString() ?? e.toString()) : e.toString();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(msg),
+                            backgroundColor: Theme.of(context).colorScheme.error,
+                          ),
+                        );
+                      }
+                    },
                   ),
                 ),
+
               if (appState.validationErrors.isNotEmpty)
                 _buildValidationErrors(context),
               Expanded(
@@ -149,11 +181,11 @@ class DayScreen extends StatelessWidget {
               if (draft != null) ...[
                 const SizedBox(width: 8),
                 OutlinedButton.icon(
-                  icon: const Icon(Icons.shuffle, size: 16),
-                  label: const Text('Пересобрать'),
+                  icon: const Icon(Icons.auto_awesome, size: 16),
+                  label: const Text('Умная пересборка'),
                   onPressed: appState.isDraftLockedFromRebuild
                       ? null
-                      : () => _confirmRebuild(context),
+                      : () => _confirmSmartRebuild(context),
                 ),
               ],
             ],
@@ -656,12 +688,15 @@ class DayScreen extends StatelessWidget {
                     children: [
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
+                          horizontal: 7,
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primaryContainer,
+                          color: AppColors.selected(isDark),
                           borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: AppColors.primary(isDark).withValues(alpha: 0.3),
+                          ),
                         ),
                         child: Text(
                           issue.key,
@@ -807,42 +842,52 @@ class DayScreen extends StatelessWidget {
     final endStr =
         '${endLocal.hour.toString().padLeft(2, '0')}:${endLocal.minute.toString().padLeft(2, '0')}';
     final durationStr = LogClock.formatHoursMinutes(breakItem.durationSeconds);
-    final isLunch = breakItem.kind == BreakKind.lunch;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final foreground = isLunch
-        ? AppColors.warn(isDark)
-        : AppColors.muted(isDark);
+    final foreground = AppColors.muted(isDark);
+    final isLocked = appState.isReadOnly || appState.isDraftLockedFromRebuild;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: isLunch ? AppColors.warnBg(isDark) : AppColors.bg(isDark),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            isLunch ? Icons.restaurant : Icons.coffee,
-            size: 16,
-            color: foreground,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            isLunch ? 'Обед' : 'Перерыв',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
+    return InkWell(
+      onTap: isLocked ? null : () => _openGapActionsDialog(context, breakItem),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppColors.bg(isDark),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.coffee,
+              size: 16,
               color: foreground,
             ),
-          ),
-          const SizedBox(width: 16),
-          Text(
-            '$startStr — $endStr ($durationStr)',
-            style: TextStyle(fontSize: 12, color: foreground),
-          ),
-        ],
+            const SizedBox(width: 8),
+            Text(
+              'Перерыв',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+                color: foreground,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Text(
+              '$startStr — $endStr ($durationStr)',
+              style: TextStyle(fontSize: 12, color: foreground),
+            ),
+            const Spacer(),
+            IconButton(
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              tooltip: 'Редактировать интервал',
+              onPressed: isLocked
+                  ? null
+                  : () => _openGapActionsDialog(context, breakItem),
+            ),
+          ],
+        ),
       ),
     );
   }
+
 
   Widget _buildExistingWorklogCard(BuildContext context, ImportedWorklog ew) {
     final startLocal = ew.startUtc.toLocal();
@@ -896,19 +941,20 @@ class DayScreen extends StatelessWidget {
                     children: [
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
+                          horizontal: 7,
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: AppColors.trackExisting(isDark),
+                          color: AppColors.hover(isDark),
                           borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: AppColors.line(isDark)),
                         ),
                         child: Text(
                           ew.issueKey ?? ew.issueId,
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
-                            color: AppColors.text(isDark),
+                            color: AppColors.muted(isDark),
                           ),
                         ),
                       ),
@@ -1085,13 +1131,13 @@ class DayScreen extends StatelessWidget {
     }
   }
 
-  void _confirmRebuild(BuildContext context) {
+  void _confirmSmartRebuild(BuildContext context) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Пересобрать расписание?'),
+        title: const Text('Умная пересборка дня?'),
         content: const Text(
-          'Все ручные правки интервалов этого дня будут заменены новым автоматически сгенерированным расписанием.',
+          'Расписание будет оптимизировано с реалистичными перерывами и обедом. Задачи дольше 1 часа будут разделены на части.',
         ),
         actions: [
           TextButton(
@@ -1101,13 +1147,28 @@ class DayScreen extends StatelessWidget {
           FilledButton(
             onPressed: () {
               Navigator.of(context).pop();
-              _handleBuildDay(context);
+              _handleSmartRebuildDay(context);
             },
             child: const Text('Пересобрать'),
           ),
         ],
       ),
     );
+  }
+
+  void _handleSmartRebuildDay(BuildContext context) async {
+    try {
+      await appState.smartRebuildDay();
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
   }
 
   void _openEditSegmentDialog(
@@ -1136,6 +1197,54 @@ class DayScreen extends StatelessWidget {
       ),
     );
   }
+
+  void _openGapActionsDialog(
+    BuildContext context,
+    Break breakItem,
+  ) {
+    if (appState.isReadOnly || appState.isDraftLockedFromRebuild) return;
+    final neighbors = appState.findGapNeighbors(breakItem);
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => GapActionsDialog(
+        breakItem: breakItem,
+        neighbors: neighbors,
+        onSnap: () {
+          appState.snapGap(breakItem);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Пауза схлопнута, задачи подтянуты вплотную.')),
+          );
+        },
+        onFillLeft: () {
+          appState.fillGapWithLeftSegment(breakItem);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Предыдущая задача продлена на время паузы.')),
+          );
+        },
+        onSetDuration: (newDurationSeconds) {
+          appState.setGapDuration(
+            gap: breakItem,
+            newDurationSeconds: newDurationSeconds,
+          );
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Длительность паузы обновлена.')),
+          );
+        },
+        onValidateDuration: (newDurationSeconds) {
+          final delta = newDurationSeconds - breakItem.durationSeconds;
+          if (delta > 0) {
+            return appState.canShiftSegmentsRight(
+              afterUtc: breakItem.endUtc,
+              deltaSeconds: delta,
+            );
+          }
+          return null;
+        },
+      ),
+    );
+  }
+
 
   void _confirmDeleteSegment(BuildContext context, Segment segment) {
     showDialog(

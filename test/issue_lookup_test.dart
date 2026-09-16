@@ -56,16 +56,19 @@ void main() {
       scope: 'https://esprowteam.atlassian.net#acc_current_user',
     );
 
-    test('Fetches issue summary and canonical key', () async {
+    test('Fetches issue summary, canonical key and status', () async {
       final mockClient = MockClient((request) async {
         expect(request.url.path, equals('/rest/api/3/issue/PROJ-123'));
-        expect(request.url.queryParameters['fields'], equals('summary'));
+        expect(request.url.queryParameters['fields'], equals('summary,status'));
 
         return http.Response(
           jsonEncode({
             'id': '10042',
             'key': 'PROJ-123',
-            'fields': {'summary': 'Implement authorization module'},
+            'fields': {
+              'summary': 'Implement authorization module',
+              'status': {'name': 'В работе'},
+            },
           }),
           200,
           headers: {'content-type': 'application/json'},
@@ -82,6 +85,7 @@ void main() {
       expect(issue.key, equals('PROJ-123'));
       expect(issue.issueId, equals('10042'));
       expect(issue.summary, equals('Implement authorization module'));
+      expect(issue.status, equals('В работе'));
       expect(issue.scope, equals(testConnection.scope));
     });
 

@@ -2,13 +2,17 @@ import 'package:flutter/material.dart';
 import '../models.dart';
 import 'app_theme.dart';
 
-/// Визуальная шкала распределения времени (.jt-track) из дизайн-макета.
-class TimelineTrackBar extends StatelessWidget {
+/// Визуальная шкала распределения времени (.jt-track) с интерактивными ручками изменения границ.
+class TimelineTrackBar extends StatefulWidget {
   final DayDraft draft;
   final List<Segment> segments;
   final List<Break> breaks;
   final Map<String, String> issueKeys;
   final void Function(Segment segment)? onEditSegment;
+  final void Function(Break breakItem)? onEditBreak;
+  final void Function(Segment segment, int newDurationSeconds)? onResizeSegmentRight;
+  final void Function(Segment segment, DateTime newStartUtc)? onResizeSegmentLeft;
+  final bool isReadOnly;
 
   const TimelineTrackBar({
     super.key,
@@ -17,7 +21,20 @@ class TimelineTrackBar extends StatelessWidget {
     required this.breaks,
     this.issueKeys = const {},
     this.onEditSegment,
+    this.onEditBreak,
+    this.onResizeSegmentRight,
+    this.onResizeSegmentLeft,
+    this.isReadOnly = false,
   });
+
+  @override
+  State<TimelineTrackBar> createState() => _TimelineTrackBarState();
+}
+
+class _TimelineTrackBarState extends State<TimelineTrackBar> {
+  String? _hoveredSegmentId;
+  String? _draggingSegmentId;
+  double _dragDeltaDx = 0;
 
   String _formatTime(DateTime dt) {
     return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
@@ -39,8 +56,8 @@ class TimelineTrackBar extends StatelessWidget {
     // Собираем все интервалы (сегменты и паузы) в единую временную шкалу
     final List<_TrackItem> items = [];
 
-    // Определяем цвета для каждого sourceLogId
-    final sourceIds = segments.map((s) => s.sourceLogId).toSet().toList();
+    // Цвета для каждого sourceLogId
+    final sourceIds = widget.segments.map((s) => s.sourceLogId).toSet().toList();
     final Map<String, Color> sourceColors = {};
     for (int i = 0; i < sourceIds.length; i++) {
       final sId = sourceIds[i];
@@ -54,8 +71,8 @@ class TimelineTrackBar extends StatelessWidget {
       }
     }
 
-    for (final seg in segments) {
-      final key = issueKeys[seg.issueId] ?? 'Задача';
+    for (final seg in widget.segments) {
+      final key = widget.issueKeys[seg.issueId] ?? 'Задача';
       final isExisting = seg.sourceLogId.toLowerCase().contains('existing');
       items.add(
         _TrackItem(
@@ -68,56 +85,197 @@ class TimelineTrackBar extends StatelessWidget {
               '$key · ${_formatTime(seg.startUtc)}–${_formatTime(seg.startUtc.add(Duration(seconds: seg.durationSeconds)))} (${_formatDuration(seg.durationSeconds)})',
           segment: seg,
           isBreak: false,
+          isExisting: isExisting,
         ),
       );
     }
 
-    for (final b in breaks) {
+    for (final b in widget.breaks) {
       items.add(
         _TrackItem(
           start: b.startUtc,
           durationSeconds: b.durationSeconds,
           color: AppColors.trackBreak(isDark),
-          label: 'Пауза (${_formatDuration(b.durationSeconds)})',
+          label:
+              'Перерыв · ${_formatTime(b.startUtc)}–${_formatTime(b.endUtc)} (${_formatDuration(b.durationSeconds)})',
+          breakItem: b,
           isBreak: true,
+          isExisting: false,
         ),
       );
     }
 
     items.sort((a, b) => a.start.compareTo(b.start));
 
+    final totalSeconds = widget.draft.endUtc.difference(widget.draft.startUtc).inSeconds;
+    final safeTotalSeconds = totalSeconds > 0 ? totalSeconds : 1;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 1. Полоса-трек (.jt-track)
-        Container(
-          height: 26,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(5),
-            color: AppColors.trackBreak(isDark),
-            border: Border.all(color: AppColors.line(isDark), width: 0.5),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Row(
-            children: items.map((item) {
-              final flex = item.durationSeconds.clamp(1, 86400);
-              return Expanded(
-                flex: flex,
-                child: Tooltip(
-                  message: item.label,
-                  child: InkWell(
-                    onTap: item.segment != null && onEditSegment != null
-                        ? () => onEditSegment!(item.segment!)
-                        : null,
-                    child: Container(
-                      color: item.color,
-                      height: double.infinity,
+        // 1. Полоса-трек (.jt-track) с LayoutBuilder для вычисления пикселей в секунды
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final trackWidth = constraints.maxWidth;
+            final secondsPerPixel = safeTotalSeconds / (trackWidth > 0 ? trackWidth : 1);
+
+            return Container(
+              height: 28,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(5),
+                color: AppColors.trackBreak(isDark),
+                border: Border.all(color: AppColors.line(isDark), width: 0.5),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Row(
+                children: items.map((item) {
+                  final flex = item.durationSeconds.clamp(1, 86400);
+                  final seg = item.segment;
+                  final isEditableSegment = seg != null && !item.isExisting && !widget.isReadOnly;
+                  final isHovered = isEditableSegment && (_hoveredSegmentId == seg.id || _draggingSegmentId == seg.id);
+
+                  return Expanded(
+                    flex: flex,
+                    child: Tooltip(
+                      message: item.label,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          // Базовое тело блока
+                          InkWell(
+                            mouseCursor: (seg != null && widget.onEditSegment != null) ||
+                                    (item.breakItem != null && widget.onEditBreak != null)
+                                ? SystemMouseCursors.click
+                                : SystemMouseCursors.basic,
+                            onTap: seg != null && widget.onEditSegment != null
+                                ? () => widget.onEditSegment!(seg)
+                                : (item.breakItem != null && widget.onEditBreak != null
+                                    ? () => widget.onEditBreak!(item.breakItem!)
+                                    : null),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              decoration: BoxDecoration(
+                                color: item.color,
+                                border: isHovered
+                                    ? Border.all(color: AppColors.primary(isDark), width: 2)
+                                    : null,
+                              ),
+                            ),
+                          ),
+
+                          // Левая ручка изменения границы
+                          if (isEditableSegment && widget.onResizeSegmentLeft != null)
+                            Positioned(
+                              left: 0,
+                              top: 0,
+                              bottom: 0,
+                              width: 14,
+                              child: MouseRegion(
+                                cursor: SystemMouseCursors.resizeLeftRight,
+                                onEnter: (_) => setState(() => _hoveredSegmentId = seg.id),
+                                onExit: (_) => setState(() {
+                                  if (_draggingSegmentId == null) _hoveredSegmentId = null;
+                                }),
+                                child: GestureDetector(
+                                  key: Key('drag_handle_left_${seg.id}'),
+                                  behavior: HitTestBehavior.opaque,
+                                  onHorizontalDragStart: (_) {
+                                    setState(() {
+                                      _draggingSegmentId = seg.id;
+                                      _dragDeltaDx = 0;
+                                    });
+                                  },
+                                  onHorizontalDragUpdate: (details) {
+                                    _dragDeltaDx += details.delta.dx;
+                                  },
+                                  onHorizontalDragEnd: (_) {
+                                    final deltaSec = (_dragDeltaDx * secondsPerPixel).round();
+                                    final newStart = seg.startUtc.add(Duration(seconds: deltaSec));
+                                    setState(() {
+                                      _draggingSegmentId = null;
+                                      _hoveredSegmentId = null;
+                                      _dragDeltaDx = 0;
+                                    });
+                                    widget.onResizeSegmentLeft?.call(seg, newStart);
+                                  },
+                                  child: Container(
+                                    alignment: Alignment.centerLeft,
+                                    padding: const EdgeInsets.only(left: 2),
+                                    child: isHovered
+                                        ? Container(
+                                            width: 3,
+                                            height: 14,
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              borderRadius: BorderRadius.circular(1.5),
+                                            ),
+                                          )
+                                        : null,
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                          // Правая ручка изменения границы
+                          if (isEditableSegment && widget.onResizeSegmentRight != null)
+                            Positioned(
+                              right: 0,
+                              top: 0,
+                              bottom: 0,
+                              width: 14,
+                              child: MouseRegion(
+                                cursor: SystemMouseCursors.resizeLeftRight,
+                                onEnter: (_) => setState(() => _hoveredSegmentId = seg.id),
+                                onExit: (_) => setState(() {
+                                  if (_draggingSegmentId == null) _hoveredSegmentId = null;
+                                }),
+                                child: GestureDetector(
+                                  key: Key('drag_handle_right_${seg.id}'),
+                                  behavior: HitTestBehavior.opaque,
+                                  onHorizontalDragStart: (_) {
+                                    setState(() {
+                                      _draggingSegmentId = seg.id;
+                                      _dragDeltaDx = 0;
+                                    });
+                                  },
+                                  onHorizontalDragUpdate: (details) {
+                                    _dragDeltaDx += details.delta.dx;
+                                  },
+                                  onHorizontalDragEnd: (_) {
+                                    final deltaSec = (_dragDeltaDx * secondsPerPixel).round();
+                                    final newDur = seg.durationSeconds + deltaSec;
+                                    setState(() {
+                                      _draggingSegmentId = null;
+                                      _hoveredSegmentId = null;
+                                      _dragDeltaDx = 0;
+                                    });
+                                    widget.onResizeSegmentRight?.call(seg, newDur);
+                                  },
+                                  child: Container(
+                                    alignment: Alignment.centerRight,
+                                    padding: const EdgeInsets.only(right: 2),
+                                    child: isHovered
+                                        ? Container(
+                                            width: 3,
+                                            height: 14,
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              borderRadius: BorderRadius.circular(1.5),
+                                            ),
+                                          )
+                                        : null,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
+                  );
+                }).toList(),
+              ),
+            );
+          },
         ),
         const SizedBox(height: 5),
 
@@ -126,7 +284,7 @@ class TimelineTrackBar extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              _formatTime(draft.startUtc),
+              _formatTime(widget.draft.startUtc),
               style: TextStyle(
                 fontSize: 11,
                 color: AppColors.muted(isDark),
@@ -142,7 +300,7 @@ class TimelineTrackBar extends StatelessWidget {
               ),
             ),
             Text(
-              _formatTime(draft.endUtc),
+              _formatTime(widget.draft.endUtc),
               style: TextStyle(
                 fontSize: 11,
                 color: AppColors.muted(isDark),
@@ -186,7 +344,9 @@ class _TrackItem {
   final Color color;
   final String label;
   final Segment? segment;
+  final Break? breakItem;
   final bool isBreak;
+  final bool isExisting;
 
   _TrackItem({
     required this.start,
@@ -194,7 +354,9 @@ class _TrackItem {
     required this.color,
     required this.label,
     this.segment,
+    this.breakItem,
     required this.isBreak,
+    required this.isExisting,
   });
 }
 

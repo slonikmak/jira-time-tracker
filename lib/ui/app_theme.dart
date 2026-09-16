@@ -91,6 +91,8 @@ class AppTheme {
       brightness: isDark ? Brightness.dark : Brightness.light,
       primary: AppColors.primary(isDark),
       onPrimary: AppColors.onPrimary(isDark),
+      primaryContainer: AppColors.selected(isDark),
+      onPrimaryContainer: AppColors.primary(isDark),
       secondary: AppColors.trackTwo(isDark),
       onSecondary: isDark ? const Color(0xFF00382E) : Colors.white,
       surface: AppColors.surface(isDark),

@@ -25,10 +25,12 @@ class ShellScreen extends StatelessWidget {
         return Scaffold(
           body: Column(
             children: [
-              // 1. Десктопный titlebar (.jt-titlebar)
+              // Десктопная панель навигации с названием приложения (.jt-nav)
               Container(
-                height: 38,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.surface(isDark),
                   border: Border(
@@ -37,16 +39,17 @@ class ShellScreen extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
+                    // Название приложения
                     Container(
-                      width: 22,
-                      height: 22,
+                      width: 24,
+                      height: 24,
                       decoration: BoxDecoration(
                         color: AppColors.primary(isDark),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: const Icon(
                         Icons.timer,
-                        size: 14,
+                        size: 15,
                         color: Colors.white,
                       ),
                     ),
@@ -54,43 +57,19 @@ class ShellScreen extends StatelessWidget {
                     Text(
                       'Jira Time Tracker',
                       style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
                         color: AppColors.text(isDark),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 14),
                     Container(
-                      height: 14,
+                      height: 18,
                       width: 1,
                       color: AppColors.line(isDark),
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Desktop',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: AppColors.muted(isDark),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+                    const SizedBox(width: 14),
 
-              // 2. Десктопная панель навигации (.jt-nav)
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.surface(isDark),
-                  border: Border(
-                    bottom: BorderSide(color: AppColors.line(isDark)),
-                  ),
-                ),
-                child: Row(
-                  children: [
                     // Вкладка «Работа»
                     _NavTabButton(
                       label: 'Работа',

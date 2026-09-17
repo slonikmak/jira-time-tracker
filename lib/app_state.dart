@@ -1253,6 +1253,8 @@ class AppState extends ChangeNotifier {
               durationLocked: _lockedSourceLogIds.contains(c.id),
               originalStartUtc: origStart,
               originalEndUtc: origEnd,
+              isFixed: c.fixedStartTime != null && c.fixedStartTime!.isNotEmpty,
+              fixedStartTime: c.fixedStartTime,
             ),
           );
         }
@@ -1719,6 +1721,100 @@ class AppState extends ChangeNotifier {
     final idx = _currentSegments.indexWhere((s) => s.id == segmentId);
     if (idx != -1 && idx < _currentSegments.length - 1) {
       reorderSegments(idx, idx + 2);
+    }
+  }
+
+  /// Пересборка текущего дня с сохранением пользовательской последовательности и якорей.
+  Future<void> rebuildCurrentDay({int? customSeed}) async {
+    if (_currentDraft == null || _currentSegments.isEmpty) {
+      return;
+    }
+    _isBuildingDay = true;
+    _validationErrors = [];
+    notifyListeners();
+
+    try {
+      final draftId = _currentDraft!.id;
+      final seed = customSeed ?? _currentDraft!.seed;
+
+      final builderLogs = <DayBuilderLogInput>[];
+      for (final s in _currentSegments) {
+        final title =
+            _issues.where((i) => i.issueId == s.issueId).firstOrNull?.summary ??
+            s.issueId;
+        builderLogs.add(
+          DayBuilderLogInput(
+            sourceLogId: s.sourceLogId,
+            issueId: s.issueId,
+            titleSnapshot: title,
+            description: s.description,
+            sourceDurationSeconds: s.durationSeconds,
+            durationLocked: true,
+            isFixed: s.isFixed,
+            fixedStartUtc: s.isFixed ? s.startUtc : null,
+          ),
+        );
+      }
+
+      final input = DayBuilderInput(
+        localDate: _selectedDate,
+        timeZoneOffset: DateTime.now().timeZoneOffset,
+        settings: _daySettings,
+        logs: builderLogs,
+        existingWorklogs: _importedWorklogs,
+        draftId: draftId,
+      );
+
+      final plan = DayBuilder.rebuildDayPlan(input: input, seed: seed);
+
+      final updatedDraft = _currentDraft!.copyWith(
+        startUtc: plan.dayStartUtc,
+        endUtc: plan.dayEndUtc,
+      );
+
+      final draftLogsMap = <String, DraftLog>{};
+      for (final b in builderLogs) {
+        if (!draftLogsMap.containsKey(b.sourceLogId)) {
+          draftLogsMap[b.sourceLogId] = DraftLog(
+            draftId: draftId,
+            sourceLogId: b.sourceLogId,
+            sourceDurationSeconds: b.sourceDurationSeconds,
+            descriptionSnapshot: b.description,
+            durationLocked: b.durationLocked,
+          );
+        } else {
+          final prev = draftLogsMap[b.sourceLogId]!;
+          draftLogsMap[b.sourceLogId] = DraftLog(
+            draftId: draftId,
+            sourceLogId: b.sourceLogId,
+            sourceDurationSeconds:
+                prev.sourceDurationSeconds + b.sourceDurationSeconds,
+            descriptionSnapshot: prev.descriptionSnapshot,
+            durationLocked: prev.durationLocked,
+          );
+        }
+      }
+      final newDraftLogs = draftLogsMap.values.toList();
+
+      store.saveDayDraft(
+        draft: updatedDraft,
+        draftLogs: newDraftLogs,
+        segments: plan.segments,
+        breaks: plan.breaks,
+      );
+
+      _currentDraft = updatedDraft;
+      _currentDraftLogs = newDraftLogs;
+      _currentSegments = plan.segments;
+      _currentBreaks = plan.breaks;
+      _activeDraftDatesBySourceLogId = store.getActiveDraftDatesBySourceLogId(
+        scope: activeScope,
+      );
+      _revalidateCurrentPlan();
+      _statusMessage = 'День успешно пересобран с сохранением порядка.';
+    } finally {
+      _isBuildingDay = false;
+      notifyListeners();
     }
   }
 

@@ -689,7 +689,8 @@ class DayBuilder {
       settings.totalDurationSecondsMax,
     );
 
-    final estimatedBreaks = needsLunch ? 3000 : 600;
+    final estimatedBreaks = (needsLunch ? settings.lunchDurationSecondsMax : 0) +
+        settings.shortBreakCountMax * settings.shortBreakDurationSecondsMax;
     if (nominalDurationSeconds > 24 * 3600) {
       nominalDurationSeconds = 24 * 3600;
     }
@@ -698,7 +699,7 @@ class DayBuilder {
         settings.totalDurationSecondsMin != settings.totalDurationSecondsMax) {
       nominalDurationSeconds = min(
         nominalDurationSeconds,
-        totalSourceSeconds + totalExistingSeconds + estimatedBreaks + 1800,
+        totalSourceSeconds + totalExistingSeconds + estimatedBreaks + 3600,
       );
     }
     var dayEndUtc = dayStartUtc.add(Duration(seconds: nominalDurationSeconds));
@@ -1531,12 +1532,19 @@ class DayBuilder {
     }
 
     // 2. Размещение коротких пауз
-    final breakCount = settings.shortBreakCountMax > settings.shortBreakCountMin
+    var breakCount = settings.shortBreakCountMax > settings.shortBreakCountMin
         ? settings.shortBreakCountMin +
               rnd.nextInt(
                 settings.shortBreakCountMax - settings.shortBreakCountMin + 1,
               )
         : settings.shortBreakCountMin;
+
+    final daySpanHours = dayEndUtc.difference(dayStartUtc).inSeconds / 3600.0;
+    if (daySpanHours <= 3.5) {
+      breakCount = min(breakCount, 1);
+    } else if (daySpanHours <= 5.5) {
+      breakCount = min(breakCount, 2);
+    }
 
     if (breakCount > 0) {
       if (lunchBreak != null) {

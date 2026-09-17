@@ -6,6 +6,8 @@ import '../worklog_sender.dart';
 import 'app_theme.dart';
 import 'gap_actions_dialog.dart';
 import 'edit_segment_dialog.dart';
+import 'merge_segments_dialog.dart';
+import 'split_segment_dialog.dart';
 import 'timeline_track_bar.dart';
 
 /// Экран «День»: календарь, сборщик расписания, инспекция пауз и редактирование сегментов.
@@ -179,6 +181,14 @@ class DayScreen extends StatelessWidget {
                     : () => appState.fetchJiraWorklogsForDate(),
               ),
               if (draft != null) ...[
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.refresh, size: 16),
+                  label: const Text('Пересобрать день'),
+                  onPressed: appState.isDraftLockedFromRebuild
+                      ? null
+                      : () => _handleRebuildCurrentDay(context),
+                ),
                 const SizedBox(width: 8),
                 OutlinedButton.icon(
                   icon: const Icon(Icons.auto_awesome, size: 16),
@@ -574,7 +584,17 @@ class DayScreen extends StatelessWidget {
       items.add(_ScheduleItem.existingWorklog(ew));
     }
 
-    items.sort((a, b) => a.startUtc.compareTo(b.startUtc));
+    final segOrder = {
+      for (var i = 0; i < appState.currentSegments.length; i++)
+        appState.currentSegments[i].id: i,
+    };
+
+    items.sort((a, b) {
+      if (a.isSegment && b.isSegment) {
+        return segOrder[a.segment!.id]!.compareTo(segOrder[b.segment!.id]!);
+      }
+      return a.startUtc.compareTo(b.startUtc);
+    });
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
@@ -599,20 +619,52 @@ class DayScreen extends StatelessWidget {
               borderRadius: BorderRadius.circular(9),
             ),
             clipBehavior: Clip.antiAlias,
-            child: ListView.separated(
+            child: ReorderableListView.builder(
+              buildDefaultDragHandles: false,
               itemCount: items.length,
-              separatorBuilder: (_, _) =>
-                  Divider(height: 1, color: AppColors.line(isDark)),
+              onReorder: (oldIndex, newIndex) {
+                if (oldIndex < 0 || oldIndex >= items.length) return;
+                final draggedItem = items[oldIndex];
+                if (!draggedItem.isSegment) return;
+                final draggedSegment = draggedItem.segment!;
+                final oldSegIndex = appState.currentSegments
+                    .indexWhere((s) => s.id == draggedSegment.id);
+                if (oldSegIndex == -1) return;
+                final targetSegIndex =
+                    items.take(newIndex).where((it) => it.isSegment).length;
+                appState.reorderSegments(oldSegIndex, targetSegIndex);
+              },
               itemBuilder: (context, index) {
                 final item = items[index];
+                final key = ValueKey(
+                  item.isSegment
+                      ? 'seg_${item.segment!.id}'
+                      : (item.isBreak
+                          ? 'break_${item.breakItem!.id}'
+                          : 'ew_${item.existingWorklog!.id}'),
+                );
+
                 if (item.isSegment) {
-                  return _buildSegmentCard(context, item.segment!);
+                  return KeyedSubtree(
+                    key: key,
+                    child: _buildSegmentCard(
+                      context,
+                      item.segment!,
+                      itemIndex: index,
+                    ),
+                  );
                 } else if (item.isBreak) {
-                  return _buildBreakCard(context, item.breakItem!);
+                  return KeyedSubtree(
+                    key: key,
+                    child: _buildBreakCard(context, item.breakItem!),
+                  );
                 } else {
-                  return _buildExistingWorklogCard(
-                    context,
-                    item.existingWorklog!,
+                  return KeyedSubtree(
+                    key: key,
+                    child: _buildExistingWorklogCard(
+                      context,
+                      item.existingWorklog!,
+                    ),
                   );
                 }
               },
@@ -623,7 +675,11 @@ class DayScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSegmentCard(BuildContext context, Segment segment) {
+  Widget _buildSegmentCard(
+    BuildContext context,
+    Segment segment, {
+    int? itemIndex,
+  }) {
     final startLocal = segment.startUtc.toLocal();
     final endLocal = segment.endUtc.toLocal();
     final startStr =
@@ -644,28 +700,73 @@ class DayScreen extends StatelessWidget {
     );
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isSent = segment.sendState == SendState.sent;
+    final isLocked = appState.isReadOnly || appState.isDraftLockedFromRebuild;
+    final segIndex = appState.currentSegments.indexWhere((s) => s.id == segment.id);
+    final canMoveUp = !isSent && !isLocked && segIndex > 0;
+    final canMoveDown = !isSent &&
+        !isLocked &&
+        segIndex != -1 &&
+        segIndex < appState.currentSegments.length - 1;
+
     return Card(
       margin: EdgeInsets.zero,
       elevation: 0,
       color: AppColors.surface(isDark),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      shape: Border(bottom: BorderSide(color: AppColors.line(isDark))),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Маркер перетаскивания (Reorder Drag Handle)
+            if (itemIndex != null && !isSent && !isLocked)
+              ReorderableDragStartListener(
+                index: itemIndex,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 6, top: 4),
+                  child: Tooltip(
+                    message: 'Перетащить для изменения порядка',
+                    child: Icon(
+                      Icons.drag_indicator,
+                      size: 18,
+                      color: AppColors.muted(isDark),
+                    ),
+                  ),
+                ),
+              ),
+
             // Колонка времени
             SizedBox(
-              width: 130,
+              width: 150,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '$startStr — $endStr',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          '$startStr — $endStr',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (segment.isFixed) ...[
+                        const SizedBox(width: 4),
+                        Tooltip(
+                          message: 'Время зафиксировано',
+                          child: Icon(
+                            Icons.lock,
+                            size: 12,
+                            color: Colors.amber.shade800,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   Text(
                     durationStr,
@@ -741,9 +842,7 @@ class DayScreen extends StatelessWidget {
                         : '(без описания)',
                     style: TextStyle(
                       fontSize: 12,
-                      color: segment.description.isNotEmpty
-                          ? AppColors.muted(isDark)
-                          : AppColors.muted(isDark),
+                      color: AppColors.muted(isDark),
                     ),
                   ),
                   if (segment.lastError != null &&
@@ -803,26 +902,75 @@ class DayScreen extends StatelessWidget {
                 ],
               ),
             ),
-            // Кнопки действий: редактировать, удалить
+            // Кнопки действий: вверх, вниз, замок, разбить, объединить, редактировать, удалить
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 IconButton(
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.arrow_upward, size: 16),
+                  tooltip: 'Переместить вверх',
+                  onPressed: canMoveUp ? () => appState.moveSegmentUp(segment.id) : null,
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.arrow_downward, size: 16),
+                  tooltip: 'Переместить вниз',
+                  onPressed: canMoveDown ? () => appState.moveSegmentDown(segment.id) : null,
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(
+                    segment.isFixed ? Icons.lock : Icons.lock_open_outlined,
+                    size: 18,
+                    color: segment.isFixed ? Colors.amber.shade800 : AppColors.muted(isDark),
+                  ),
+                  tooltip: segment.isFixed ? 'Снять фиксацию времени' : 'Зафиксировать время',
+                  onPressed: isSent || isLocked ? null : () => appState.toggleSegmentFixed(segment.id),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.call_split, size: 18),
+                  tooltip: 'Разбить интервал',
+                  onPressed: isSent || isLocked
+                      ? null
+                      : () => SplitSegmentDialog.show(
+                            context,
+                            appState: appState,
+                            segment: segment,
+                            issueKey: issue.key,
+                          ),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.merge_type, size: 18),
+                  tooltip: 'Объединить интервалы',
+                  onPressed: isSent || isLocked || appState.currentSegments.length <= 1
+                      ? null
+                      : () => MergeSegmentsDialog.show(
+                            context,
+                            appState: appState,
+                            segment: segment,
+                          ),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
                   icon: const Icon(Icons.edit_outlined, size: 18),
-                  tooltip: segment.sendState == SendState.sent
+                  tooltip: isSent
                       ? 'Уже отправлено в Jira'
                       : 'Редактировать интервал (A13)',
-                  onPressed: segment.sendState == SendState.sent
+                  onPressed: isSent
                       ? null
                       : () =>
                             _openEditSegmentDialog(context, segment, issue.key),
                 ),
                 IconButton(
+                  visualDensity: VisualDensity.compact,
                   icon: const Icon(Icons.delete_outline, size: 18),
-                  tooltip: segment.sendState == SendState.sent
+                  tooltip: isSent
                       ? 'Уже отправлено в Jira'
                       : 'Удалить интервал (A13)',
-                  onPressed: segment.sendState == SendState.sent
+                  onPressed: isSent
                       ? null
                       : () => _confirmDeleteSegment(context, segment),
                 ),
@@ -852,6 +1000,7 @@ class DayScreen extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: AppColors.bg(isDark),
+          border: Border(bottom: BorderSide(color: AppColors.line(isDark))),
         ),
         child: Row(
           children: [
@@ -903,7 +1052,7 @@ class DayScreen extends StatelessWidget {
       margin: EdgeInsets.zero,
       color: AppColors.selected(isDark),
       elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      shape: Border(bottom: BorderSide(color: AppColors.line(isDark))),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Row(
@@ -1154,6 +1303,26 @@ class DayScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  void _handleRebuildCurrentDay(BuildContext context) async {
+    try {
+      await appState.rebuildCurrentDay();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('День пересобран с сохранением порядка и якорей.')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
   }
 
   void _handleSmartRebuildDay(BuildContext context) async {

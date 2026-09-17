@@ -1597,6 +1597,7 @@ class AppState extends ChangeNotifier {
     final updated = segment.copyWith(isFixed: !segment.isFixed);
     _currentSegments[idx] = updated;
     store.updateSegment(updated);
+    _revalidateCurrentPlan();
     notifyListeners();
   }
 

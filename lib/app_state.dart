@@ -1367,6 +1367,9 @@ class AppState extends ChangeNotifier {
       if (sourceLog == null) {
         // Создаем локальный лог под этот сегмент
         final logId = const Uuid().v4();
+        final startLocal = input.startUtc.toLocal();
+        final localTimeStr =
+            '${startLocal.hour.toString().padLeft(2, '0')}:${startLocal.minute.toString().padLeft(2, '0')}';
         sourceLog = LocalLog(
           id: logId,
           scope: activeScope,
@@ -1376,6 +1379,7 @@ class AppState extends ChangeNotifier {
           accumulatedSeconds: input.durationSeconds,
           createdAtUtc: input.startUtc,
           isManual: true,
+          fixedStartTime: input.fixedStartTime ?? (input.isFixed ? localTimeStr : null),
         );
         addedLogs.add(sourceLog);
       }
@@ -1404,6 +1408,7 @@ class AppState extends ChangeNotifier {
               ? input.description
               : sourceLog.description,
           sendState: SendState.pending,
+          isFixed: input.isFixed,
         ),
       );
     }

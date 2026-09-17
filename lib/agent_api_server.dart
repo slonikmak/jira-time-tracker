@@ -113,25 +113,49 @@ Content-Type: application/json
 {
   "issue_key": "PROJ-123",
   "duration_minutes": 90,
-  "description": "Опциональный комментарий"
+  "description": "Опциональный комментарий",
+  "fixed_start_time": "11:00"
 }
-(Также поддерживается "duration_seconds" вместо "duration_minutes").
+(Также поддерживается "duration_seconds" вместо "duration_minutes". "fixed_start_time" — опциональное фиксированное время в формате "HH:MM").
 
-### 3. Изменить или удалить лог
+### 3. Разбить лог на две части
+POST /api/logs/{id}/split
+Content-Type: application/json
+{
+  "part1_minutes": 45,
+  "part1_description": "Первая часть работы",
+  "part2_description": "Вторая часть работы"
+}
+(Также поддерживается "part1_seconds" вместо "part1_minutes").
+Ответ: массив из двух созданных логов.
+
+### 4. Объединить несколько логов в один
+POST /api/logs/merge
+Content-Type: application/json
+{
+  "source_log_ids": ["uuid-1", "uuid-2"],
+  "target_issue_key": "PROJ-123",
+  "description": "Объединенный комментарий"
+}
+(target_issue_key и description опциональны).
+Ответ: созданный объединенный лог.
+
+### 5. Изменить или удалить лог
 PATCH /api/logs/{id}
 {
   "duration_minutes": 45,
-  "description": "Обновленный комментарий"
+  "description": "Обновленный комментарий",
+  "fixed_start_time": "11:00"
 }
 
 DELETE /api/logs/{id}
 
-### 4. Получить состояние дня
+### 6. Получить состояние дня
 GET /api/day?date=YYYY-MM-DD
 (Параметр date опционален, по умолчанию — сегодня).
 Возвращает существующие ворклоги Jira (jira_worklogs) и текущий черновик расписания (draft) с сегментами и паузами.
 
-### 5. Сохранить расписание дня
+### 7. Сохранить расписание дня
 POST /api/day
 Content-Type: application/json
 {
@@ -144,15 +168,17 @@ Content-Type: application/json
       "description": "Работа над модулем"
     },
     {
-      "issue_key": "PROJ-456",
+      "issue_key": "EG-294",
       "start": "11:00",
-      "duration_minutes": 60,
-      "source_log_id": "optional-log-uuid"
+      "duration_minutes": 30,
+      "description": "Daily sync",
+      "is_fixed": true,
+      "fixed_start_time": "11:00"
     }
   ]
 }
 
-### 6. Получить список служебных тикетов
+### 8. Получить список служебных тикетов
 GET /api/service-tickets
 Ответ:
 [
@@ -163,7 +189,7 @@ GET /api/service-tickets
   }
 ]
 
-### 7. Справка и документация
+### 9. Справка и документация
 - GET /api/help (справка по эндпоинтам)
 - GET /api/openapi.json (OpenAPI 3.0 спецификация)
 ''';
@@ -202,7 +228,7 @@ GET /api/service-tickets
         return;
       }
 
-      // Маршруты Ticket 02
+      // Маршруты Ticket 02 и Split/Merge
       if (path == '/api/logs') {
         if (request.method == 'GET') {
           await _handleGetLogs(request, response);
@@ -211,6 +237,17 @@ GET /api/service-tickets
           await _handlePostLogs(request, response);
           return;
         }
+      }
+
+      if (path == '/api/logs/merge' && request.method == 'POST') {
+        await _handleMergeLogs(request, response);
+        return;
+      }
+
+      if (path.startsWith('/api/logs/') && path.endsWith('/split') && request.method == 'POST') {
+        final id = path.substring('/api/logs/'.length, path.length - '/split'.length);
+        await _handleSplitLog(request, response, id);
+        return;
       }
 
       if (path.startsWith('/api/logs/') && path.length > '/api/logs/'.length) {
@@ -296,6 +333,24 @@ GET /api/service-tickets
     }
   }
 
+  Map<String, dynamic> _formatLog(LocalLog log, AppState state) {
+    final issue = state.issues.where((i) => i.issueId == log.issueId).firstOrNull;
+    final key = issue?.key ?? log.issueId;
+    return {
+      'id': log.id,
+      'issue_id': log.issueId,
+      'issue_key': key,
+      'issue_title': log.titleSnapshot,
+      'duration_seconds': log.accumulatedSeconds,
+      'duration_minutes': (log.accumulatedSeconds / 60).round(),
+      'description': log.description,
+      'created_at': log.createdAtUtc.toIso8601String(),
+      'is_running': log.isRunning,
+      'is_manual': log.isManual,
+      'fixed_start_time': log.fixedStartTime,
+    };
+  }
+
   Future<void> _handleGetLogs(HttpRequest request, HttpResponse response) async {
     final state = appState;
     if (state == null) {
@@ -304,25 +359,7 @@ GET /api/service-tickets
     }
 
     final unconsumed = state.unconsumedLogs;
-    final issuesMap = {for (final i in state.issues) i.issueId: i};
-
-    final result = unconsumed.map((log) {
-      final issue = issuesMap[log.issueId];
-      final key = issue?.key ?? log.issueId;
-      return {
-        'id': log.id,
-        'issue_id': log.issueId,
-        'issue_key': key,
-        'issue_title': log.titleSnapshot,
-        'duration_seconds': log.accumulatedSeconds,
-        'duration_minutes': (log.accumulatedSeconds / 60).round(),
-        'description': log.description,
-        'created_at': log.createdAtUtc.toIso8601String(),
-        'is_running': log.isRunning,
-        'is_manual': log.isManual,
-      };
-    }).toList();
-
+    final result = unconsumed.map((log) => _formatLog(log, state)).toList();
     _sendJson(response, HttpStatus.ok, result);
   }
 
@@ -354,6 +391,25 @@ GET /api/service-tickets
     }
 
     final description = (body['description'] as String?) ?? '';
+    final fixedStartTime = body['fixed_start_time'] as String?;
+
+    if (fixedStartTime != null && fixedStartTime.trim().isNotEmpty) {
+      final parts = fixedStartTime.trim().split(':');
+      if (parts.length != 2) {
+        _sendJson(response, HttpStatus.badRequest, {
+          'error': 'Invalid "fixed_start_time" format "$fixedStartTime". Expected HH:MM'
+        });
+        return;
+      }
+      final h = int.tryParse(parts[0]);
+      final m = int.tryParse(parts[1]);
+      if (h == null || m == null || h < 0 || h > 23 || m < 0 || m > 59) {
+        _sendJson(response, HttpStatus.badRequest, {
+          'error': 'Invalid "fixed_start_time" value. Hours must be 0-23, minutes 0-59'
+        });
+        return;
+      }
+    }
 
     try {
       final issue = await state.resolveOrCreateIssue(issueKey);
@@ -361,18 +417,10 @@ GET /api/service-tickets
         issueId: issue.issueId,
         durationSeconds: totalSeconds,
         description: description,
+        fixedStartTime: fixedStartTime?.trim(),
       );
 
-      _sendJson(response, HttpStatus.created, {
-        'id': log.id,
-        'issue_id': issue.issueId,
-        'issue_key': issue.key,
-        'issue_title': issue.summary,
-        'duration_seconds': log.accumulatedSeconds,
-        'duration_minutes': (log.accumulatedSeconds / 60).round(),
-        'description': log.description,
-        'created_at': log.createdAtUtc.toIso8601String(),
-      });
+      _sendJson(response, HttpStatus.created, _formatLog(log, state));
     } catch (e) {
       _sendJson(response, HttpStatus.badRequest, {'error': e.toString()});
     }
@@ -401,23 +449,148 @@ GET /api/service-tickets
 
     final description = (body['description'] as String?) ?? log.description;
 
+    final hasFixedStartTime = body.containsKey('fixed_start_time');
+    final fixedStartTime = body['fixed_start_time'] as String?;
+    final clearFixedStartTime = (body['clear_fixed_start_time'] as bool?) ??
+        (hasFixedStartTime && (fixedStartTime == null || fixedStartTime.trim().isEmpty));
+
+    if (fixedStartTime != null && fixedStartTime.trim().isNotEmpty) {
+      final parts = fixedStartTime.trim().split(':');
+      if (parts.length != 2) {
+        _sendJson(response, HttpStatus.badRequest, {
+          'error': 'Invalid "fixed_start_time" format "$fixedStartTime". Expected HH:MM'
+        });
+        return;
+      }
+      final h = int.tryParse(parts[0]);
+      final m = int.tryParse(parts[1]);
+      if (h == null || m == null || h < 0 || h > 23 || m < 0 || m > 59) {
+        _sendJson(response, HttpStatus.badRequest, {
+          'error': 'Invalid "fixed_start_time" value. Hours must be 0-23, minutes 0-59'
+        });
+        return;
+      }
+    }
+
     try {
       await state.editLog(
         logId: id,
         durationSeconds: totalSeconds,
         description: description,
+        fixedStartTime: fixedStartTime?.trim(),
+        clearFixedStartTime: clearFixedStartTime,
       );
 
       final updated = state.logs.firstWhere((l) => l.id == id);
-      final issue = state.issues.where((i) => i.issueId == updated.issueId).firstOrNull;
+      _sendJson(response, HttpStatus.ok, _formatLog(updated, state));
+    } catch (e) {
+      _sendJson(response, HttpStatus.badRequest, {'error': e.toString()});
+    }
+  }
 
-      _sendJson(response, HttpStatus.ok, {
-        'id': updated.id,
-        'issue_key': issue?.key ?? updated.issueId,
-        'duration_seconds': updated.accumulatedSeconds,
-        'duration_minutes': (updated.accumulatedSeconds / 60).round(),
-        'description': updated.description,
+  Future<void> _handleSplitLog(HttpRequest request, HttpResponse response, String id) async {
+    final state = appState;
+    if (state == null) {
+      _sendJson(response, HttpStatus.serviceUnavailable, {'error': 'AppState not available'});
+      return;
+    }
+
+    final log = state.logs.where((l) => l.id == id).firstOrNull;
+    if (log == null) {
+      _sendJson(response, HttpStatus.notFound, {'error': 'Log with id "$id" not found'});
+      return;
+    }
+    if (log.isRunning) {
+      _sendJson(response, HttpStatus.badRequest, {
+        'error': 'Cannot split a running log. Pause it first.'
       });
+      return;
+    }
+    if (log.isConsumed || state.isLogInDraft(id)) {
+      _sendJson(response, HttpStatus.badRequest, {
+        'error': 'Cannot split a log that has already been included in a day draft.'
+      });
+      return;
+    }
+
+    final body = await _parseJsonBody(request, response);
+    if (body == null) return;
+
+    final part1Minutes = body['part1_minutes'] as int?;
+    final part1Seconds = body['part1_seconds'] as int?;
+    final splitOffset = part1Seconds ?? ((part1Minutes ?? 0) * 60);
+
+    if (splitOffset <= 0 || splitOffset >= log.accumulatedSeconds) {
+      _sendJson(response, HttpStatus.badRequest, {
+        'error':
+            'Split offset must be > 0 and < log duration (${log.accumulatedSeconds}s). Got $splitOffset'
+      });
+      return;
+    }
+
+    final part1Desc = body['part1_description'] as String?;
+    final part2Desc = body['part2_description'] as String?;
+
+    try {
+      final (l1, l2) = await state.splitLog(
+        logId: id,
+        part1DurationSeconds: splitOffset,
+        part1Description: part1Desc,
+        part2Description: part2Desc,
+      );
+
+      _sendJson(response, HttpStatus.ok, [
+        _formatLog(l1, state),
+        _formatLog(l2, state),
+      ]);
+    } catch (e) {
+      _sendJson(response, HttpStatus.badRequest, {'error': e.toString()});
+    }
+  }
+
+  Future<void> _handleMergeLogs(HttpRequest request, HttpResponse response) async {
+    final state = appState;
+    if (state == null) {
+      _sendJson(response, HttpStatus.serviceUnavailable, {'error': 'AppState not available'});
+      return;
+    }
+
+    final body = await _parseJsonBody(request, response);
+    if (body == null) return;
+
+    final sourceLogIdsRaw = body['source_log_ids'];
+    if (sourceLogIdsRaw is! List || sourceLogIdsRaw.length < 2) {
+      _sendJson(response, HttpStatus.badRequest, {
+        'error': 'Field "source_log_ids" must be an array with at least 2 log IDs'
+      });
+      return;
+    }
+
+    final sourceLogIds = sourceLogIdsRaw.map((e) => e.toString()).toList();
+    final targetIssueKey = body['target_issue_key'] as String?;
+    String? targetIssueId;
+    if (targetIssueKey != null && targetIssueKey.trim().isNotEmpty) {
+      try {
+        final issue = await state.resolveOrCreateIssue(targetIssueKey.trim());
+        targetIssueId = issue.issueId;
+      } catch (e) {
+        _sendJson(response, HttpStatus.badRequest, {
+          'error': 'Target issue "$targetIssueKey" could not be resolved: $e'
+        });
+        return;
+      }
+    }
+
+    final description = body['description'] as String?;
+
+    try {
+      final merged = await state.mergeLogs(
+        logIds: sourceLogIds,
+        targetIssueId: targetIssueId,
+        description: description,
+      );
+
+      _sendJson(response, HttpStatus.ok, _formatLog(merged, state));
     } catch (e) {
       _sendJson(response, HttpStatus.badRequest, {'error': e.toString()});
     }
@@ -507,6 +680,7 @@ GET /api/service-tickets
           'duration_minutes': (s.durationSeconds / 60).round(),
           'description': s.description,
           'send_state': s.sendState.name,
+          'is_fixed': s.isFixed,
         }).toList(),
         'breaks': breaks.map((b) => {
           'id': b.id,
@@ -621,6 +795,8 @@ GET /api/service-tickets
 
       final desc = (item['description'] as String?) ?? '';
       final sourceLogId = item['source_log_id'] as String?;
+      final isFixed = (item['is_fixed'] as bool?) ?? (item['fixed_start_time'] != null);
+      final fixedStartTime = item['fixed_start_time'] as String?;
 
       inputSegments.add(
         AgentSegmentInput(
@@ -629,6 +805,8 @@ GET /api/service-tickets
           durationSeconds: totalSec,
           description: desc,
           sourceLogId: sourceLogId,
+          isFixed: isFixed,
+          fixedStartTime: fixedStartTime?.trim(),
         ),
       );
     }
@@ -675,9 +853,21 @@ GET /api/service-tickets
   ```bash
   curl -X POST $url/api/logs \\
     -H "Content-Type: application/json" \\
-    -d '{"issue_key": "PROJ-123", "duration_minutes": 45, "description": "Работа над багом"}'
+    -d '{"issue_key": "PROJ-123", "duration_minutes": 45, "description": "Работа над багом", "fixed_start_time": "11:00"}'
   ```
-- `PATCH /api/logs/{id}` — скорректировать длительность или описание свободного лога.
+- `POST /api/logs/{id}/split` — разделить лог на две части:
+  ```bash
+  curl -X POST $url/api/logs/LOG_ID/split \\
+    -H "Content-Type: application/json" \\
+    -d '{"part1_minutes": 30, "part1_description": "Часть 1", "part2_description": "Часть 2"}'
+  ```
+- `POST /api/logs/merge` — объединить несколько логов в один:
+  ```bash
+  curl -X POST $url/api/logs/merge \\
+    -H "Content-Type: application/json" \\
+    -d '{"source_log_ids": ["ID_1", "ID_2"], "target_issue_key": "PROJ-123", "description": "Слияние задач"}'
+  ```
+- `PATCH /api/logs/{id}` — скорректировать длительность, описание или фиксированное время свободного лога.
 - `DELETE /api/logs/{id}` — удалить ошибочный лог.
 
 ### 3. Расписание дня
@@ -694,6 +884,14 @@ GET /api/service-tickets
           "start": "09:00",
           "duration_minutes": 60,
           "description": "Анализ кода"
+        },
+        {
+          "issue_key": "EG-294",
+          "start": "11:00",
+          "duration_minutes": 30,
+          "description": "Daily standup",
+          "is_fixed": true,
+          "fixed_start_time": "11:00"
         }
       ]
     }'
@@ -757,7 +955,12 @@ GET /api/service-tickets
                       'issue_key': {'type': 'string', 'example': 'PROJ-123'},
                       'duration_minutes': {'type': 'integer', 'example': 45},
                       'duration_seconds': {'type': 'integer', 'example': 2700},
-                      'description': {'type': 'string', 'example': 'Debugging issue'}
+                      'description': {'type': 'string', 'example': 'Debugging issue'},
+                      'fixed_start_time': {
+                        'type': 'string',
+                        'example': '11:00',
+                        'description': 'Optional fixed start time (HH:MM)'
+                      }
                     }
                   }
                 }
@@ -770,12 +973,65 @@ GET /api/service-tickets
             }
           }
         },
+        '/api/logs/merge': {
+          'post': {
+            'summary': 'Merge multiple unsubmitted time logs into one',
+            'requestBody': {
+              'required': true,
+              'content': {
+                'application/json': {
+                  'schema': {
+                    'type': 'object',
+                    'required': ['source_log_ids'],
+                    'properties': {
+                      'source_log_ids': {
+                        'type': 'array',
+                        'items': {'type': 'string'},
+                        'example': ['uuid-1', 'uuid-2']
+                      },
+                      'target_issue_key': {
+                        'type': 'string',
+                        'example': 'PROJ-123',
+                        'description': 'Optional target issue key (defaults to first log issue)'
+                      },
+                      'description': {
+                        'type': 'string',
+                        'example': 'Combined description'
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            'responses': {
+              '200': {'description': 'Merged log'},
+              '400': {'description': 'Invalid parameters or logs not found'}
+            }
+          }
+        },
         '/api/logs/{id}': {
           'patch': {
             'summary': 'Update an unsubmitted time log',
             'parameters': [
               {'name': 'id', 'in': 'path', 'required': true, 'schema': {'type': 'string'}}
             ],
+            'requestBody': {
+              'required': false,
+              'content': {
+                'application/json': {
+                  'schema': {
+                    'type': 'object',
+                    'properties': {
+                      'duration_minutes': {'type': 'integer', 'example': 45},
+                      'duration_seconds': {'type': 'integer', 'example': 2700},
+                      'description': {'type': 'string', 'example': 'Updated description'},
+                      'fixed_start_time': {'type': 'string', 'example': '11:00'},
+                      'clear_fixed_start_time': {'type': 'boolean', 'example': false}
+                    }
+                  }
+                }
+              }
+            },
             'responses': {
               '200': {'description': 'Log updated'},
               '404': {'description': 'Log not found or already consumed'}
@@ -788,6 +1044,35 @@ GET /api/service-tickets
             ],
             'responses': {
               '200': {'description': 'Log deleted'},
+              '404': {'description': 'Log not found'}
+            }
+          }
+        },
+        '/api/logs/{id}/split': {
+          'post': {
+            'summary': 'Split an unsubmitted time log into two parts',
+            'parameters': [
+              {'name': 'id', 'in': 'path', 'required': true, 'schema': {'type': 'string'}}
+            ],
+            'requestBody': {
+              'required': true,
+              'content': {
+                'application/json': {
+                  'schema': {
+                    'type': 'object',
+                    'properties': {
+                      'part1_minutes': {'type': 'integer', 'example': 30},
+                      'part1_seconds': {'type': 'integer', 'example': 1800},
+                      'part1_description': {'type': 'string', 'example': 'First half'},
+                      'part2_description': {'type': 'string', 'example': 'Second half'}
+                    }
+                  }
+                }
+              }
+            },
+            'responses': {
+              '200': {'description': 'Array of two created logs'},
+              '400': {'description': 'Invalid split offset or log in draft'},
               '404': {'description': 'Log not found'}
             }
           }
@@ -830,7 +1115,9 @@ GET /api/service-tickets
                             'duration_minutes': {'type': 'integer', 'example': 60},
                             'duration_seconds': {'type': 'integer', 'example': 3600},
                             'description': {'type': 'string', 'example': 'Code review'},
-                            'source_log_id': {'type': 'string'}
+                            'source_log_id': {'type': 'string'},
+                            'is_fixed': {'type': 'boolean', 'example': true},
+                            'fixed_start_time': {'type': 'string', 'example': '11:00'}
                           }
                         }
                       }

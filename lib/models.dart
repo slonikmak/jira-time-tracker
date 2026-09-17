@@ -797,6 +797,8 @@ class AgentSegmentInput {
   final int durationSeconds;
   final String description;
   final String? sourceLogId;
+  final bool isFixed;
+  final String? fixedStartTime;
 
   const AgentSegmentInput({
     required this.issueKey,
@@ -804,6 +806,8 @@ class AgentSegmentInput {
     required this.durationSeconds,
     this.description = '',
     this.sourceLogId,
+    this.isFixed = false,
+    this.fixedStartTime,
   });
 }
 

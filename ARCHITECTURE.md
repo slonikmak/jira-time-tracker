@@ -57,12 +57,16 @@ flowchart TD
 | lib/ui/shell_screen.dart | Реализован | ShellScreen: общая оболочка, табы «Работа» и «День», настройки | Виджеты, баннер read-only, навигация |
 | lib/ui/work_screen.dart | Реализован | WorkScreen: каталог задач, таймеры, очередь логов и история | Карточки задач, живые таймеры, очередь неиспользованных логов, нижняя панель сборки |
 | lib/ui/day_screen.dart | Реализован | DayScreen: календарный день, расписание, отправка и сверка | Таблица расписания, визуализация пауз и конфликтов, отправка в Jira, сверка unknown |
-| lib/ui/add_time_dialog.dart | Реализован | AddTimeDialog: диалог ручного добавления времени (A01) | Ввод часов/минут, выбор задачи, опциональное описание, валидация |
-| lib/ui/edit_log_dialog.dart | Реализован | EditLogDialog: редактирование свободного остановленного лога | Изменение часов, минут и описания работы |
+| lib/ui/add_time_dialog.dart | Реализован | AddTimeDialog: диалог ручного добавления времени (A01) | Ввод часов/минут, выбор задачи, опциональное описание, фиксированное время старта, валидация |
+| lib/ui/edit_log_dialog.dart | Реализован | EditLogDialog: редактирование свободного остановленного лога | Изменение часов, минут, описания работы и фиксированного времени старта |
+| lib/ui/split_log_dialog.dart | Реализован | SplitLogDialog: разделение свободного лога на две части | Настройка смещения точки разделения, индивидуальные описания обеих частей |
+| lib/ui/merge_logs_dialog.dart | Реализован | MergeLogsDialog: объединение нескольких свободных логов | Выбор целевой задачи и объединение накопленного времени и комментариев |
 | lib/ui/edit_segment_dialog.dart | Реализован | EditSegmentDialog: редактирование отдельного интервала расписания | Изменение времени начала и длительности интервала |
+| lib/ui/split_segment_dialog.dart | Реализован | SplitSegmentDialog: разделение интервала расписания дня | Разрезание сегмента на две последовательные части с сохранением позиции в дне |
+| lib/ui/merge_segments_dialog.dart | Реализован | MergeSegmentsDialog: объединение двух сегментов дня | Слияние сегментов с суммированием длительности |
 | lib/ui/gap_actions_dialog.dart | Реализован | GapActionsDialog: быстрые целевые действия над свободным промежутком расписания | Схлопывание зазора (snap), растягивание задачи (fill) и точная длительность с выталкиванием волной (ripple push) |
 | lib/ui/settings_dialog.dart | Реализован | SettingsDialog: диалог настроек подключения | Форма ввода, маскирование токена, тестирование подключения, отображение статуса Local API и копирование скилла для агента |
-| lib/agent_api_server.dart | Реализован | AgentApiServer: встроенный HTTP REST API для AI-агентов (порт 8765) | Эндпоинты /api/help, /api/openapi.json, /api/logs, /api/day для автономного взаимодействия агентов с трекером |
+| lib/agent_api_server.dart | Реализован | AgentApiServer: встроенный HTTP REST API для AI-агентов (порт 8765) | Эндпоинты /api/help, /api/openapi.json, /api/logs (вкл. /split, /merge), /api/day (якоря is_fixed), /api/service-tickets |
 
 Пути — ориентир для навигации, а не требование создать пустые заготовки заранее. Начинай с нужных файлов; разделяй файл, когда в нём появляется самостоятельная ответственность. Интерфейс здесь означает доступные операции и их условия, а не обязательный Dart interface или abstract class.
 
@@ -81,10 +85,10 @@ flowchart TD
 | Сущность | Минимальные поля | Назначение |
 |---|---|---|
 | Issue | scope, issueId, key, summary, status?, lastUsedAtUtc, currentLogId? | Кэш задачи, статус и ссылка на текущий локальный лог |
-| LocalLog | id, scope, issueId, titleSnapshot, description, accumulatedSeconds, runningSinceUtc?, createdAtUtc, consumedAtUtc?, isManual | Исходная запись пользователя (таймер или ручной ввод); хранится независимо от результата сборки |
+| LocalLog | id, scope, issueId, titleSnapshot, description, accumulatedSeconds, runningSinceUtc?, createdAtUtc, consumedAtUtc?, isManual, fixedStartTime? | Исходная запись пользователя (таймер или ручной ввод, опциональный якорь старта); хранится независимо от результата сборки |
 | DayDraft | id, scope, date, startUtc, endUtc, seed, settingsSnapshot, importedWorklogsSnapshot, status | Сохранённый план одной даты и сведения, на которых он построен |
 | DraftLog | draftId, sourceLogId, sourceDurationSeconds, descriptionSnapshot, durationLocked | Привязка источника к черновику и снимок исходных данных |
-| Segment | id, draftId, sourceLogId, issueId, startUtc, durationSeconds, description, sendState, jiraWorklogId?, lastError?, frozenPayload? | Отдельная отправляемая часть и её устойчивое состояние доставки |
+| Segment | id, draftId, sourceLogId, issueId, startUtc, durationSeconds, description, sendState, jiraWorklogId?, lastError?, frozenPayload?, isFixed | Отдельная отправляемая часть (опционально зафиксированный якорь) и её устойчивое состояние доставки |
 | Break | draftId, startUtc, durationSeconds, kind | Сгенерированная пауза с видом lunch/short; прочие пробелы после ручной правки выводятся из расписания |
 
 Имена таблиц и классов можно адаптировать. Поля settingsSnapshot, importedWorklogsSnapshot и frozenPayload допустимо хранить как JSON в SQLite: их содержимое не требует самостоятельной таблицы только ради вложенности. Отдельные секунды тиков и повторно вычисляемые экранные суммы в базе не нужны.

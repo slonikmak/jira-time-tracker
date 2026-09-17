@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../agent_api_server.dart';
 import '../app_state.dart';
 import '../jira_client.dart';
 import '../models.dart';
@@ -25,6 +27,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late final TextEditingController _urlController;
   late final TextEditingController _emailController;
   late final TextEditingController _tokenController;
+  late final TextEditingController _agentUrlController;
+  late final TextEditingController _skillPromptController;
 
   bool _isLoading = true;
   bool _isChecking = false;
@@ -38,6 +42,11 @@ class _SettingsDialogState extends State<SettingsDialog> {
     _urlController = TextEditingController();
     _emailController = TextEditingController();
     _tokenController = TextEditingController();
+    final agentUrl = widget.appState.apiServerUrl ?? 'http://127.0.0.1:8765';
+    _agentUrlController = TextEditingController(text: agentUrl);
+    _skillPromptController = TextEditingController(
+      text: AgentApiServer.generateSkillPrompt(agentUrl),
+    );
     _loadInitialData();
   }
 
@@ -59,6 +68,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
     _urlController.dispose();
     _emailController.dispose();
     _tokenController.dispose();
+    _agentUrlController.dispose();
+    _skillPromptController.dispose();
     super.dispose();
   }
 
@@ -124,7 +135,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     return AlertDialog(
       title: const Text('Настройки подключения к Jira'),
       content: SizedBox(
-        width: 520,
+        width: 580,
         child: _isLoading
             ? const SizedBox(
                 height: 200,
@@ -282,6 +293,93 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         ),
                       ),
                     ],
+                    const SizedBox(height: 20),
+                    const Divider(),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Локальный API для AI-агентов',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Встроенный HTTP-сервер позволяет AI-агентам логировать время и передавать готовое расписание дня.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _agentUrlController,
+                      readOnly: true,
+                      decoration: InputDecoration(
+                        labelText: 'Адрес локального сервера (хост и порт)',
+                        border: const OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.lan_outlined),
+                        suffixIcon: IconButton(
+                          tooltip: 'Скопировать адрес',
+                          icon: const Icon(Icons.copy, size: 18),
+                          onPressed: () {
+                            Clipboard.setData(
+                              ClipboardData(text: _agentUrlController.text),
+                            );
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Адрес сервера скопирован в буфер обмена',
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Инструкция для создания скилла агента:',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        FilledButton.tonalIcon(
+                          icon: const Icon(Icons.copy, size: 16),
+                          label: const Text('Скопировать инструкцию для агента'),
+                          onPressed: () {
+                            Clipboard.setData(
+                              ClipboardData(text: _skillPromptController.text),
+                            );
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Инструкция для агента скопирована в буфер обмена',
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _skillPromptController,
+                      readOnly: true,
+                      maxLines: 8,
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 11,
+                      ),
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.all(10),
+                      ),
+                    ),
                   ],
                 ),
               ),

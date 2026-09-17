@@ -43,6 +43,9 @@ void main() async {
     isReadOnly: !isPrimary,
   );
   await appState.loadSavedConnection();
+  if (isPrimary) {
+    await appState.startApiServer();
+  }
 
   runApp(JiraTimeTrackerApp(appState: appState));
 }

@@ -774,3 +774,21 @@ class ImportedWorklog {
   factory ImportedWorklog.fromJson(String source) =>
       ImportedWorklog.fromMap(jsonDecode(source) as Map<String, dynamic>);
 }
+
+/// Входной сегмент для формирования дня от внешнего AI-агента.
+class AgentSegmentInput {
+  final String issueKey;
+  final DateTime startUtc;
+  final int durationSeconds;
+  final String description;
+  final String? sourceLogId;
+
+  const AgentSegmentInput({
+    required this.issueKey,
+    required this.startUtc,
+    required this.durationSeconds,
+    this.description = '',
+    this.sourceLogId,
+  });
+}
+

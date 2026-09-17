@@ -29,6 +29,7 @@ class _EditLogDialogState extends State<EditLogDialog> {
   late final TextEditingController _hoursController;
   late final TextEditingController _minutesController;
   late final TextEditingController _descController;
+  String? _fixedStartTime;
   String? _errorMessage;
   bool _isSaving = false;
 
@@ -40,6 +41,7 @@ class _EditLogDialogState extends State<EditLogDialog> {
     _hoursController = TextEditingController(text: h.toString());
     _minutesController = TextEditingController(text: m.toString());
     _descController = TextEditingController(text: widget.log.description);
+    _fixedStartTime = widget.log.fixedStartTime;
   }
 
   @override
@@ -75,6 +77,8 @@ class _EditLogDialogState extends State<EditLogDialog> {
         logId: widget.log.id,
         durationSeconds: totalSeconds,
         description: _descController.text.trim(),
+        fixedStartTime: _fixedStartTime,
+        clearFixedStartTime: _fixedStartTime == null,
       );
 
       if (mounted) {
@@ -161,6 +165,58 @@ class _EditLogDialogState extends State<EditLogDialog> {
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),
+              ),
+              const SizedBox(height: 16),
+
+              // Фиксированное время начала
+              const Text(
+                'Фиксированное время начала (необязательно)',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.access_time, size: 18),
+                      label: Text(
+                        _fixedStartTime != null
+                            ? 'Старт: $_fixedStartTime'
+                            : 'Указать фиксированное время',
+                      ),
+                      onPressed: () async {
+                        final picked = await showTimePicker(
+                          context: context,
+                          initialTime: _fixedStartTime != null
+                              ? TimeOfDay(
+                                  hour: int.parse(_fixedStartTime!.split(':')[0]),
+                                  minute: int.parse(_fixedStartTime!.split(':')[1]),
+                                )
+                              : const TimeOfDay(hour: 11, minute: 0),
+                        );
+                        if (picked != null) {
+                          final hh = picked.hour.toString().padLeft(2, '0');
+                          final mm = picked.minute.toString().padLeft(2, '0');
+                          setState(() {
+                            _fixedStartTime = '$hh:$mm';
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                  if (_fixedStartTime != null) ...[
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      tooltip: 'Очистить фиксированное время',
+                      onPressed: () {
+                        setState(() {
+                          _fixedStartTime = null;
+                        });
+                      },
+                    ),
+                  ],
+                ],
               ),
 
               if (_errorMessage != null) ...[

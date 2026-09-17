@@ -894,7 +894,10 @@ class DayBuilder {
         maximumWorkSeconds: targetWorkSeconds,
         freeIntervals: freeIntervals,
         existingBreaks: breaks,
-        mandatoryPauseSeconds: settings.shortBreakDurationSecondsMin,
+        mandatoryPauseSeconds: (settings.shortBreakCountMax > 0 &&
+                settings.shortBreakDurationSecondsMax > 0)
+            ? settings.shortBreakDurationSecondsMin
+            : 0,
         draftId: input.draftId,
         seed: seed,
         occupiedActivities: occupied.where((o) => o.type != 'Перерыв').toList(),
@@ -1165,15 +1168,10 @@ class DayBuilder {
 
     bool hasBreakBetween(DateTime start, DateTime end) {
       if (start.isAtSameMomentAs(end)) return false;
-      final hasBreak = [...existingBreaks, ...additionalBreaks].any(
+      return [...existingBreaks, ...additionalBreaks].any(
         (pause) =>
             !pause.startUtc.isBefore(start) && !pause.endUtc.isAfter(end),
       );
-      if (hasBreak) return true;
-      final hasActivity = occupiedActivities.any(
-        (act) => !act.start.isBefore(start) && !act.end.isAfter(end),
-      );
-      return hasActivity;
     }
 
     for (final chunk in chunks) {

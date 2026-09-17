@@ -6,6 +6,8 @@ import '../service_tickets.dart';
 import 'add_time_dialog.dart';
 import 'app_theme.dart';
 import 'edit_log_dialog.dart';
+import 'merge_logs_dialog.dart';
+import 'split_log_dialog.dart';
 
 /// Режим отображения правой колонки экрана «Работа».
 enum WorkScreenQueueTab { queue, history }
@@ -931,6 +933,37 @@ class _WorkScreenState extends State<WorkScreen> {
                       ),
                     ),
                   ),
+                  if (log.fixedStartTime != null) ...[
+                    const SizedBox(width: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary(isDark).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: AppColors.primary(isDark).withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.lock, size: 11, color: AppColors.primary(isDark)),
+                          const SizedBox(width: 3),
+                          Text(
+                            log.fixedStartTime!,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 10,
+                              color: AppColors.primary(isDark),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -986,15 +1019,63 @@ class _WorkScreenState extends State<WorkScreen> {
                         log: log,
                       ),
                     ),
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      icon: const Icon(
-                        Icons.delete_outline,
-                        size: 18,
-                        color: Colors.red,
-                      ),
-                      tooltip: 'Удалить лог',
-                      onPressed: () => _confirmDeleteLog(context, log),
+                    PopupMenuButton<String>(
+                      tooltip: 'Дополнительные действия',
+                      icon: const Icon(Icons.more_vert, size: 18),
+                      onSelected: (val) {
+                        switch (val) {
+                          case 'split':
+                            SplitLogDialog.show(
+                              context,
+                              appState: widget.appState,
+                              log: log,
+                            );
+                            break;
+                          case 'merge':
+                            MergeLogsDialog.show(
+                              context,
+                              appState: widget.appState,
+                              log: log,
+                            );
+                            break;
+                          case 'delete':
+                            _confirmDeleteLog(context, log);
+                            break;
+                        }
+                      },
+                      itemBuilder: (ctx) => [
+                        const PopupMenuItem(
+                          value: 'split',
+                          child: Row(
+                            children: [
+                              Icon(Icons.call_split, size: 16),
+                              SizedBox(width: 8),
+                              Text('Разбить'),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'merge',
+                          child: Row(
+                            children: [
+                              Icon(Icons.merge_type, size: 16),
+                              SizedBox(width: 8),
+                              Text('Объединить с...'),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuDivider(),
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(Icons.delete_outline, size: 16, color: Colors.red),
+                              SizedBox(width: 8),
+                              Text('Удалить', style: TextStyle(color: Colors.red)),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ],

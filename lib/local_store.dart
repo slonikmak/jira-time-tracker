@@ -61,6 +61,7 @@ class LocalStore {
             created_at_utc TEXT NOT NULL,
             consumed_at_utc TEXT,
             is_manual INTEGER NOT NULL DEFAULT 0,
+            fixed_start_time TEXT,
             FOREIGN KEY (scope, issue_id) REFERENCES issues (scope, issue_id) ON DELETE CASCADE
           );
 
@@ -102,6 +103,7 @@ class LocalStore {
             jira_worklog_id TEXT,
             last_error TEXT,
             frozen_payload TEXT,
+            is_fixed INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY (draft_id) REFERENCES day_drafts (id) ON DELETE CASCADE,
             FOREIGN KEY (source_log_id) REFERENCES local_logs (id) ON DELETE CASCADE
           );
@@ -119,7 +121,7 @@ class LocalStore {
 
           CREATE INDEX IF NOT EXISTS idx_breaks_draft ON breaks (draft_id);
 
-          PRAGMA user_version = 1;
+          PRAGMA user_version = 2;
         ''');
         _db.execute('COMMIT;');
       } catch (e) {
@@ -142,6 +144,25 @@ class LocalStore {
       _db.execute(
         'ALTER TABLE local_logs ADD COLUMN is_manual INTEGER NOT NULL DEFAULT 0;',
       );
+    }
+
+    // Для существующих баз гарантируем наличие колонки fixed_start_time
+    final hasFixedStartTime = logColumns.any((c) => c['name'] == 'fixed_start_time');
+    if (!hasFixedStartTime) {
+      _db.execute('ALTER TABLE local_logs ADD COLUMN fixed_start_time TEXT;');
+    }
+
+    // Для существующих баз гарантируем наличие колонки is_fixed
+    final segmentColumns = _db.select('PRAGMA table_info(segments);');
+    final hasIsFixed = segmentColumns.any((c) => c['name'] == 'is_fixed');
+    if (!hasIsFixed) {
+      _db.execute(
+        'ALTER TABLE segments ADD COLUMN is_fixed INTEGER NOT NULL DEFAULT 0;',
+      );
+    }
+
+    if (currentVersion < 2) {
+      _db.execute('PRAGMA user_version = 2;');
     }
   }
 
@@ -246,15 +267,16 @@ class LocalStore {
   void upsertLocalLog(LocalLog log) {
     _checkWritable();
     final stmt = _db.prepare('''
-      INSERT INTO local_logs (id, scope, issue_id, title_snapshot, description, accumulated_seconds, running_since_utc, created_at_utc, consumed_at_utc, is_manual)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO local_logs (id, scope, issue_id, title_snapshot, description, accumulated_seconds, running_since_utc, created_at_utc, consumed_at_utc, is_manual, fixed_start_time)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         title_snapshot = excluded.title_snapshot,
         description = excluded.description,
         accumulated_seconds = excluded.accumulated_seconds,
         running_since_utc = excluded.running_since_utc,
         consumed_at_utc = excluded.consumed_at_utc,
-        is_manual = excluded.is_manual;
+        is_manual = excluded.is_manual,
+        fixed_start_time = excluded.fixed_start_time;
     ''');
     try {
       stmt.execute([
@@ -268,6 +290,7 @@ class LocalStore {
         log.createdAtUtc.toIso8601String(),
         log.consumedAtUtc?.toIso8601String(),
         log.isManual ? 1 : 0,
+        log.fixedStartTime,
       ]);
     } finally {
       stmt.close();
@@ -276,7 +299,7 @@ class LocalStore {
 
   LocalLog? getLocalLog(String id) {
     final stmt = _db.prepare('''
-      SELECT id, scope, issue_id, title_snapshot, description, accumulated_seconds, running_since_utc, created_at_utc, consumed_at_utc, is_manual
+      SELECT id, scope, issue_id, title_snapshot, description, accumulated_seconds, running_since_utc, created_at_utc, consumed_at_utc, is_manual, fixed_start_time
       FROM local_logs
       WHERE id = ?;
     ''');
@@ -295,13 +318,13 @@ class LocalStore {
   }) {
     final sql = onlyUnconsumed
         ? '''
-          SELECT id, scope, issue_id, title_snapshot, description, accumulated_seconds, running_since_utc, created_at_utc, consumed_at_utc, is_manual
+          SELECT id, scope, issue_id, title_snapshot, description, accumulated_seconds, running_since_utc, created_at_utc, consumed_at_utc, is_manual, fixed_start_time
           FROM local_logs
           WHERE scope = ? AND consumed_at_utc IS NULL
           ORDER BY created_at_utc DESC;
         '''
         : '''
-          SELECT id, scope, issue_id, title_snapshot, description, accumulated_seconds, running_since_utc, created_at_utc, consumed_at_utc, is_manual
+          SELECT id, scope, issue_id, title_snapshot, description, accumulated_seconds, running_since_utc, created_at_utc, consumed_at_utc, is_manual, fixed_start_time
           FROM local_logs
           WHERE scope = ?
           ORDER BY created_at_utc DESC;
@@ -448,8 +471,8 @@ class LocalStore {
       for (final s in segments) {
         _db.execute(
           '''
-          INSERT INTO segments (id, draft_id, source_log_id, issue_id, start_utc, duration_seconds, description, send_state, jira_worklog_id, last_error, frozen_payload)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+          INSERT INTO segments (id, draft_id, source_log_id, issue_id, start_utc, duration_seconds, description, send_state, jira_worklog_id, last_error, frozen_payload, is_fixed)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         ''',
           [
             s.id,
@@ -463,6 +486,7 @@ class LocalStore {
             s.jiraWorklogId,
             s.lastError,
             s.frozenPayload,
+            s.isFixed ? 1 : 0,
           ],
         );
       }
@@ -541,7 +565,7 @@ class LocalStore {
   /// Получение списка Segment для черновика, отсортированных по start_utc.
   List<Segment> getSegments({required String draftId}) {
     final stmt = _db.prepare('''
-      SELECT id, draft_id, source_log_id, issue_id, start_utc, duration_seconds, description, send_state, jira_worklog_id, last_error, frozen_payload
+      SELECT id, draft_id, source_log_id, issue_id, start_utc, duration_seconds, description, send_state, jira_worklog_id, last_error, frozen_payload, is_fixed
       FROM segments
       WHERE draft_id = ?
       ORDER BY start_utc ASC;
@@ -601,13 +625,38 @@ class LocalStore {
     }
   }
 
+  /// Вставка одного сегмента в базу данных.
+  void insertSegment(Segment segment) {
+    _checkWritable();
+    _db.execute(
+      '''
+      INSERT INTO segments (id, draft_id, source_log_id, issue_id, start_utc, duration_seconds, description, send_state, jira_worklog_id, last_error, frozen_payload, is_fixed)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    ''',
+      [
+        segment.id,
+        segment.draftId,
+        segment.sourceLogId,
+        segment.issueId,
+        segment.startUtc.toIso8601String(),
+        segment.durationSeconds,
+        segment.description,
+        segment.sendState.name,
+        segment.jiraWorklogId,
+        segment.lastError,
+        segment.frozenPayload,
+        segment.isFixed ? 1 : 0,
+      ],
+    );
+  }
+
   /// Обновление одного сегмента в базе данных.
   void updateSegment(Segment segment) {
     _checkWritable();
     _db.execute(
       '''
       UPDATE segments
-      SET start_utc = ?, duration_seconds = ?, description = ?, send_state = ?, jira_worklog_id = ?, last_error = ?, frozen_payload = ?
+      SET start_utc = ?, duration_seconds = ?, description = ?, send_state = ?, jira_worklog_id = ?, last_error = ?, frozen_payload = ?, is_fixed = ?
       WHERE id = ?;
     ''',
       [
@@ -618,6 +667,7 @@ class LocalStore {
         segment.jiraWorklogId,
         segment.lastError,
         segment.frozenPayload,
+        segment.isFixed ? 1 : 0,
         segment.id,
       ],
     );

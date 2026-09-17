@@ -13,6 +13,9 @@ class DayBuilderLogInput {
 
   final DateTime? originalStartUtc;
   final DateTime? originalEndUtc;
+  final bool isFixed;
+  final String? fixedStartTime;
+  final DateTime? fixedStartUtc;
 
   const DayBuilderLogInput({
     required this.sourceLogId,
@@ -23,6 +26,9 @@ class DayBuilderLogInput {
     this.durationLocked = false,
     this.originalStartUtc,
     this.originalEndUtc,
+    this.isFixed = false,
+    this.fixedStartTime,
+    this.fixedStartUtc,
   });
 
   DayBuilderLogInput copyWith({
@@ -34,6 +40,9 @@ class DayBuilderLogInput {
     bool? durationLocked,
     DateTime? originalStartUtc,
     DateTime? originalEndUtc,
+    bool? isFixed,
+    String? fixedStartTime,
+    DateTime? fixedStartUtc,
   }) {
     return DayBuilderLogInput(
       sourceLogId: sourceLogId ?? this.sourceLogId,
@@ -45,6 +54,9 @@ class DayBuilderLogInput {
       durationLocked: durationLocked ?? this.durationLocked,
       originalStartUtc: originalStartUtc ?? this.originalStartUtc,
       originalEndUtc: originalEndUtc ?? this.originalEndUtc,
+      isFixed: isFixed ?? this.isFixed,
+      fixedStartTime: fixedStartTime ?? this.fixedStartTime,
+      fixedStartUtc: fixedStartUtc ?? this.fixedStartUtc,
     );
   }
 }

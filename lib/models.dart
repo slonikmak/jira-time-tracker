@@ -134,6 +134,7 @@ class LocalLog {
   final DateTime createdAtUtc;
   final DateTime? consumedAtUtc;
   final bool isManual;
+  final String? fixedStartTime;
 
   const LocalLog({
     required this.id,
@@ -146,6 +147,7 @@ class LocalLog {
     required this.createdAtUtc,
     this.consumedAtUtc,
     this.isManual = false,
+    this.fixedStartTime,
   });
 
   bool get isRunning => runningSinceUtc != null;
@@ -163,6 +165,7 @@ class LocalLog {
       'created_at_utc': createdAtUtc.toIso8601String(),
       'consumed_at_utc': consumedAtUtc?.toIso8601String(),
       'is_manual': isManual ? 1 : 0,
+      'fixed_start_time': fixedStartTime,
     };
   }
 
@@ -182,6 +185,7 @@ class LocalLog {
           ? DateTime.parse(map['consumed_at_utc'] as String)
           : null,
       isManual: (map['is_manual'] as int? ?? 0) == 1,
+      fixedStartTime: map['fixed_start_time'] as String?,
     );
   }
 
@@ -197,6 +201,8 @@ class LocalLog {
     DateTime? createdAtUtc,
     DateTime? consumedAtUtc,
     bool? isManual,
+    String? fixedStartTime,
+    bool clearFixedStartTime = false,
   }) {
     return LocalLog(
       id: id ?? this.id,
@@ -211,6 +217,9 @@ class LocalLog {
       createdAtUtc: createdAtUtc ?? this.createdAtUtc,
       consumedAtUtc: consumedAtUtc ?? this.consumedAtUtc,
       isManual: isManual ?? this.isManual,
+      fixedStartTime: clearFixedStartTime
+          ? null
+          : (fixedStartTime ?? this.fixedStartTime),
     );
   }
 
@@ -444,6 +453,7 @@ class Segment {
   final String? jiraWorklogId;
   final String? lastError;
   final String? frozenPayload;
+  final bool isFixed;
 
   const Segment({
     required this.id,
@@ -457,6 +467,7 @@ class Segment {
     this.jiraWorklogId,
     this.lastError,
     this.frozenPayload,
+    this.isFixed = false,
   });
 
   DateTime get endUtc => startUtc.add(Duration(seconds: durationSeconds));
@@ -474,6 +485,7 @@ class Segment {
       'jira_worklog_id': jiraWorklogId,
       'last_error': lastError,
       'frozen_payload': frozenPayload,
+      'is_fixed': isFixed ? 1 : 0,
     };
   }
 
@@ -490,6 +502,7 @@ class Segment {
       jiraWorklogId: map['jira_worklog_id'] as String?,
       lastError: map['last_error'] as String?,
       frozenPayload: map['frozen_payload'] as String?,
+      isFixed: (map['is_fixed'] as int? ?? 0) == 1,
     );
   }
 
@@ -505,6 +518,7 @@ class Segment {
     String? jiraWorklogId,
     String? lastError,
     String? frozenPayload,
+    bool? isFixed,
   }) {
     return Segment(
       id: id ?? this.id,
@@ -518,6 +532,7 @@ class Segment {
       jiraWorklogId: jiraWorklogId ?? this.jiraWorklogId,
       lastError: lastError ?? this.lastError,
       frozenPayload: frozenPayload ?? this.frozenPayload,
+      isFixed: isFixed ?? this.isFixed,
     );
   }
 }

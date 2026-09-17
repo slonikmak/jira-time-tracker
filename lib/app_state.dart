@@ -527,6 +527,7 @@ class AppState extends ChangeNotifier {
     required String issueId,
     required int durationSeconds,
     String description = '',
+    String? fixedStartTime,
   }) async {
     if (durationSeconds <= 0) {
       throw ArgumentError('Длительность времени должна быть больше нуля');
@@ -549,6 +550,7 @@ class AppState extends ChangeNotifier {
       runningSinceUtc: null,
       createdAtUtc: now,
       isManual: true,
+      fixedStartTime: fixedStartTime,
     );
 
     final updatedIssue = issue.copyWith(lastUsedAtUtc: now);
@@ -744,6 +746,8 @@ class AppState extends ChangeNotifier {
     required String logId,
     required int durationSeconds,
     required String description,
+    String? fixedStartTime,
+    bool clearFixedStartTime = false,
   }) async {
     if (durationSeconds <= 0) {
       throw ArgumentError('Длительность времени должна быть больше нуля');
@@ -769,9 +773,116 @@ class AppState extends ChangeNotifier {
     final updated = log.copyWith(
       accumulatedSeconds: durationSeconds,
       description: description.trim(),
+      fixedStartTime: fixedStartTime,
+      clearFixedStartTime: clearFixedStartTime,
     );
     store.upsertLocalLog(updated);
     await loadLogs();
+  }
+
+  /// Разбиение неиспользованного лога на две части.
+  Future<(LocalLog, LocalLog)> splitLog({
+    required String logId,
+    required int part1DurationSeconds,
+    String? part1Description,
+    String? part2Description,
+  }) async {
+    final log = _logs.where((l) => l.id == logId).firstOrNull;
+    if (log == null) {
+      throw StateError('Лог с ID $logId не найден');
+    }
+    if (log.isRunning) {
+      throw StateError('Нельзя разбить работающий лог. Сначала остановите его.');
+    }
+    if (log.isConsumed) {
+      throw StateError('Нельзя разбить уже использованный лог.');
+    }
+    if (isLogInDraft(logId)) {
+      throw StateError('Нельзя разбить лог, уже включенный в черновик дня.');
+    }
+    if (part1DurationSeconds <= 0 || part1DurationSeconds >= log.accumulatedSeconds) {
+      throw ArgumentError(
+        'Длительность первой части должна быть больше 0 и меньше общей длительности (${log.accumulatedSeconds} с)',
+      );
+    }
+
+    final part2DurationSeconds = log.accumulatedSeconds - part1DurationSeconds;
+
+    final log1 = log.copyWith(
+      accumulatedSeconds: part1DurationSeconds,
+      description: (part1Description ?? log.description).trim(),
+    );
+
+    final log2Id = const Uuid().v4();
+    final log2 = LocalLog(
+      id: log2Id,
+      scope: log.scope,
+      issueId: log.issueId,
+      titleSnapshot: log.titleSnapshot,
+      description: (part2Description ?? log.description).trim(),
+      accumulatedSeconds: part2DurationSeconds,
+      runningSinceUtc: null,
+      createdAtUtc: log.createdAtUtc.add(const Duration(milliseconds: 1)),
+      isManual: log.isManual,
+      fixedStartTime: null,
+    );
+
+    store.upsertLocalLog(log1);
+    store.upsertLocalLog(log2);
+
+    await loadLogs();
+    return (log1, log2);
+  }
+
+  /// Объединение нескольких неиспользованных логов в один.
+  Future<LocalLog> mergeLogs({
+    required List<String> logIds,
+    String? targetIssueId,
+    String? description,
+  }) async {
+    if (logIds.length < 2) {
+      throw ArgumentError('Для объединения требуется минимум два лога');
+    }
+    final selected = _logs.where((l) => logIds.contains(l.id)).toList();
+    if (selected.length != logIds.length) {
+      throw StateError('Некоторые из указанных логов не найдены');
+    }
+    if (selected.any((l) => l.isRunning)) {
+      throw StateError('Нельзя объединять работающие логи.');
+    }
+    if (selected.any((l) => l.isConsumed || isLogInDraft(l.id))) {
+      throw StateError('Нельзя объединять логи, уже включенные в черновик дня.');
+    }
+
+    final primaryLog = selected.first;
+    final effectiveIssueId = targetIssueId ?? primaryLog.issueId;
+    final issue = _issues.where((i) => i.issueId == effectiveIssueId).firstOrNull;
+
+    final totalSeconds = selected.fold<int>(0, (sum, l) => sum + l.accumulatedSeconds);
+    final combinedDesc = description?.trim() ??
+        selected
+            .map((l) => l.description.trim())
+            .where((d) => d.isNotEmpty)
+            .toSet()
+            .join('\n');
+
+    final mergedLog = primaryLog.copyWith(
+      issueId: effectiveIssueId,
+      titleSnapshot: issue?.summary ?? primaryLog.titleSnapshot,
+      accumulatedSeconds: totalSeconds,
+      description: combinedDesc,
+    );
+
+    store.upsertLocalLog(mergedLog);
+
+    for (final other in selected.skip(1)) {
+      _selectedLogIds.remove(other.id);
+      store.deleteLocalLog(other.id);
+    }
+
+    await loadIssues();
+    await loadLogs();
+    return mergedLog;
   }
 
   /// Удаление остановленного лога.
@@ -1472,6 +1583,143 @@ class AppState extends ChangeNotifier {
       scope: activeScope,
     );
     notifyListeners();
+  }
+
+  /// Переключение фиксированного времени старта у сегмента дня.
+  void toggleSegmentFixed(String segmentId) {
+    if (_currentDraft == null) return;
+    final idx = _currentSegments.indexWhere((s) => s.id == segmentId);
+    if (idx == -1) return;
+
+    final segment = _currentSegments[idx];
+    final updated = segment.copyWith(isFixed: !segment.isFixed);
+    _currentSegments[idx] = updated;
+    store.updateSegment(updated);
+    notifyListeners();
+  }
+
+  /// Разрезание сегмента дня на два последовательных сегмента.
+  void splitSegment({
+    required String segmentId,
+    required int splitOffsetSeconds,
+    String? part1Description,
+    String? part2Description,
+  }) {
+    if (_currentDraft == null) return;
+    final idx = _currentSegments.indexWhere((s) => s.id == segmentId);
+    if (idx == -1) return;
+
+    final oldSegment = _currentSegments[idx];
+    if (splitOffsetSeconds <= 0 || splitOffsetSeconds >= oldSegment.durationSeconds) {
+      throw ArgumentError(
+        'Смещение точки разделения должно быть больше 0 и меньше длительности сегмента (${oldSegment.durationSeconds} с)',
+      );
+    }
+
+    final part2Duration = oldSegment.durationSeconds - splitOffsetSeconds;
+    final seg1 = oldSegment.copyWith(
+      durationSeconds: splitOffsetSeconds,
+      description: (part1Description ?? oldSegment.description).trim(),
+    );
+
+    final seg2Id = const Uuid().v4();
+    final seg2 = Segment(
+      id: seg2Id,
+      draftId: oldSegment.draftId,
+      sourceLogId: oldSegment.sourceLogId,
+      issueId: oldSegment.issueId,
+      startUtc: oldSegment.startUtc.add(Duration(seconds: splitOffsetSeconds)),
+      durationSeconds: part2Duration,
+      description: (part2Description ?? oldSegment.description).trim(),
+      sendState: SendState.pending,
+      isFixed: false,
+    );
+
+    _currentSegments[idx] = seg1;
+    _currentSegments.insert(idx + 1, seg2);
+
+    store.updateSegment(seg1);
+    store.insertSegment(seg2);
+
+    _sortSegmentsAndExpandDraft();
+    _revalidateCurrentPlan();
+    notifyListeners();
+  }
+
+  /// Объединение двух сегментов дня в один.
+  void mergeSegments({
+    required String segmentId1,
+    required String segmentId2,
+    String? targetIssueId,
+    String? description,
+  }) {
+    if (_currentDraft == null) return;
+    final idx1 = _currentSegments.indexWhere((s) => s.id == segmentId1);
+    final idx2 = _currentSegments.indexWhere((s) => s.id == segmentId2);
+    if (idx1 == -1 || idx2 == -1 || idx1 == idx2) return;
+
+    final seg1 = _currentSegments[idx1];
+    final seg2 = _currentSegments[idx2];
+
+    final firstSeg = seg1.startUtc.isBefore(seg2.startUtc) ? seg1 : seg2;
+    final secondSeg = identical(firstSeg, seg1) ? seg2 : seg1;
+
+    final effectiveIssueId = targetIssueId ?? firstSeg.issueId;
+    final totalDuration = firstSeg.durationSeconds + secondSeg.durationSeconds;
+    final combinedDesc = description?.trim() ??
+        [firstSeg.description.trim(), secondSeg.description.trim()]
+            .where((d) => d.isNotEmpty)
+            .toSet()
+            .join('\n');
+
+    final mergedSeg = firstSeg.copyWith(
+      issueId: effectiveIssueId,
+      durationSeconds: totalDuration,
+      description: combinedDesc,
+    );
+
+    _currentSegments.removeWhere((s) => s.id == secondSeg.id);
+    final replaceIdx = _currentSegments.indexWhere((s) => s.id == firstSeg.id);
+    if (replaceIdx != -1) {
+      _currentSegments[replaceIdx] = mergedSeg;
+    }
+
+    store.updateSegment(mergedSeg);
+    store.deleteSegment(draftId: _currentDraft!.id, segmentId: secondSeg.id);
+
+    _sortSegmentsAndExpandDraft();
+    _revalidateCurrentPlan();
+    notifyListeners();
+  }
+
+  /// Ручное изменение порядка сегментов в черновике дня.
+  void reorderSegments(int oldIndex, int newIndex) {
+    if (_currentDraft == null) return;
+    if (oldIndex < 0 || oldIndex >= _currentSegments.length) return;
+    if (newIndex < 0 || newIndex > _currentSegments.length) return;
+
+    if (oldIndex < newIndex) {
+      newIndex -= 1;
+    }
+    final item = _currentSegments.removeAt(oldIndex);
+    _currentSegments.insert(newIndex, item);
+    notifyListeners();
+  }
+
+  /// Перемещение сегмента на одну позицию вверх.
+  void moveSegmentUp(String segmentId) {
+    final idx = _currentSegments.indexWhere((s) => s.id == segmentId);
+    if (idx > 0) {
+      reorderSegments(idx, idx - 1);
+    }
+  }
+
+  /// Перемещение сегмента на одну позицию вниз.
+  void moveSegmentDown(String segmentId) {
+    final idx = _currentSegments.indexWhere((s) => s.id == segmentId);
+    if (idx != -1 && idx < _currentSegments.length - 1) {
+      reorderSegments(idx, idx + 2);
+    }
   }
 
   /// Поиск смежных элементов расписания, прилегающих к промежутку (Timeline Gap).

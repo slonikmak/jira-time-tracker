@@ -20,9 +20,9 @@ void main() {
       store.close();
     });
 
-    test('Initializes schema v1 and enforces foreign keys', () {
+    test('Initializes schema v2 and enforces foreign keys', () {
       final versionRow = db.select('PRAGMA user_version;');
-      expect(versionRow.first.values.first, equals(1));
+      expect(versionRow.first.values.first, equals(2));
 
       final fkRow = db.select('PRAGMA foreign_keys;');
       expect(fkRow.first.values.first, equals(1));
@@ -174,6 +174,180 @@ void main() {
         "SELECT send_state FROM segments WHERE id = 'seg-1';",
       );
       expect(row.first['send_state'], equals('unknown'));
+    });
+
+    test('Saves and retrieves LocalLog with fixedStartTime', () {
+      final issue = Issue(
+        scope: 'test-scope',
+        issueId: '1001',
+        key: 'PROJ-1',
+        summary: 'Test issue',
+        lastUsedAtUtc: DateTime.utc(2026, 9, 17, 10, 0),
+      );
+      store.upsertIssue(issue);
+
+      final log = LocalLog(
+        id: 'log-fixed-1',
+        scope: 'test-scope',
+        issueId: '1001',
+        titleSnapshot: 'Daily Standup',
+        accumulatedSeconds: 1800,
+        createdAtUtc: DateTime.utc(2026, 9, 17, 10, 0),
+        fixedStartTime: '11:00',
+      );
+      store.upsertLocalLog(log);
+
+      final fetched = store.getLocalLog('log-fixed-1');
+      expect(fetched, isNotNull);
+      expect(fetched!.fixedStartTime, equals('11:00'));
+
+      final list = store.getLocalLogs(scope: 'test-scope');
+      expect(list.first.fixedStartTime, equals('11:00'));
+    });
+
+    test('Saves, inserts and retrieves Segment with isFixed', () {
+      final issue = Issue(
+        scope: 'test-scope',
+        issueId: '1001',
+        key: 'PROJ-1',
+        summary: 'Test issue',
+        lastUsedAtUtc: DateTime.utc(2026, 9, 17, 10, 0),
+      );
+      store.upsertIssue(issue);
+
+      final log = LocalLog(
+        id: 'log-1',
+        scope: 'test-scope',
+        issueId: '1001',
+        titleSnapshot: 'Test',
+        accumulatedSeconds: 3600,
+        createdAtUtc: DateTime.utc(2026, 9, 17, 10, 0),
+      );
+      store.upsertLocalLog(log);
+
+      final draft = DayDraft(
+        id: 'draft-1',
+        scope: 'test-scope',
+        date: '2026-09-17',
+        startUtc: DateTime.utc(2026, 9, 17, 9, 0),
+        endUtc: DateTime.utc(2026, 9, 17, 17, 0),
+        seed: 123,
+        settingsSnapshot: '{}',
+        status: DraftStatus.draft,
+      );
+
+      final seg = Segment(
+        id: 'seg-fixed-1',
+        draftId: 'draft-1',
+        sourceLogId: 'log-1',
+        issueId: '1001',
+        startUtc: DateTime.utc(2026, 9, 17, 11, 0),
+        durationSeconds: 1800,
+        isFixed: true,
+      );
+
+      store.saveDayDraft(
+        draft: draft,
+        draftLogs: [],
+        segments: [seg],
+        breaks: [],
+      );
+
+      final segments = store.getSegments(draftId: 'draft-1');
+      expect(segments.length, equals(1));
+      expect(segments.first.isFixed, isTrue);
+
+      final seg2 = Segment(
+        id: 'seg-fixed-2',
+        draftId: 'draft-1',
+        sourceLogId: 'log-1',
+        issueId: '1001',
+        startUtc: DateTime.utc(2026, 9, 17, 12, 0),
+        durationSeconds: 1800,
+        isFixed: false,
+      );
+      store.insertSegment(seg2);
+
+      final segmentsAfterInsert = store.getSegments(draftId: 'draft-1');
+      expect(segmentsAfterInsert.length, equals(2));
+      expect(segmentsAfterInsert.any((s) => s.id == 'seg-fixed-2' && !s.isFixed), isTrue);
+
+      // Update segment isFixed
+      store.updateSegment(seg2.copyWith(isFixed: true));
+      final updatedSegments = store.getSegments(draftId: 'draft-1');
+      expect(updatedSegments.firstWhere((s) => s.id == 'seg-fixed-2').isFixed, isTrue);
+    });
+
+    test('Migrates existing schema v1 to v2 adding columns and updating version', () {
+      final oldDb = sqlite3.openInMemory();
+      // Setup v1 schema manually
+      oldDb.execute('''
+        CREATE TABLE issues (
+          scope TEXT NOT NULL,
+          issue_id TEXT NOT NULL,
+          key TEXT NOT NULL,
+          summary TEXT NOT NULL,
+          status TEXT,
+          last_used_at_utc TEXT NOT NULL,
+          current_log_id TEXT,
+          PRIMARY KEY (scope, issue_id)
+        );
+        CREATE TABLE local_logs (
+          id TEXT PRIMARY KEY,
+          scope TEXT NOT NULL,
+          issue_id TEXT NOT NULL,
+          title_snapshot TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          accumulated_seconds INTEGER NOT NULL DEFAULT 0,
+          running_since_utc TEXT,
+          created_at_utc TEXT NOT NULL,
+          consumed_at_utc TEXT,
+          is_manual INTEGER NOT NULL DEFAULT 0,
+          FOREIGN KEY (scope, issue_id) REFERENCES issues (scope, issue_id) ON DELETE CASCADE
+        );
+        CREATE TABLE day_drafts (
+          id TEXT PRIMARY KEY,
+          scope TEXT NOT NULL,
+          date TEXT NOT NULL,
+          start_utc TEXT NOT NULL,
+          end_utc TEXT NOT NULL,
+          seed INTEGER NOT NULL,
+          settings_snapshot TEXT NOT NULL,
+          imported_worklogs_snapshot TEXT NOT NULL DEFAULT '[]',
+          status TEXT NOT NULL,
+          UNIQUE (scope, date)
+        );
+        CREATE TABLE segments (
+          id TEXT PRIMARY KEY,
+          draft_id TEXT NOT NULL,
+          source_log_id TEXT NOT NULL,
+          issue_id TEXT NOT NULL,
+          start_utc TEXT NOT NULL,
+          duration_seconds INTEGER NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          send_state TEXT NOT NULL,
+          jira_worklog_id TEXT,
+          last_error TEXT,
+          frozen_payload TEXT,
+          FOREIGN KEY (draft_id) REFERENCES day_drafts (id) ON DELETE CASCADE,
+          FOREIGN KEY (source_log_id) REFERENCES local_logs (id) ON DELETE CASCADE
+        );
+        PRAGMA user_version = 1;
+      ''');
+
+      final oldStore = LocalStore(oldDb);
+      oldStore.init();
+
+      final versionRow = oldDb.select('PRAGMA user_version;');
+      expect(versionRow.first.values.first, equals(2));
+
+      final logCols = oldDb.select('PRAGMA table_info(local_logs);');
+      expect(logCols.any((c) => c['name'] == 'fixed_start_time'), isTrue);
+
+      final segCols = oldDb.select('PRAGMA table_info(segments);');
+      expect(segCols.any((c) => c['name'] == 'is_fixed'), isTrue);
+
+      oldStore.close();
     });
   });
 

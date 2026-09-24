@@ -7,11 +7,14 @@ class TimelineTrackBar extends StatefulWidget {
   final DayDraft draft;
   final List<Segment> segments;
   final List<Break> breaks;
+  final List<ImportedWorklog> existingWorklogs;
   final Map<String, String> issueKeys;
   final void Function(Segment segment)? onEditSegment;
   final void Function(Break breakItem)? onEditBreak;
-  final void Function(Segment segment, int newDurationSeconds)? onResizeSegmentRight;
-  final void Function(Segment segment, DateTime newStartUtc)? onResizeSegmentLeft;
+  final void Function(Segment segment, int newDurationSeconds)?
+  onResizeSegmentRight;
+  final void Function(Segment segment, DateTime newStartUtc)?
+  onResizeSegmentLeft;
   final bool isReadOnly;
 
   const TimelineTrackBar({
@@ -19,6 +22,7 @@ class TimelineTrackBar extends StatefulWidget {
     required this.draft,
     required this.segments,
     required this.breaks,
+    this.existingWorklogs = const [],
     this.issueKeys = const {},
     this.onEditSegment,
     this.onEditBreak,
@@ -57,7 +61,10 @@ class _TimelineTrackBarState extends State<TimelineTrackBar> {
     final List<_TrackItem> items = [];
 
     // Цвета для каждого sourceLogId
-    final sourceIds = widget.segments.map((s) => s.sourceLogId).toSet().toList();
+    final sourceIds = widget.segments
+        .map((s) => s.sourceLogId)
+        .toSet()
+        .toList();
     final Map<String, Color> sourceColors = {};
     for (int i = 0; i < sourceIds.length; i++) {
       final sId = sourceIds[i];
@@ -105,9 +112,25 @@ class _TimelineTrackBarState extends State<TimelineTrackBar> {
       );
     }
 
+    for (final worklog in widget.existingWorklogs) {
+      items.add(
+        _TrackItem(
+          start: worklog.startUtc,
+          durationSeconds: worklog.durationSeconds,
+          color: AppColors.trackExisting(isDark),
+          label:
+              '${worklog.issueKey ?? worklog.issueId} · уже в Jira · ${_formatTime(worklog.startUtc)}–${_formatTime(worklog.endUtc)}',
+          isBreak: false,
+          isExisting: true,
+        ),
+      );
+    }
+
     items.sort((a, b) => a.start.compareTo(b.start));
 
-    final totalSeconds = widget.draft.endUtc.difference(widget.draft.startUtc).inSeconds;
+    final totalSeconds = widget.draft.endUtc
+        .difference(widget.draft.startUtc)
+        .inSeconds;
     final safeTotalSeconds = totalSeconds > 0 ? totalSeconds : 1;
 
     return Column(
@@ -117,7 +140,8 @@ class _TimelineTrackBarState extends State<TimelineTrackBar> {
         LayoutBuilder(
           builder: (context, constraints) {
             final trackWidth = constraints.maxWidth;
-            final secondsPerPixel = safeTotalSeconds / (trackWidth > 0 ? trackWidth : 1);
+            final secondsPerPixel =
+                safeTotalSeconds / (trackWidth > 0 ? trackWidth : 1);
 
             return Container(
               height: 28,
@@ -127,15 +151,36 @@ class _TimelineTrackBarState extends State<TimelineTrackBar> {
                 border: Border.all(color: AppColors.line(isDark), width: 0.5),
               ),
               clipBehavior: Clip.antiAlias,
-              child: Row(
+              child: Stack(
                 children: items.map((item) {
-                  final flex = item.durationSeconds.clamp(1, 86400);
+                  final left =
+                      (item.start.difference(widget.draft.startUtc).inSeconds /
+                              safeTotalSeconds *
+                              trackWidth)
+                          .clamp(0.0, trackWidth)
+                          .toDouble();
+                  final right =
+                      ((item.start.difference(widget.draft.startUtc).inSeconds +
+                                  item.durationSeconds) /
+                              safeTotalSeconds *
+                              trackWidth)
+                          .clamp(0.0, trackWidth)
+                          .toDouble();
+                  if (right <= left) return const SizedBox.shrink();
                   final seg = item.segment;
-                  final isEditableSegment = seg != null && !item.isExisting && !widget.isReadOnly;
-                  final isHovered = isEditableSegment && (_hoveredSegmentId == seg.id || _draggingSegmentId == seg.id);
+                  final isEditableSegment =
+                      seg != null && !item.isExisting && !widget.isReadOnly;
+                  final isHovered =
+                      isEditableSegment &&
+                      (_hoveredSegmentId == seg.id ||
+                          _draggingSegmentId == seg.id);
 
-                  return Expanded(
-                    flex: flex,
+                  return Positioned(
+                    key: seg == null ? null : Key('track_segment_${seg.id}'),
+                    left: left,
+                    width: right - left,
+                    top: 0,
+                    bottom: 0,
                     child: Tooltip(
                       message: item.label,
                       child: Stack(
@@ -143,28 +188,43 @@ class _TimelineTrackBarState extends State<TimelineTrackBar> {
                         children: [
                           // Базовое тело блока
                           InkWell(
-                            mouseCursor: (seg != null && widget.onEditSegment != null) ||
-                                    (item.breakItem != null && widget.onEditBreak != null)
+                            mouseCursor:
+                                (!widget.isReadOnly &&
+                                        seg != null &&
+                                        widget.onEditSegment != null) ||
+                                    (!widget.isReadOnly &&
+                                        item.breakItem != null &&
+                                        widget.onEditBreak != null)
                                 ? SystemMouseCursors.click
                                 : SystemMouseCursors.basic,
-                            onTap: seg != null && widget.onEditSegment != null
+                            onTap:
+                                !widget.isReadOnly &&
+                                    seg != null &&
+                                    widget.onEditSegment != null
                                 ? () => widget.onEditSegment!(seg)
-                                : (item.breakItem != null && widget.onEditBreak != null
-                                    ? () => widget.onEditBreak!(item.breakItem!)
-                                    : null),
+                                : (!widget.isReadOnly &&
+                                          item.breakItem != null &&
+                                          widget.onEditBreak != null
+                                      ? () =>
+                                            widget.onEditBreak!(item.breakItem!)
+                                      : null),
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 150),
                               decoration: BoxDecoration(
                                 color: item.color,
                                 border: isHovered
-                                    ? Border.all(color: AppColors.primary(isDark), width: 2)
+                                    ? Border.all(
+                                        color: AppColors.primary(isDark),
+                                        width: 2,
+                                      )
                                     : null,
                               ),
                             ),
                           ),
 
                           // Левая ручка изменения границы
-                          if (isEditableSegment && widget.onResizeSegmentLeft != null)
+                          if (isEditableSegment &&
+                              widget.onResizeSegmentLeft != null)
                             Positioned(
                               left: 0,
                               top: 0,
@@ -172,9 +232,12 @@ class _TimelineTrackBarState extends State<TimelineTrackBar> {
                               width: 14,
                               child: MouseRegion(
                                 cursor: SystemMouseCursors.resizeLeftRight,
-                                onEnter: (_) => setState(() => _hoveredSegmentId = seg.id),
+                                onEnter: (_) =>
+                                    setState(() => _hoveredSegmentId = seg.id),
                                 onExit: (_) => setState(() {
-                                  if (_draggingSegmentId == null) _hoveredSegmentId = null;
+                                  if (_draggingSegmentId == null) {
+                                    _hoveredSegmentId = null;
+                                  }
                                 }),
                                 child: GestureDetector(
                                   key: Key('drag_handle_left_${seg.id}'),
@@ -189,14 +252,21 @@ class _TimelineTrackBarState extends State<TimelineTrackBar> {
                                     _dragDeltaDx += details.delta.dx;
                                   },
                                   onHorizontalDragEnd: (_) {
-                                    final deltaSec = (_dragDeltaDx * secondsPerPixel).round();
-                                    final newStart = seg.startUtc.add(Duration(seconds: deltaSec));
+                                    final deltaSec =
+                                        (_dragDeltaDx * secondsPerPixel)
+                                            .round();
+                                    final newStart = seg.startUtc.add(
+                                      Duration(seconds: deltaSec),
+                                    );
                                     setState(() {
                                       _draggingSegmentId = null;
                                       _hoveredSegmentId = null;
                                       _dragDeltaDx = 0;
                                     });
-                                    widget.onResizeSegmentLeft?.call(seg, newStart);
+                                    widget.onResizeSegmentLeft?.call(
+                                      seg,
+                                      newStart,
+                                    );
                                   },
                                   child: Container(
                                     alignment: Alignment.centerLeft,
@@ -207,7 +277,8 @@ class _TimelineTrackBarState extends State<TimelineTrackBar> {
                                             height: 14,
                                             decoration: BoxDecoration(
                                               color: Colors.white,
-                                              borderRadius: BorderRadius.circular(1.5),
+                                              borderRadius:
+                                                  BorderRadius.circular(1.5),
                                             ),
                                           )
                                         : null,
@@ -217,7 +288,8 @@ class _TimelineTrackBarState extends State<TimelineTrackBar> {
                             ),
 
                           // Правая ручка изменения границы
-                          if (isEditableSegment && widget.onResizeSegmentRight != null)
+                          if (isEditableSegment &&
+                              widget.onResizeSegmentRight != null)
                             Positioned(
                               right: 0,
                               top: 0,
@@ -225,9 +297,12 @@ class _TimelineTrackBarState extends State<TimelineTrackBar> {
                               width: 14,
                               child: MouseRegion(
                                 cursor: SystemMouseCursors.resizeLeftRight,
-                                onEnter: (_) => setState(() => _hoveredSegmentId = seg.id),
+                                onEnter: (_) =>
+                                    setState(() => _hoveredSegmentId = seg.id),
                                 onExit: (_) => setState(() {
-                                  if (_draggingSegmentId == null) _hoveredSegmentId = null;
+                                  if (_draggingSegmentId == null) {
+                                    _hoveredSegmentId = null;
+                                  }
                                 }),
                                 child: GestureDetector(
                                   key: Key('drag_handle_right_${seg.id}'),
@@ -242,14 +317,20 @@ class _TimelineTrackBarState extends State<TimelineTrackBar> {
                                     _dragDeltaDx += details.delta.dx;
                                   },
                                   onHorizontalDragEnd: (_) {
-                                    final deltaSec = (_dragDeltaDx * secondsPerPixel).round();
-                                    final newDur = seg.durationSeconds + deltaSec;
+                                    final deltaSec =
+                                        (_dragDeltaDx * secondsPerPixel)
+                                            .round();
+                                    final newDur =
+                                        seg.durationSeconds + deltaSec;
                                     setState(() {
                                       _draggingSegmentId = null;
                                       _hoveredSegmentId = null;
                                       _dragDeltaDx = 0;
                                     });
-                                    widget.onResizeSegmentRight?.call(seg, newDur);
+                                    widget.onResizeSegmentRight?.call(
+                                      seg,
+                                      newDur,
+                                    );
                                   },
                                   child: Container(
                                     alignment: Alignment.centerRight,
@@ -260,7 +341,8 @@ class _TimelineTrackBarState extends State<TimelineTrackBar> {
                                             height: 14,
                                             decoration: BoxDecoration(
                                               color: Colors.white,
-                                              borderRadius: BorderRadius.circular(1.5),
+                                              borderRadius:
+                                                  BorderRadius.circular(1.5),
                                             ),
                                           )
                                         : null,
@@ -292,7 +374,11 @@ class _TimelineTrackBarState extends State<TimelineTrackBar> {
               ),
             ),
             Text(
-              '12:00',
+              _formatTime(
+                widget.draft.startUtc.add(
+                  Duration(seconds: safeTotalSeconds ~/ 2),
+                ),
+              ),
               style: TextStyle(
                 fontSize: 11,
                 color: AppColors.muted(isDark),

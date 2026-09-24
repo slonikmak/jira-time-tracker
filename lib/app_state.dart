@@ -32,6 +32,8 @@ enum IssueFilterPeriod {
   }
 }
 
+enum UiThemeMode { system, light, dark }
+
 /// Состояние приложения, координация данных, задач, таймеров и подключений.
 class AppState extends ChangeNotifier {
   final LocalStore store;
@@ -40,6 +42,7 @@ class AppState extends ChangeNotifier {
   final WorklogSender worklogSender;
   final bool isReadOnly;
   final DateTime Function() nowProvider;
+  late final ValueNotifier<UiThemeMode> themeMode;
 
   int _selectedTabIndex = 0;
   String? _statusMessage;
@@ -75,6 +78,13 @@ class AppState extends ChangeNotifier {
              jiraClient: jiraClient,
              nowProvider: nowProvider,
            ) {
+    final savedThemeMode = store.getSetting('theme_mode');
+    themeMode = ValueNotifier(
+      UiThemeMode.values.firstWhere(
+        (mode) => mode.name == savedThemeMode,
+        orElse: () => UiThemeMode.system,
+      ),
+    );
     _initData();
     if (autoStartApiServer && !isReadOnly) {
       startApiServer();
@@ -82,8 +92,10 @@ class AppState extends ChangeNotifier {
   }
 
   AgentApiServer? get apiServer => _apiServer;
-  String? get apiServerUrl => _apiServer?.isRunning == true ? _apiServer!.url : null;
-  int? get apiServerPort => _apiServer?.isRunning == true ? _apiServer!.port : null;
+  String? get apiServerUrl =>
+      _apiServer?.isRunning == true ? _apiServer!.url : null;
+  int? get apiServerPort =>
+      _apiServer?.isRunning == true ? _apiServer!.port : null;
   bool get isApiServerRunning => _apiServer?.isRunning == true;
 
   Future<void> startApiServer({int port = 8765}) async {
@@ -147,6 +159,7 @@ class AppState extends ChangeNotifier {
       draftId: _currentDraft!.id,
     );
   }
+
   List<ImportedWorklog> get importedWorklogs =>
       List.unmodifiable(_importedWorklogs);
   bool get isFetchingJiraWorklogs => _isFetchingJiraWorklogs;
@@ -190,6 +203,14 @@ class AppState extends ChangeNotifier {
       _activeDraftDatesBySourceLogId[logId];
 
   int get selectedTabIndex => _selectedTabIndex;
+
+  void selectThemeMode(UiThemeMode mode) {
+    if (themeMode.value == mode) return;
+    store.setSetting('theme_mode', mode.name);
+    themeMode.value = mode;
+    notifyListeners();
+  }
+
   String? get statusMessage => _statusMessage;
   JiraConnection? get currentConnection => _currentConnection;
 
@@ -475,9 +496,10 @@ class AppState extends ChangeNotifier {
     }
 
     final cached = _issues
-        .where((i) =>
-            i.key.toUpperCase() == clean.toUpperCase() ||
-            i.issueId == clean)
+        .where(
+          (i) =>
+              i.key.toUpperCase() == clean.toUpperCase() || i.issueId == clean,
+        )
         .firstOrNull;
     if (cached != null) return cached;
 
@@ -792,7 +814,9 @@ class AppState extends ChangeNotifier {
       throw StateError('Лог с ID $logId не найден');
     }
     if (log.isRunning) {
-      throw StateError('Нельзя разбить работающий лог. Сначала остановите его.');
+      throw StateError(
+        'Нельзя разбить работающий лог. Сначала остановите его.',
+      );
     }
     if (log.isConsumed) {
       throw StateError('Нельзя разбить уже использованный лог.');
@@ -800,7 +824,8 @@ class AppState extends ChangeNotifier {
     if (isLogInDraft(logId)) {
       throw StateError('Нельзя разбить лог, уже включенный в черновик дня.');
     }
-    if (part1DurationSeconds <= 0 || part1DurationSeconds >= log.accumulatedSeconds) {
+    if (part1DurationSeconds <= 0 ||
+        part1DurationSeconds >= log.accumulatedSeconds) {
       throw ArgumentError(
         'Длительность первой части должна быть больше 0 и меньше общей длительности (${log.accumulatedSeconds} с)',
       );
@@ -851,15 +876,23 @@ class AppState extends ChangeNotifier {
       throw StateError('Нельзя объединять работающие логи.');
     }
     if (selected.any((l) => l.isConsumed || isLogInDraft(l.id))) {
-      throw StateError('Нельзя объединять логи, уже включенные в черновик дня.');
+      throw StateError(
+        'Нельзя объединять логи, уже включенные в черновик дня.',
+      );
     }
 
     final primaryLog = selected.first;
     final effectiveIssueId = targetIssueId ?? primaryLog.issueId;
-    final issue = _issues.where((i) => i.issueId == effectiveIssueId).firstOrNull;
+    final issue = _issues
+        .where((i) => i.issueId == effectiveIssueId)
+        .firstOrNull;
 
-    final totalSeconds = selected.fold<int>(0, (sum, l) => sum + l.accumulatedSeconds);
-    final combinedDesc = description?.trim() ??
+    final totalSeconds = selected.fold<int>(
+      0,
+      (sum, l) => sum + l.accumulatedSeconds,
+    );
+    final combinedDesc =
+        description?.trim() ??
         selected
             .map((l) => l.description.trim())
             .where((d) => d.isNotEmpty)
@@ -1346,7 +1379,11 @@ class AppState extends ChangeNotifier {
       throw ArgumentError('Список сегментов не может быть пустым.');
     }
 
-    final localDate = DateTime(targetDate.year, targetDate.month, targetDate.day);
+    final localDate = DateTime(
+      targetDate.year,
+      targetDate.month,
+      targetDate.day,
+    );
     final dateStr =
         '${localDate.year.toString().padLeft(4, '0')}-${localDate.month.toString().padLeft(2, '0')}-${localDate.day.toString().padLeft(2, '0')}';
 
@@ -1379,7 +1416,8 @@ class AppState extends ChangeNotifier {
           accumulatedSeconds: input.durationSeconds,
           createdAtUtc: input.startUtc,
           isManual: true,
-          fixedStartTime: input.fixedStartTime ?? (input.isFixed ? localTimeStr : null),
+          fixedStartTime:
+              input.fixedStartTime ?? (input.isFixed ? localTimeStr : null),
         );
         addedLogs.add(sourceLog);
       }
@@ -1463,9 +1501,7 @@ class AppState extends ChangeNotifier {
     );
 
     if (validationErrors.isNotEmpty) {
-      throw DayBuilderException(
-        validationErrors.join('; '),
-      );
+      throw DayBuilderException(validationErrors.join('; '));
     }
 
     // Сохраняем вновь созданные логи
@@ -1509,48 +1545,89 @@ class AppState extends ChangeNotifier {
     required String description,
   }) {
     if (_currentDraft == null) return;
+    if (isReadOnly) throw StateError('Приложение открыто только для чтения.');
     final idx = _currentSegments.indexWhere((s) => s.id == segmentId);
     if (idx == -1) return;
 
     final oldSegment = _currentSegments[idx];
+    if (oldSegment.sendState == SendState.sent ||
+        oldSegment.sendState == SendState.unknown ||
+        oldSegment.sendState == SendState.sending) {
+      throw StateError(
+        'Этот интервал уже отправлен или ожидает сверки с Jira.',
+      );
+    }
+    if (durationSeconds <= 0) {
+      throw ArgumentError('Длительность должна быть больше 0 минут.');
+    }
     final updatedSegment = oldSegment.copyWith(
       startUtc: startUtc,
       durationSeconds: durationSeconds,
       description: description,
     );
 
-    final segments = List<Segment>.from(_currentSegments);
-    segments[idx] = updatedSegment;
-    segments.sort((a, b) => a.startUtc.compareTo(b.startUtc));
-
-    // Ripple push: если обновленный сегмент накладывается на последующие
-    var cursor = updatedSegment.endUtc;
-    final afterIdx = segments.indexWhere((s) => s.id == updatedSegment.id) + 1;
-
-    for (var i = afterIdx; i < segments.length; i++) {
-      final s = segments[i];
-      if (s.startUtc.isBefore(cursor)) {
-        final pushDelta = cursor.difference(s.startUtc).inSeconds;
-        final err = canShiftSegmentsRight(
-          afterUtc: s.startUtc,
-          deltaSeconds: pushDelta,
-        );
-        if (err != null) {
-          throw ArgumentError(err);
+    // Сохраняем расстояния между последующими записями и их длительности.
+    // Порядок списка не меняем: пользователь мог переставить строки перед пересборкой.
+    final delta = updatedSegment.endUtc.difference(oldSegment.endUtc);
+    final segments = <Segment>[];
+    for (final segment in _currentSegments) {
+      if (segment.id == oldSegment.id) {
+        segments.add(updatedSegment);
+      } else if (delta != Duration.zero &&
+          !segment.startUtc.isBefore(oldSegment.endUtc)) {
+        if (segment.isFixed || segment.sendState != SendState.pending) {
+          throw ArgumentError(
+            'Следующий интервал закреплён или уже отправлялся. Сдвиг невозможен.',
+          );
         }
-        final pushed = s.copyWith(startUtc: cursor);
-        segments[i] = pushed;
-        store.updateSegment(pushed);
-        cursor = pushed.endUtc;
+        segments.add(segment.copyWith(startUtc: segment.startUtc.add(delta)));
       } else {
-        break;
+        segments.add(segment);
+      }
+    }
+    final breaks = [
+      for (final item in _currentBreaks)
+        if (delta != Duration.zero &&
+            !item.startUtc.isBefore(oldSegment.endUtc))
+          item.copyWith(startUtc: item.startUtc.add(delta))
+        else
+          item,
+    ];
+
+    for (final segment in segments) {
+      if (segment.id != oldSegment.id &&
+          segment.startUtc.isBefore(oldSegment.endUtc)) {
+        continue;
+      }
+      for (final existing in importedWorklogs) {
+        if (segment.startUtc.isBefore(existing.endUtc) &&
+            segment.endUtc.isAfter(existing.startUtc)) {
+          throw ArgumentError(
+            'Интервал пересечётся с записью Jira ${existing.issueKey ?? existing.issueId}.',
+          );
+        }
       }
     }
 
+    var dayStart = _currentDraft!.startUtc;
+    var dayEnd = _currentDraft!.endUtc;
+    for (final segment in segments) {
+      if (segment.startUtc.isBefore(dayStart)) dayStart = segment.startUtc;
+      if (segment.endUtc.isAfter(dayEnd)) dayEnd = segment.endUtc;
+    }
+    for (final item in breaks) {
+      if (item.endUtc.isAfter(dayEnd)) dayEnd = item.endUtc;
+    }
+    final draft = _currentDraft!.copyWith(startUtc: dayStart, endUtc: dayEnd);
+    store.saveDayDraft(
+      draft: draft,
+      draftLogs: _currentDraftLogs,
+      segments: segments,
+      breaks: breaks,
+    );
+    _currentDraft = draft;
     _currentSegments = segments;
-    store.updateSegment(updatedSegment);
-
-    _sortSegmentsAndExpandDraft();
+    _currentBreaks = breaks;
     _revalidateCurrentPlan();
     notifyListeners();
   }
@@ -1572,7 +1649,8 @@ class AppState extends ChangeNotifier {
       newEnd = lastSeg.endUtc;
     }
 
-    if (newStart != _currentDraft!.startUtc || newEnd != _currentDraft!.endUtc) {
+    if (newStart != _currentDraft!.startUtc ||
+        newEnd != _currentDraft!.endUtc) {
       _currentDraft = _currentDraft!.copyWith(
         startUtc: newStart,
         endUtc: newEnd,
@@ -1580,7 +1658,6 @@ class AppState extends ChangeNotifier {
       store.updateDayDraft(_currentDraft!);
     }
   }
-
 
   void deleteSegment(String segmentId) {
     if (_currentDraft == null) return;
@@ -1618,7 +1695,8 @@ class AppState extends ChangeNotifier {
     if (idx == -1) return;
 
     final oldSegment = _currentSegments[idx];
-    if (splitOffsetSeconds <= 0 || splitOffsetSeconds >= oldSegment.durationSeconds) {
+    if (splitOffsetSeconds <= 0 ||
+        splitOffsetSeconds >= oldSegment.durationSeconds) {
       throw ArgumentError(
         'Смещение точки разделения должно быть больше 0 и меньше длительности сегмента (${oldSegment.durationSeconds} с)',
       );
@@ -1674,11 +1752,12 @@ class AppState extends ChangeNotifier {
 
     final effectiveIssueId = targetIssueId ?? firstSeg.issueId;
     final totalDuration = firstSeg.durationSeconds + secondSeg.durationSeconds;
-    final combinedDesc = description?.trim() ??
-        [firstSeg.description.trim(), secondSeg.description.trim()]
-            .where((d) => d.isNotEmpty)
-            .toSet()
-            .join('\n');
+    final combinedDesc =
+        description?.trim() ??
+        [
+          firstSeg.description.trim(),
+          secondSeg.description.trim(),
+        ].where((d) => d.isNotEmpty).toSet().join('\n');
 
     final mergedSeg = firstSeg.copyWith(
       issueId: effectiveIssueId,
@@ -1735,22 +1814,28 @@ class AppState extends ChangeNotifier {
     if (_currentDraft == null || _currentSegments.isEmpty) {
       return;
     }
+    if (isReadOnly || isDraftLockedFromRebuild) {
+      throw StateError(
+        'Нельзя пересобрать день после начала отправки или в режиме только чтения.',
+      );
+    }
     _isBuildingDay = true;
-    _validationErrors = [];
     notifyListeners();
 
     try {
       final draftId = _currentDraft!.id;
-      final seed = customSeed ?? _currentDraft!.seed;
+      final seed = customSeed ?? Random().nextInt(1000000000);
 
       final builderLogs = <DayBuilderLogInput>[];
+      final sourceLogIdBySegmentId = <String, String>{};
       for (final s in _currentSegments) {
+        sourceLogIdBySegmentId[s.id] = s.sourceLogId;
         final title =
             _issues.where((i) => i.issueId == s.issueId).firstOrNull?.summary ??
             s.issueId;
         builderLogs.add(
           DayBuilderLogInput(
-            sourceLogId: s.sourceLogId,
+            sourceLogId: s.id,
             issueId: s.issueId,
             titleSnapshot: title,
             description: s.description,
@@ -1772,46 +1857,28 @@ class AppState extends ChangeNotifier {
       );
 
       final plan = DayBuilder.rebuildDayPlan(input: input, seed: seed);
+      final rebuiltSegments = [
+        for (final segment in plan.segments)
+          segment.copyWith(
+            sourceLogId: sourceLogIdBySegmentId[segment.sourceLogId]!,
+          ),
+      ];
 
       final updatedDraft = _currentDraft!.copyWith(
         startUtc: plan.dayStartUtc,
         endUtc: plan.dayEndUtc,
+        seed: seed,
       );
-
-      final draftLogsMap = <String, DraftLog>{};
-      for (final b in builderLogs) {
-        if (!draftLogsMap.containsKey(b.sourceLogId)) {
-          draftLogsMap[b.sourceLogId] = DraftLog(
-            draftId: draftId,
-            sourceLogId: b.sourceLogId,
-            sourceDurationSeconds: b.sourceDurationSeconds,
-            descriptionSnapshot: b.description,
-            durationLocked: b.durationLocked,
-          );
-        } else {
-          final prev = draftLogsMap[b.sourceLogId]!;
-          draftLogsMap[b.sourceLogId] = DraftLog(
-            draftId: draftId,
-            sourceLogId: b.sourceLogId,
-            sourceDurationSeconds:
-                prev.sourceDurationSeconds + b.sourceDurationSeconds,
-            descriptionSnapshot: prev.descriptionSnapshot,
-            durationLocked: prev.durationLocked,
-          );
-        }
-      }
-      final newDraftLogs = draftLogsMap.values.toList();
 
       store.saveDayDraft(
         draft: updatedDraft,
-        draftLogs: newDraftLogs,
-        segments: plan.segments,
+        draftLogs: _currentDraftLogs,
+        segments: rebuiltSegments,
         breaks: plan.breaks,
       );
 
       _currentDraft = updatedDraft;
-      _currentDraftLogs = newDraftLogs;
-      _currentSegments = plan.segments;
+      _currentSegments = rebuiltSegments;
       _currentBreaks = plan.breaks;
       _activeDraftDatesBySourceLogId = store.getActiveDraftDatesBySourceLogId(
         scope: activeScope,
@@ -1866,7 +1933,8 @@ class AppState extends ChangeNotifier {
     }
     for (final ew in importedWorklogs) {
       if (!ew.startUtc.isBefore(gap.endUtc)) {
-        if (minStartAfterGap == null || ew.startUtc.isBefore(minStartAfterGap)) {
+        if (minStartAfterGap == null ||
+            ew.startUtc.isBefore(minStartAfterGap)) {
           minStartAfterGap = ew.startUtc;
           rightExisting = ew;
           rightSegment = null;
@@ -1904,7 +1972,9 @@ class AppState extends ChangeNotifier {
         return 'Нельзя изменять границу: слева находится запись из Jira (${neighbors.leftExisting!.issueKey}).';
       }
     } else if (neighbors.leftSegment != null) {
-      final leftDur = newStartUtc.difference(neighbors.leftSegment!.startUtc).inSeconds;
+      final leftDur = newStartUtc
+          .difference(neighbors.leftSegment!.startUtc)
+          .inSeconds;
       if (leftDur < 60) {
         return 'Длительность предыдущей задачи не может быть меньше 1 минуты.';
       }
@@ -1915,7 +1985,9 @@ class AppState extends ChangeNotifier {
         return 'Нельзя изменять границу: справа находится запись из Jira (${neighbors.rightExisting!.issueKey}).';
       }
     } else if (neighbors.rightSegment != null) {
-      final rightDur = neighbors.rightSegment!.endUtc.difference(newEndUtc).inSeconds;
+      final rightDur = neighbors.rightSegment!.endUtc
+          .difference(newEndUtc)
+          .inSeconds;
       if (rightDur < 60) {
         return 'Длительность следующей задачи не может быть меньше 1 минуты.';
       }
@@ -1945,8 +2017,12 @@ class AppState extends ChangeNotifier {
 
     // 1. Обновление левого соседа
     if (neighbors.leftSegment != null) {
-      final newDur = newStartUtc.difference(neighbors.leftSegment!.startUtc).inSeconds;
-      final updatedLeft = neighbors.leftSegment!.copyWith(durationSeconds: newDur);
+      final newDur = newStartUtc
+          .difference(neighbors.leftSegment!.startUtc)
+          .inSeconds;
+      final updatedLeft = neighbors.leftSegment!.copyWith(
+        durationSeconds: newDur,
+      );
       final idx = _currentSegments.indexWhere((s) => s.id == updatedLeft.id);
       if (idx != -1) {
         final list = List<Segment>.from(_currentSegments);
@@ -1961,7 +2037,9 @@ class AppState extends ChangeNotifier {
 
     // 2. Обновление правого соседа
     if (neighbors.rightSegment != null) {
-      final newDur = neighbors.rightSegment!.endUtc.difference(newEndUtc).inSeconds;
+      final newDur = neighbors.rightSegment!.endUtc
+          .difference(newEndUtc)
+          .inSeconds;
       final updatedRight = neighbors.rightSegment!.copyWith(
         startUtc: newEndUtc,
         durationSeconds: newDur,
@@ -1983,7 +2061,8 @@ class AppState extends ChangeNotifier {
     var newDraftEnd = _currentDraft!.endUtc;
     if (newStartUtc.isBefore(newDraftStart)) newDraftStart = newStartUtc;
     if (newEndUtc.isAfter(newDraftEnd)) newDraftEnd = newEndUtc;
-    if (newDraftStart != _currentDraft!.startUtc || newDraftEnd != _currentDraft!.endUtc) {
+    if (newDraftStart != _currentDraft!.startUtc ||
+        newDraftEnd != _currentDraft!.endUtc) {
       _currentDraft = _currentDraft!.copyWith(
         startUtc: newDraftStart,
         endUtc: newDraftEnd,
@@ -1998,15 +2077,19 @@ class AppState extends ChangeNotifier {
 
     // 3. Сохранение предпочтения обеда
     final breaks = List<Break>.from(_currentBreaks);
-    breaks.removeWhere((b) => b.startUtc.isBefore(newEndUtc) && b.endUtc.isAfter(newStartUtc));
+    breaks.removeWhere(
+      (b) => b.startUtc.isBefore(newEndUtc) && b.endUtc.isAfter(newStartUtc),
+    );
     if (newKind == BreakKind.lunch) {
-      breaks.add(Break(
-        id: 'lunch-${newStartUtc.millisecondsSinceEpoch}',
-        draftId: _currentDraft!.id,
-        startUtc: newStartUtc,
-        durationSeconds: newEndUtc.difference(newStartUtc).inSeconds,
-        kind: BreakKind.lunch,
-      ));
+      breaks.add(
+        Break(
+          id: 'lunch-${newStartUtc.millisecondsSinceEpoch}',
+          draftId: _currentDraft!.id,
+          startUtc: newStartUtc,
+          durationSeconds: newEndUtc.difference(newStartUtc).inSeconds,
+          kind: BreakKind.lunch,
+        ),
+      );
     }
     breaks.sort((a, b) => a.startUtc.compareTo(b.startUtc));
     _currentBreaks = breaks;
@@ -2022,11 +2105,16 @@ class AppState extends ChangeNotifier {
     final neighbors = findGapNeighbors(gap);
 
     if (neighbors.leftSegment != null) {
-      final targetEnd = neighbors.rightSegment?.startUtc ??
+      final targetEnd =
+          neighbors.rightSegment?.startUtc ??
           neighbors.rightExisting?.startUtc ??
           gap.endUtc;
-      final newDur = targetEnd.difference(neighbors.leftSegment!.startUtc).inSeconds;
-      final updatedLeft = neighbors.leftSegment!.copyWith(durationSeconds: newDur);
+      final newDur = targetEnd
+          .difference(neighbors.leftSegment!.startUtc)
+          .inSeconds;
+      final updatedLeft = neighbors.leftSegment!.copyWith(
+        durationSeconds: newDur,
+      );
       final idx = _currentSegments.indexWhere((s) => s.id == updatedLeft.id);
       if (idx != -1) {
         final list = List<Segment>.from(_currentSegments);
@@ -2034,9 +2122,12 @@ class AppState extends ChangeNotifier {
         _currentSegments = list;
         store.updateSegment(updatedLeft);
       }
-    } else if (neighbors.leftExisting != null && neighbors.rightSegment != null) {
+    } else if (neighbors.leftExisting != null &&
+        neighbors.rightSegment != null) {
       final newStart = neighbors.leftExisting!.endUtc;
-      final newDur = neighbors.rightSegment!.endUtc.difference(newStart).inSeconds;
+      final newDur = neighbors.rightSegment!.endUtc
+          .difference(newStart)
+          .inSeconds;
       final updatedRight = neighbors.rightSegment!.copyWith(
         startUtc: newStart,
         durationSeconds: newDur,
@@ -2049,13 +2140,15 @@ class AppState extends ChangeNotifier {
         store.updateSegment(updatedRight);
       }
     } else if (neighbors.isStartOfDay) {
-      final targetStart = neighbors.rightSegment?.startUtc ??
+      final targetStart =
+          neighbors.rightSegment?.startUtc ??
           neighbors.rightExisting?.startUtc ??
           gap.endUtc;
       _currentDraft = _currentDraft!.copyWith(startUtc: targetStart);
       store.updateDayDraft(_currentDraft!);
     } else if (neighbors.isEndOfDay) {
-      final targetEnd = neighbors.leftSegment?.endUtc ??
+      final targetEnd =
+          neighbors.leftSegment?.endUtc ??
           neighbors.leftExisting?.endUtc ??
           gap.startUtc;
       _currentDraft = _currentDraft!.copyWith(endUtc: targetEnd);
@@ -2063,7 +2156,9 @@ class AppState extends ChangeNotifier {
     }
 
     final breaks = List<Break>.from(_currentBreaks);
-    breaks.removeWhere((b) => b.startUtc.isBefore(gap.endUtc) && b.endUtc.isAfter(gap.startUtc));
+    breaks.removeWhere(
+      (b) => b.startUtc.isBefore(gap.endUtc) && b.endUtc.isAfter(gap.startUtc),
+    );
     _currentBreaks = breaks;
     store.replaceBreaks(draftId: _currentDraft!.id, breaks: _currentBreaks);
 
@@ -2077,8 +2172,9 @@ class AppState extends ChangeNotifier {
     required int deltaSeconds,
   }) {
     if (deltaSeconds <= 0) return null;
-    final affectedSegments =
-        _currentSegments.where((s) => !s.startUtc.isBefore(afterUtc)).toList();
+    final affectedSegments = _currentSegments
+        .where((s) => !s.startUtc.isBefore(afterUtc))
+        .toList();
     if (affectedSegments.isEmpty) return null;
 
     for (final s in affectedSegments) {
@@ -2086,7 +2182,8 @@ class AppState extends ChangeNotifier {
       final shiftedEnd = s.endUtc.add(Duration(seconds: deltaSeconds));
 
       for (final ew in importedWorklogs) {
-        if (shiftedStart.isBefore(ew.endUtc) && shiftedEnd.isAfter(ew.startUtc)) {
+        if (shiftedStart.isBefore(ew.endUtc) &&
+            shiftedEnd.isAfter(ew.startUtc)) {
           final availableSec = ew.startUtc.difference(s.startUtc).inSeconds;
           final availMin = (availableSec / 60).round();
           final reqMin = (deltaSeconds / 60).round();
@@ -2096,7 +2193,6 @@ class AppState extends ChangeNotifier {
     }
     return null;
   }
-
 
   /// Прямое изменение правой границы задачи (Right Handle Drag):
   /// - newDurationSeconds >= 600 (мин. 10 минут).
@@ -2120,13 +2216,20 @@ class AppState extends ChangeNotifier {
       );
       if (err != null) throw ArgumentError(err);
 
-      final rightSegments = _currentSegments
-          .where((s) => s.id != currentSegment.id && !s.startUtc.isBefore(currentSegment.endUtc))
-          .toList()
-        ..sort((a, b) => a.startUtc.compareTo(b.startUtc));
+      final rightSegments =
+          _currentSegments
+              .where(
+                (s) =>
+                    s.id != currentSegment.id &&
+                    !s.startUtc.isBefore(currentSegment.endUtc),
+              )
+              .toList()
+            ..sort((a, b) => a.startUtc.compareTo(b.startUtc));
 
       for (final s in rightSegments) {
-        final pushed = s.copyWith(startUtc: s.startUtc.add(Duration(seconds: delta)));
+        final pushed = s.copyWith(
+          startUtc: s.startUtc.add(Duration(seconds: delta)),
+        );
         store.updateSegment(pushed);
         final sIdx = _currentSegments.indexWhere((x) => x.id == s.id);
         if (sIdx != -1) _currentSegments[sIdx] = pushed;
@@ -2142,13 +2245,20 @@ class AppState extends ChangeNotifier {
       store.replaceBreaks(draftId: _currentDraft!.id, breaks: _currentBreaks);
     } else {
       final shiftLeft = -delta;
-      final rightSegments = _currentSegments
-          .where((s) => s.id != currentSegment.id && !s.startUtc.isBefore(currentSegment.endUtc))
-          .toList()
-        ..sort((a, b) => a.startUtc.compareTo(b.startUtc));
+      final rightSegments =
+          _currentSegments
+              .where(
+                (s) =>
+                    s.id != currentSegment.id &&
+                    !s.startUtc.isBefore(currentSegment.endUtc),
+              )
+              .toList()
+            ..sort((a, b) => a.startUtc.compareTo(b.startUtc));
 
       for (final s in rightSegments) {
-        final pulled = s.copyWith(startUtc: s.startUtc.subtract(Duration(seconds: shiftLeft)));
+        final pulled = s.copyWith(
+          startUtc: s.startUtc.subtract(Duration(seconds: shiftLeft)),
+        );
         store.updateSegment(pulled);
         final sIdx = _currentSegments.indexWhere((x) => x.id == s.id);
         if (sIdx != -1) _currentSegments[sIdx] = pulled;
@@ -2156,7 +2266,9 @@ class AppState extends ChangeNotifier {
 
       final updatedBreaks = _currentBreaks.map((b) {
         if (!b.startUtc.isBefore(currentSegment.endUtc)) {
-          return b.copyWith(startUtc: b.startUtc.subtract(Duration(seconds: shiftLeft)));
+          return b.copyWith(
+            startUtc: b.startUtc.subtract(Duration(seconds: shiftLeft)),
+          );
         }
         return b;
       }).toList();
@@ -2164,7 +2276,9 @@ class AppState extends ChangeNotifier {
       store.replaceBreaks(draftId: _currentDraft!.id, breaks: _currentBreaks);
     }
 
-    final updatedSegment = currentSegment.copyWith(durationSeconds: targetDuration);
+    final updatedSegment = currentSegment.copyWith(
+      durationSeconds: targetDuration,
+    );
     _currentSegments[idx] = updatedSegment;
     store.updateSegment(updatedSegment);
 
@@ -2189,7 +2303,8 @@ class AppState extends ChangeNotifier {
     // Находим границу соседа слева (не урезается!)
     var minAllowedStart = _currentDraft!.startUtc;
     for (final s in _currentSegments) {
-      if (s.id != currentSegment.id && !s.endUtc.isAfter(currentSegment.startUtc)) {
+      if (s.id != currentSegment.id &&
+          !s.endUtc.isAfter(currentSegment.startUtc)) {
         if (s.endUtc.isAfter(minAllowedStart)) {
           minAllowedStart = s.endUtc;
         }
@@ -2204,7 +2319,9 @@ class AppState extends ChangeNotifier {
     }
 
     // Ограничение справа: мин. 10 минут
-    final maxAllowedStart = currentSegment.endUtc.subtract(const Duration(minutes: 10));
+    final maxAllowedStart = currentSegment.endUtc.subtract(
+      const Duration(minutes: 10),
+    );
 
     var effectiveStart = newStartUtc;
     if (effectiveStart.isBefore(minAllowedStart)) {
@@ -2214,7 +2331,9 @@ class AppState extends ChangeNotifier {
       effectiveStart = maxAllowedStart;
     }
 
-    final newDurationSeconds = currentSegment.endUtc.difference(effectiveStart).inSeconds;
+    final newDurationSeconds = currentSegment.endUtc
+        .difference(effectiveStart)
+        .inSeconds;
     final updatedSegment = currentSegment.copyWith(
       startUtc: effectiveStart,
       durationSeconds: newDurationSeconds,
@@ -2222,7 +2341,11 @@ class AppState extends ChangeNotifier {
 
     // Удаляем любые breaks, оказавшиеся внутри нового диапазона задачи
     final breaks = List<Break>.from(_currentBreaks);
-    breaks.removeWhere((b) => b.startUtc.isBefore(currentSegment.endUtc) && b.endUtc.isAfter(effectiveStart));
+    breaks.removeWhere(
+      (b) =>
+          b.startUtc.isBefore(currentSegment.endUtc) &&
+          b.endUtc.isAfter(effectiveStart),
+    );
     _currentBreaks = breaks;
     store.replaceBreaks(draftId: _currentDraft!.id, breaks: _currentBreaks);
 
@@ -2238,20 +2361,22 @@ class AppState extends ChangeNotifier {
   void snapGap(Break gap) {
     if (_currentDraft == null) return;
     final neighbors = findGapNeighbors(gap);
-    final targetStart = neighbors.leftSegment?.endUtc ??
+    final targetStart =
+        neighbors.leftSegment?.endUtc ??
         neighbors.leftExisting?.endUtc ??
         _currentDraft!.startUtc;
 
-    final rightSegments = _currentSegments
-        .where((s) => !s.startUtc.isBefore(gap.endUtc))
-        .toList()
-      ..sort((a, b) => a.startUtc.compareTo(b.startUtc));
+    final rightSegments =
+        _currentSegments.where((s) => !s.startUtc.isBefore(gap.endUtc)).toList()
+          ..sort((a, b) => a.startUtc.compareTo(b.startUtc));
 
     if (rightSegments.isEmpty) {
       _currentDraft = _currentDraft!.copyWith(endUtc: targetStart);
       store.updateDayDraft(_currentDraft!);
     } else {
-      final delta = rightSegments.first.startUtc.difference(targetStart).inSeconds;
+      final delta = rightSegments.first.startUtc
+          .difference(targetStart)
+          .inSeconds;
       if (delta > 0) {
         for (final s in rightSegments) {
           final newStart = s.startUtc.subtract(Duration(seconds: delta));
@@ -2264,7 +2389,9 @@ class AppState extends ChangeNotifier {
     }
 
     final breaks = List<Break>.from(_currentBreaks);
-    breaks.removeWhere((b) => b.startUtc.isBefore(gap.endUtc) && b.endUtc.isAfter(gap.startUtc));
+    breaks.removeWhere(
+      (b) => b.startUtc.isBefore(gap.endUtc) && b.endUtc.isAfter(gap.startUtc),
+    );
     _currentBreaks = breaks;
     store.replaceBreaks(draftId: _currentDraft!.id, breaks: _currentBreaks);
 
@@ -2286,7 +2413,9 @@ class AppState extends ChangeNotifier {
     if (idx != -1) _currentSegments[idx] = updated;
 
     final breaks = List<Break>.from(_currentBreaks);
-    breaks.removeWhere((b) => b.startUtc.isBefore(gap.endUtc) && b.endUtc.isAfter(gap.startUtc));
+    breaks.removeWhere(
+      (b) => b.startUtc.isBefore(gap.endUtc) && b.endUtc.isAfter(gap.startUtc),
+    );
     _currentBreaks = breaks;
     store.replaceBreaks(draftId: _currentDraft!.id, breaks: _currentBreaks);
 
@@ -2311,10 +2440,11 @@ class AppState extends ChangeNotifier {
       );
       if (err != null) throw ArgumentError(err);
 
-      final rightSegments = _currentSegments
-          .where((s) => !s.startUtc.isBefore(gap.endUtc))
-          .toList()
-        ..sort((a, b) => a.startUtc.compareTo(b.startUtc));
+      final rightSegments =
+          _currentSegments
+              .where((s) => !s.startUtc.isBefore(gap.endUtc))
+              .toList()
+            ..sort((a, b) => a.startUtc.compareTo(b.startUtc));
 
       for (final s in rightSegments) {
         final newStart = s.startUtc.add(Duration(seconds: delta));
@@ -2325,10 +2455,11 @@ class AppState extends ChangeNotifier {
       }
     } else if (delta < 0) {
       final shiftLeft = -delta;
-      final rightSegments = _currentSegments
-          .where((s) => !s.startUtc.isBefore(gap.endUtc))
-          .toList()
-        ..sort((a, b) => a.startUtc.compareTo(b.startUtc));
+      final rightSegments =
+          _currentSegments
+              .where((s) => !s.startUtc.isBefore(gap.endUtc))
+              .toList()
+            ..sort((a, b) => a.startUtc.compareTo(b.startUtc));
 
       for (final s in rightSegments) {
         final newStart = s.startUtc.subtract(Duration(seconds: shiftLeft));
@@ -2341,15 +2472,19 @@ class AppState extends ChangeNotifier {
 
     final effectiveKind = kind ?? gap.kind;
     final breaks = List<Break>.from(_currentBreaks);
-    breaks.removeWhere((b) => b.startUtc.isBefore(gap.endUtc) && b.endUtc.isAfter(gap.startUtc));
+    breaks.removeWhere(
+      (b) => b.startUtc.isBefore(gap.endUtc) && b.endUtc.isAfter(gap.startUtc),
+    );
     if (effectiveKind == BreakKind.lunch) {
-      breaks.add(Break(
-        id: 'lunch-${gap.startUtc.millisecondsSinceEpoch}',
-        draftId: _currentDraft!.id,
-        startUtc: gap.startUtc,
-        durationSeconds: newDurationSeconds,
-        kind: BreakKind.lunch,
-      ));
+      breaks.add(
+        Break(
+          id: 'lunch-${gap.startUtc.millisecondsSinceEpoch}',
+          draftId: _currentDraft!.id,
+          startUtc: gap.startUtc,
+          durationSeconds: newDurationSeconds,
+          kind: BreakKind.lunch,
+        ),
+      );
     }
     _currentBreaks = breaks;
     store.replaceBreaks(draftId: _currentDraft!.id, breaks: _currentBreaks);
@@ -2361,6 +2496,7 @@ class AppState extends ChangeNotifier {
 
   /// Отправка текущего черновика дня в Jira (сценарии A14, A17).
   Future<SendDraftResult?> submitCurrentDraft() async {
+    if (isReadOnly) return null;
     final draft = _currentDraft;
     final conn = _currentConnection;
     if (draft == null || conn == null) return null;
@@ -2410,6 +2546,7 @@ class AppState extends ChangeNotifier {
 
   /// Сверка сегмента со статусом unknown через Jira properties (сценарий A15).
   Future<ReconcileResult?> reconcileSegment(Segment segment) async {
+    if (isReadOnly) return null;
     final conn = _currentConnection;
     if (conn == null) return null;
     final token = await connectionStore.getSavedToken();
@@ -2438,6 +2575,7 @@ class AppState extends ChangeNotifier {
     Segment segment,
     String worklogId,
   ) async {
+    if (isReadOnly) return null;
     final conn = _currentConnection;
     if (conn == null) return null;
     final token = await connectionStore.getSavedToken();
@@ -2460,6 +2598,7 @@ class AppState extends ChangeNotifier {
 
   /// Пользователь подтвердил отсутствие записи и разрешил повтор (сценарий A15).
   void manuallyConfirmAbsenceAndAllowRetry(Segment segment) {
+    if (isReadOnly) throw StateError('Приложение открыто только для чтения.');
     worklogSender.manuallyConfirmAbsenceAndAllowRetry(segment: segment);
     loadDraftForSelectedDate();
     _statusMessage =
@@ -2485,6 +2624,7 @@ class AppState extends ChangeNotifier {
     _tickerTimer = null;
     _apiServer?.stop();
     _apiServer = null;
+    themeMode.dispose();
     super.dispose();
   }
 }

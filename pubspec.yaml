@@ -43,6 +43,8 @@ dependencies:
   uuid: ^4.6.0
   win32: ^6.4.0
   ffi: ^2.2.0
+  flutter_driver:
+    sdk: flutter
 
 dev_dependencies:
   flutter_test:
@@ -65,6 +67,18 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  assets:
+    - assets/fonts/Inter-OFL.txt
+    - assets/fonts/IBMPlexMono-OFL.txt
+
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter.ttf
+    - family: IBM Plex Mono
+      fonts:
+        - asset: assets/fonts/IBMPlexMono-Regular.ttf
 
   # To add assets to your application, add an assets section, like this:
   # assets:

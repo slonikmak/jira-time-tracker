@@ -27,59 +27,10 @@ class DayScreen extends StatelessWidget {
             children: [
               _buildHeader(context),
               if (hasDraft) _buildSummaryStats(context),
-              if (hasDraft)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(22, 0, 22, 18),
-                  child: TimelineTrackBar(
-                    draft: appState.currentDraft!,
-                    segments: appState.currentSegments,
-                    breaks: appState.currentBreaks,
-                    issueKeys: {
-                      for (final i in appState.issues) i.issueId: i.key,
-                    },
-                    onEditSegment: (seg) {
-                      final key =
-                          appState.issues
-                              .where((i) => i.issueId == seg.issueId)
-                              .firstOrNull
-                              ?.key ??
-                          'Задача';
-                      _openEditSegmentDialog(context, seg, key);
-                    },
-                    onEditBreak: (breakItem) {
-                      _openGapActionsDialog(context, breakItem);
-                    },
-                    isReadOnly: appState.isReadOnly || appState.isDraftLockedFromRebuild,
-                    onResizeSegmentRight: (seg, newDur) {
-                      try {
-                        appState.resizeSegmentRight(seg, newDur);
-                      } catch (e) {
-                        final msg = e is ArgumentError ? (e.message?.toString() ?? e.toString()) : e.toString();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(msg),
-                            backgroundColor: Theme.of(context).colorScheme.error,
-                          ),
-                        );
-                      }
-                    },
-                    onResizeSegmentLeft: (seg, newStart) {
-                      try {
-                        appState.resizeSegmentLeft(seg, newStart);
-                      } catch (e) {
-                        final msg = e is ArgumentError ? (e.message?.toString() ?? e.toString()) : e.toString();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(msg),
-                            backgroundColor: Theme.of(context).colorScheme.error,
-                          ),
-                        );
-                      }
-                    },
-                  ),
-                ),
+              if (hasDraft) _buildTimeline(context),
+              if (hasDraft) _buildSubmissionNotice(context),
 
-              if (appState.validationErrors.isNotEmpty)
+              if (hasDraft && appState.validationErrors.isNotEmpty)
                 _buildValidationErrors(context),
               Expanded(
                 child: hasDraft
@@ -91,6 +42,124 @@ class DayScreen extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildTimeline(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(40, 0, 40, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Шкала дня', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 10),
+          TimelineTrackBar(
+            draft: appState.currentDraft!,
+            segments: appState.currentSegments,
+            breaks: appState.currentBreaks,
+            existingWorklogs: appState.importedWorklogs,
+            issueKeys: {for (final i in appState.issues) i.issueId: i.key},
+            onEditSegment: (seg) {
+              final issue = appState.issues
+                  .where((i) => i.issueId == seg.issueId)
+                  .firstOrNull;
+              _openEditSegmentDialog(
+                context,
+                seg,
+                issue == null ? 'Задача' : '${issue.key} · ${issue.summary}',
+              );
+            },
+            onEditBreak: (breakItem) =>
+                _openGapActionsDialog(context, breakItem),
+            isReadOnly:
+                appState.isReadOnly || appState.isDraftLockedFromRebuild,
+            onResizeSegmentRight: (seg, newDuration) {
+              try {
+                appState.resizeSegmentRight(seg, newDuration);
+              } catch (error) {
+                _showEditError(context, error);
+              }
+            },
+            onResizeSegmentLeft: (seg, newStart) {
+              try {
+                appState.resizeSegmentLeft(seg, newStart);
+              } catch (error) {
+                _showEditError(context, error);
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditError(BuildContext context, Object error) {
+    final message = error is ArgumentError
+        ? (error.message?.toString() ?? error.toString())
+        : error.toString();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Theme.of(context).colorScheme.error,
+      ),
+    );
+  }
+
+  Widget _buildSubmissionNotice(BuildContext context) {
+    final segments = appState.currentSegments;
+    final sent = segments.where((s) => s.sendState == SendState.sent).length;
+    final failed = segments
+        .where((s) => s.sendState == SendState.failed)
+        .length;
+    final unknown = segments
+        .where((s) => s.sendState == SendState.unknown)
+        .length;
+    if (failed == 0 && unknown == 0) return const SizedBox.shrink();
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final title = unknown > 0
+        ? 'Нужно проверить результат отправки'
+        : sent > 0
+        ? 'День отправлен частично'
+        : 'Не удалось отправить записи';
+    final detail = unknown > 0
+        ? '$sent отправлено, $failed с ошибкой, $unknown с неизвестным результатом. Повторная отправка неизвестных записей заблокирована.'
+        : '$sent отправлено, $failed не отправлено. Можно повторить отправку неуспешных записей.';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(40, 0, 40, 20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppColors.warnBg(isDark),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.error_outline, color: AppColors.warn(isDark)),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    detail,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.muted(isDark),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -107,100 +176,144 @@ class DayScreen extends StatelessWidget {
         ? 'Все записи отправлены'
         : appState.isDraftLockedFromRebuild
         ? 'Результат отправки'
-        : 'Черновик · можно редактировать';
+        : '${_weekdayName(date.weekday)} · Черновик сохранён на устройстве';
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 18, 22, 18),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('День', style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.muted(isDark),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.chevron_left, size: 20),
-                tooltip: 'Предыдущий день',
-                onPressed: () => appState.previousDay(),
-              ),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.calendar_month, size: 18),
-                label: Text(
-                  dateStr,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                onPressed: () async {
-                  final picked = await showDatePicker(
-                    context: context,
-                    initialDate: appState.selectedDate,
-                    firstDate: DateTime(2020),
-                    lastDate: DateTime(2035),
-                    helpText: 'Выберите дату',
-                    cancelText: 'Отмена',
-                    confirmText: 'Выбрать',
-                  );
-                  if (picked != null) {
-                    appState.setSelectedDate(picked);
-                  }
-                },
-              ),
-              IconButton(
-                icon: const Icon(Icons.chevron_right, size: 20),
-                tooltip: 'Следующий день',
-                onPressed: () => appState.nextDay(),
-              ),
-              TextButton(
-                onPressed: () => appState.today(),
-                child: const Text('Сегодня'),
-              ),
-              IconButton(
-                icon: appState.isFetchingJiraWorklogs
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.sync, size: 18),
-                tooltip: 'Обновить записи из Jira',
-                onPressed: appState.isFetchingJiraWorklogs
-                    ? null
-                    : () => appState.fetchJiraWorklogsForDate(),
-              ),
-              if (draft != null) ...[
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.refresh, size: 16),
-                  label: const Text('Пересобрать день'),
-                  onPressed: appState.isDraftLockedFromRebuild
-                      ? null
-                      : () => _handleRebuildCurrentDay(context),
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.auto_awesome, size: 16),
-                  label: const Text('Умная пересборка'),
-                  onPressed: appState.isDraftLockedFromRebuild
-                      ? null
-                      : () => _confirmSmartRebuild(context),
-                ),
-              ],
-            ],
+    Future<void> pickDate() async {
+      final picked = await showDatePicker(
+        context: context,
+        initialDate: appState.selectedDate,
+        firstDate: DateTime(2020),
+        lastDate: DateTime(2035),
+        helpText: 'Выберите дату',
+        cancelText: 'Отмена',
+        confirmText: 'Выбрать',
+      );
+      if (picked != null) appState.setSelectedDate(picked);
+    }
+
+    final dateMenu = PopupMenuButton<String>(
+      tooltip: 'Другие действия с расписанием',
+      onSelected: (action) {
+        switch (action) {
+          case 'date':
+            pickDate();
+          case 'previous':
+            appState.previousDay();
+          case 'next':
+            appState.nextDay();
+          case 'today':
+            appState.today();
+          case 'refresh':
+            appState.fetchJiraWorklogsForDate();
+          case 'rebuild':
+            _confirmRebuildCurrentDay(context);
+        }
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem(value: 'date', child: Text('Выбрать дату ($dateStr)')),
+        const PopupMenuItem(value: 'previous', child: Text('Предыдущий день')),
+        const PopupMenuItem(value: 'next', child: Text('Следующий день')),
+        const PopupMenuItem(value: 'today', child: Text('Сегодня')),
+        PopupMenuItem(
+          value: 'refresh',
+          enabled: !appState.isFetchingJiraWorklogs,
+          child: const Text('Обновить записи из Jira'),
+        ),
+        if (draft != null) ...[
+          const PopupMenuDivider(),
+          PopupMenuItem(
+            value: 'rebuild',
+            enabled: !appState.isReadOnly && !appState.isDraftLockedFromRebuild,
+            child: const Text('Пересобрать день'),
           ),
         ],
+      ],
+      child: const Padding(
+        padding: EdgeInsets.only(left: 12),
+        child: Icon(Icons.keyboard_arrow_down, size: 20),
+      ),
+    );
+
+    final hasSendResults = appState.currentSegments.any(
+      (segment) => segment.sendState != SendState.pending,
+    );
+    final controls = <Widget>[
+      if (hasSendResults)
+        TextButton.icon(
+          onPressed: () => _showSubmissionResults(context),
+          icon: const Icon(Icons.receipt_long_outlined, size: 16),
+          label: const Text('Результаты отправки'),
+        ),
+      if (draft != null)
+        OutlinedButton.icon(
+          icon: const Icon(Icons.auto_awesome, size: 16),
+          label: const Text('Умная пересборка'),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(0, 36),
+            visualDensity: VisualDensity.standard,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            textStyle: const TextStyle(fontSize: 13),
+          ),
+          onPressed: appState.isReadOnly || appState.isDraftLockedFromRebuild
+              ? null
+              : () => _confirmSmartRebuild(context),
+        ),
+    ];
+
+    final dateTitle = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextButton(
+              onPressed: pickDate,
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                alignment: Alignment.centerLeft,
+              ),
+              child: Text(
+                '${date.day} ${_monthName(date.month)}',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontSize: 29,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            dateMenu,
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(
+          subtitle,
+          style: TextStyle(fontSize: 12, color: AppColors.muted(isDark)),
+        ),
+      ],
+    );
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(40, 32, 40, 28),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 1040) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                dateTitle,
+                const SizedBox(height: 6),
+                Wrap(spacing: 2, runSpacing: 2, children: controls),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: dateTitle),
+              Row(mainAxisSize: MainAxisSize.min, children: controls),
+            ],
+          );
+        },
       ),
     );
   }
@@ -210,57 +323,111 @@ class DayScreen extends StatelessWidget {
     final draft = appState.currentDraft!;
     final start = _formatTime(draft.startUtc.toLocal());
     final end = _formatTime(draft.endUtc.toLocal());
+    final sentSegments = appState.currentSegments
+        .where((segment) => segment.sendState == SendState.sent)
+        .toList();
+    final hasSent = sentSegments.isNotEmpty;
+    final sentDuration = sentSegments.fold<int>(
+      0,
+      (sum, segment) => sum + segment.durationSeconds,
+    );
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(22, 0, 22, 18),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.fromLTRB(40, 0, 40, 18),
+      padding: const EdgeInsets.symmetric(vertical: 20),
       decoration: BoxDecoration(
         color: AppColors.surface(isDark),
-        border: Border.all(color: AppColors.line(isDark)),
-        borderRadius: BorderRadius.circular(9),
+        border: Border.symmetric(
+          horizontal: BorderSide(color: AppColors.line(isDark)),
+        ),
       ),
-      child: Wrap(
-        spacing: 28,
-        runSpacing: 12,
-        children: [
-          _DayMetric(label: 'Границы дня', value: '$start — $end'),
-          _DayMetric(
-            label: 'Весь день',
-            value: LogClock.formatHoursMinutes(
-              appState.totalDayDurationSeconds,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final metrics = [
+            _DayMetric(
+              label: 'Границы дня',
+              value: '$start — $end',
+              detail:
+                  'Весь день: ${LogClock.formatHoursMinutes(appState.totalDayDurationSeconds)} с паузами',
             ),
-          ),
-          _DayMetric(
-            label: 'Паузы',
-            value: LogClock.formatHoursMinutes(
-              appState.totalBreaksDurationSeconds,
+            _DayMetric(
+              label: hasSent ? 'Отправлено' : 'Новое время',
+              value: LogClock.formatHoursMinutes(
+                hasSent ? sentDuration : appState.totalSegmentsDurationSeconds,
+              ),
+              detail: hasSent
+                  ? '${sentSegments.length} из ${appState.currentSegments.length} записей'
+                  : appState.currentSegments.any(
+                      (segment) =>
+                          segment.sendState == SendState.failed ||
+                          segment.sendState == SendState.unknown,
+                    )
+                  ? '${appState.currentSegments.length} записей в расписании'
+                  : '${appState.currentSegments.length} записей к отправке',
+              color: hasSent
+                  ? AppColors.green(isDark)
+                  : AppColors.primary(isDark),
             ),
-          ),
-          _DayMetric(
-            label: 'Новое время',
-            value: LogClock.formatHoursMinutes(
-              appState.totalSegmentsDurationSeconds,
+            _DayMetric(
+              label: 'Уже в Jira',
+              value: LogClock.formatHoursMinutes(
+                appState.totalExistingDurationSeconds,
+              ),
+              detail: 'Не отправляется повторно',
+              color: AppColors.text(isDark),
             ),
-            color: AppColors.primary(isDark),
-          ),
-          _DayMetric(
-            label: 'Уже в Jira',
-            value: LogClock.formatHoursMinutes(
-              appState.totalExistingDurationSeconds,
+            _DayMetric(
+              label: 'Паузы',
+              value: LogClock.formatHoursMinutes(
+                appState.totalBreaksDurationSeconds,
+              ),
+              detail: 'Не входят в рабочее время',
             ),
-            color: AppColors.muted(isDark),
-          ),
-        ],
+          ];
+          if (constraints.maxWidth < 760) {
+            return Wrap(
+              children: metrics
+                  .map(
+                    (metric) => SizedBox(
+                      width: constraints.maxWidth / 2,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: metric,
+                      ),
+                    ),
+                  )
+                  .toList(),
+            );
+          }
+          return Row(
+            children: [
+              for (var i = 0; i < metrics.length; i++) ...[
+                if (i > 0)
+                  Container(
+                    width: 1,
+                    height: 80,
+                    color: AppColors.line(isDark),
+                  ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: metrics[i],
+                  ),
+                ),
+              ],
+            ],
+          );
+        },
       ),
     );
   }
 
   Widget _buildDayGrid(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 0, 22, 18),
+      padding: const EdgeInsets.fromLTRB(40, 5, 40, 18),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          if (constraints.maxWidth < 830) {
+          if (constraints.maxWidth < 930) {
             return SingleChildScrollView(
               child: Column(
                 children: [
@@ -272,14 +439,265 @@ class DayScreen extends StatelessWidget {
             );
           }
           return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(child: _buildSchedulePanel(context)),
-              const SizedBox(width: 24),
-              SizedBox(width: 240, child: _buildSourcesPanel(context)),
+              const SizedBox(width: 36),
+              VerticalDivider(
+                width: 1,
+                thickness: 1,
+                color: AppColors.line(
+                  Theme.of(context).brightness == Brightness.dark,
+                ),
+              ),
+              const SizedBox(width: 27),
+              SizedBox(width: 302, child: _buildSourcesPanel(context)),
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildSubmissionResults(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final segments = [...appState.currentSegments]
+      ..sort((a, b) => a.startUtc.compareTo(b.startUtc));
+    final hasUnknown = segments.any((s) => s.sendState == SendState.unknown);
+    final hasFailed = segments.any((s) => s.sendState == SendState.failed);
+    final note = appState.isDraftLockedFromRebuild
+        ? 'Пересборка недоступна после начала отправки. Сначала нужно разрешить все результаты.'
+        : hasUnknown
+        ? 'Сверьте неизвестные результаты перед повторной отправкой.'
+        : hasFailed
+        ? 'Повторная отправка затронет только неотправленные записи.'
+        : 'Успешные записи не отправляются повторно.';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(40, 5, 40, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                'Записи этого дня',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const Spacer(),
+              Text(
+                'Успешные записи не отправляются повторно',
+                style: TextStyle(fontSize: 11, color: AppColors.muted(isDark)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Divider(height: 1, color: AppColors.line(isDark)),
+          Expanded(
+            child: ListView.separated(
+              itemCount: segments.length,
+              separatorBuilder: (context, index) =>
+                  Divider(height: 1, color: AppColors.line(isDark)),
+              itemBuilder: (context, index) =>
+                  _buildSubmissionResultRow(context, segments[index]),
+            ),
+          ),
+          Divider(height: 1, color: AppColors.line(isDark)),
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Text(
+              note,
+              style: TextStyle(fontSize: 11, color: AppColors.muted(isDark)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSubmissionResults(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        child: SizedBox(
+          width: 1000,
+          height: MediaQuery.sizeOf(dialogContext).height * .72,
+          child: ListenableBuilder(
+            listenable: appState,
+            builder: (context, _) => _buildSubmissionResults(context),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSubmissionResultRow(BuildContext context, Segment segment) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final start = segment.startUtc.toLocal();
+    final end = segment.endUtc.toLocal();
+    final timeRange = '${_formatTime(start)} — ${_formatTime(end)}';
+    final issue = appState.issues
+        .where((item) => item.issueId == segment.issueId)
+        .firstOrNull;
+    final issueKey = issue?.key ?? segment.issueId;
+    final title = issue?.summary ?? issueKey;
+    final status = switch (segment.sendState) {
+      SendState.pending => (
+        'Ожидает отправки',
+        Icons.hourglass_empty,
+        AppColors.muted(isDark),
+      ),
+      SendState.sending => (
+        'Отправка...',
+        Icons.sync,
+        AppColors.primary(isDark),
+      ),
+      SendState.sent => (
+        'Отправлено',
+        Icons.check_circle_outline,
+        AppColors.green(isDark),
+      ),
+      SendState.failed => (
+        'Не отправлено',
+        Icons.error_outline,
+        AppColors.error(isDark),
+      ),
+      SendState.unknown => (
+        'Проверяем результат',
+        Icons.sync,
+        AppColors.warn(isDark),
+      ),
+    };
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 138,
+            child: Text(
+              timeRange,
+              style: TextStyle(
+                fontFamily: 'IBM Plex Mono',
+                fontSize: 11,
+                color: AppColors.muted(isDark),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      issueKey,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.primary(isDark),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  segment.description.isNotEmpty
+                      ? segment.description
+                      : '(без описания)',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.muted(isDark),
+                  ),
+                ),
+                if (segment.jiraWorklogId != null)
+                  Text(
+                    'Jira #${segment.jiraWorklogId}',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: AppColors.muted(isDark),
+                    ),
+                  ),
+                if (segment.lastError?.isNotEmpty == true)
+                  Text(
+                    segment.lastError!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: AppColors.warn(isDark),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          SizedBox(
+            width: 54,
+            child: Text(
+              LogClock.formatHoursMinutes(segment.durationSeconds),
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontFamily: 'IBM Plex Mono', fontSize: 11),
+            ),
+          ),
+          const SizedBox(width: 18),
+          SizedBox(
+            width: 164,
+            child: Row(
+              children: [
+                Icon(status.$2, size: 16, color: status.$3),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    status.$1,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 11, color: status.$3),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (segment.sendState == SendState.unknown)
+            PopupMenuButton<String>(
+              tooltip: 'Действия для неопределённого результата',
+              enabled: !appState.isReadOnly,
+              onSelected: (action) {
+                if (action == 'reconcile') {
+                  _handleReconcileSegment(context, segment);
+                } else {
+                  _openManualResolveDialog(context, segment);
+                }
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: 'reconcile',
+                  child: Text('Сверить результат (A15)'),
+                ),
+                PopupMenuItem(
+                  value: 'resolve',
+                  child: Text('Разрешить вручную (A15)'),
+                ),
+              ],
+            )
+          else
+            const SizedBox(width: 48),
+        ],
       ),
     );
   }
@@ -316,51 +734,84 @@ class DayScreen extends StatelessWidget {
   }
 
   Widget _buildValidationErrors(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      color: Theme.of(context).colorScheme.errorContainer,
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.error_outline,
-                size: 20,
-                color: Theme.of(context).colorScheme.onErrorContainer,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Ошибки валидации расписания (отправка заблокирована):',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.onErrorContainer,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          ...appState.validationErrors.map(
-            (err) => Padding(
-              padding: const EdgeInsets.only(left: 28, bottom: 2),
-              child: Text(
-                '• $err',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Theme.of(context).colorScheme.onErrorContainer,
-                ),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final errors = appState.validationErrors;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(40, 0, 40, 20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppColors.warnBg(isDark),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.error_outline, color: AppColors.warn(isDark), size: 20),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Расписание требует проверки',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.warn(isDark),
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '${errors.length} ${errors.length == 1 ? 'ошибка' : 'ошибок'} · отправка в Jira заблокирована',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.muted(isDark),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-        ],
+            TextButton(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (dialogContext) => AlertDialog(
+                  title: const Text('Ошибки в расписании'),
+                  content: SizedBox(
+                    width: 560,
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          for (final error in errors)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: Text(
+                                '• $error',
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      child: const Text('Закрыть'),
+                    ),
+                  ],
+                ),
+              ),
+              child: const Text('Показать ошибки'),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildSourcesPanel(BuildContext context) {
     final hasDraft = appState.currentDraft != null;
-    final draftLogs = appState.currentDraftLogs;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Column(
@@ -370,19 +821,19 @@ class DayScreen extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                hasDraft ? 'Из выбранных логов' : 'Логи для включения',
+                hasDraft ? 'Источники' : 'Логи для включения',
                 style: Theme.of(context).textTheme.titleSmall,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            if (hasDraft)
-              Text(
-                '${draftLogs.length} шт.',
-                style: TextStyle(fontSize: 12, color: AppColors.muted(isDark)),
-              ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 24),
+        Text(
+          hasDraft ? 'Исходное время → в расписании' : 'Выберите логи для дня',
+          style: TextStyle(fontSize: 11, color: AppColors.muted(isDark)),
+        ),
+        const SizedBox(height: 5),
         Expanded(
           child: hasDraft
               ? _buildDraftSourcesList(context)
@@ -394,6 +845,7 @@ class DayScreen extends StatelessWidget {
 
   Widget _buildDraftSourcesList(BuildContext context) {
     final draftLogs = appState.currentDraftLogs;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     if (draftLogs.isEmpty) {
       return const Center(child: Text('Нет источников'));
     }
@@ -421,6 +873,9 @@ class DayScreen extends StatelessWidget {
             createdAtUtc: DateTime.now().toUtc(),
           ),
         );
+        final sourceIssue = appState.issues
+            .where((issue) => issue.issueId == srcLog.issueId)
+            .firstOrNull;
 
         final originalTime = LogClock.formatHoursMinutes(
           dl.sourceDurationSeconds,
@@ -428,23 +883,47 @@ class DayScreen extends StatelessWidget {
         final allocatedTime = LogClock.formatHoursMinutes(allocatedSec);
 
         return ListTile(
-          dense: true,
-          title: Text(
-            srcLog.titleSnapshot,
-            style: const TextStyle(fontWeight: FontWeight.bold),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+          dense: false,
+          contentPadding: EdgeInsets.zero,
+          minVerticalPadding: 12,
+          title: Row(
+            children: [
+              if (sourceIssue != null) ...[
+                Text(
+                  sourceIssue.key,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.primary(isDark),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Expanded(
+                child: Text(
+                  srcLog.titleSnapshot,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const SizedBox(height: 4),
               Text(
                 '$originalTime → $allocatedTime',
                 style: TextStyle(
                   color: isLocked
-                      ? Colors.amber.shade900
-                      : Theme.of(context).colorScheme.primary,
+                      ? AppColors.warn(isDark)
+                      : AppColors.primary(isDark),
                   fontWeight: FontWeight.w600,
+                  fontFamily: 'IBM Plex Mono',
+                  fontSize: 13,
                 ),
               ),
               if (dl.descriptionSnapshot.isNotEmpty)
@@ -452,7 +931,10 @@ class DayScreen extends StatelessWidget {
                   dl.descriptionSnapshot,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.muted(isDark),
+                  ),
                 ),
             ],
           ),
@@ -460,7 +942,9 @@ class DayScreen extends StatelessWidget {
             icon: Icon(
               isLocked ? Icons.lock : Icons.lock_open_outlined,
               size: 18,
-              color: isLocked ? Colors.amber.shade800 : Colors.grey,
+              color: isLocked
+                  ? AppColors.primary(isDark)
+                  : AppColors.muted(isDark),
             ),
             tooltip: isLocked
                 ? 'Длительность зафиксирована (нажмите чтобы разблокировать)'
@@ -605,70 +1089,65 @@ class DayScreen extends StatelessWidget {
             Text('Расписание', style: Theme.of(context).textTheme.titleSmall),
             const Spacer(),
             Text(
-              '${appState.currentSegments.length} новых записей',
+              'Нажмите на интервал, чтобы изменить',
               style: TextStyle(fontSize: 12, color: AppColors.muted(isDark)),
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 22),
         Expanded(
-          child: Container(
-            decoration: BoxDecoration(
-              color: AppColors.surface(isDark),
-              border: Border.all(color: AppColors.line(isDark)),
-              borderRadius: BorderRadius.circular(9),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: ReorderableListView.builder(
-              buildDefaultDragHandles: false,
-              itemCount: items.length,
-              onReorder: (oldIndex, newIndex) {
-                if (oldIndex < 0 || oldIndex >= items.length) return;
-                final draggedItem = items[oldIndex];
-                if (!draggedItem.isSegment) return;
-                final draggedSegment = draggedItem.segment!;
-                final oldSegIndex = appState.currentSegments
-                    .indexWhere((s) => s.id == draggedSegment.id);
-                if (oldSegIndex == -1) return;
-                final targetSegIndex =
-                    items.take(newIndex).where((it) => it.isSegment).length;
-                appState.reorderSegments(oldSegIndex, targetSegIndex);
-              },
-              itemBuilder: (context, index) {
-                final item = items[index];
-                final key = ValueKey(
-                  item.isSegment
-                      ? 'seg_${item.segment!.id}'
-                      : (item.isBreak
+          child: ReorderableListView.builder(
+            buildDefaultDragHandles: false,
+            itemCount: items.length,
+            onReorder: (oldIndex, newIndex) {
+              if (oldIndex < 0 || oldIndex >= items.length) return;
+              final draggedItem = items[oldIndex];
+              if (!draggedItem.isSegment) return;
+              final draggedSegment = draggedItem.segment!;
+              final oldSegIndex = appState.currentSegments.indexWhere(
+                (s) => s.id == draggedSegment.id,
+              );
+              if (oldSegIndex == -1) return;
+              final targetSegIndex = items
+                  .take(newIndex)
+                  .where((it) => it.isSegment)
+                  .length;
+              appState.reorderSegments(oldSegIndex, targetSegIndex);
+            },
+            itemBuilder: (context, index) {
+              final item = items[index];
+              final key = ValueKey(
+                item.isSegment
+                    ? 'seg_${item.segment!.id}'
+                    : (item.isBreak
                           ? 'break_${item.breakItem!.id}'
                           : 'ew_${item.existingWorklog!.id}'),
-                );
+              );
 
-                if (item.isSegment) {
-                  return KeyedSubtree(
-                    key: key,
-                    child: _buildSegmentCard(
-                      context,
-                      item.segment!,
-                      itemIndex: index,
-                    ),
-                  );
-                } else if (item.isBreak) {
-                  return KeyedSubtree(
-                    key: key,
-                    child: _buildBreakCard(context, item.breakItem!),
-                  );
-                } else {
-                  return KeyedSubtree(
-                    key: key,
-                    child: _buildExistingWorklogCard(
-                      context,
-                      item.existingWorklog!,
-                    ),
-                  );
-                }
-              },
-            ),
+              if (item.isSegment) {
+                return KeyedSubtree(
+                  key: key,
+                  child: _buildSegmentCard(
+                    context,
+                    item.segment!,
+                    itemIndex: index,
+                  ),
+                );
+              } else if (item.isBreak) {
+                return KeyedSubtree(
+                  key: key,
+                  child: _buildBreakCard(context, item.breakItem!),
+                );
+              } else {
+                return KeyedSubtree(
+                  key: key,
+                  child: _buildExistingWorklogCard(
+                    context,
+                    item.existingWorklog!,
+                  ),
+                );
+              }
+            },
           ),
         ),
       ],
@@ -702,282 +1181,254 @@ class DayScreen extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isSent = segment.sendState == SendState.sent;
     final isLocked = appState.isReadOnly || appState.isDraftLockedFromRebuild;
-    final segIndex = appState.currentSegments.indexWhere((s) => s.id == segment.id);
+    final segIndex = appState.currentSegments.indexWhere(
+      (s) => s.id == segment.id,
+    );
     final canMoveUp = !isSent && !isLocked && segIndex > 0;
-    final canMoveDown = !isSent &&
+    final canMoveDown =
+        !isSent &&
         !isLocked &&
         segIndex != -1 &&
         segIndex < appState.currentSegments.length - 1;
 
-    return Card(
-      margin: EdgeInsets.zero,
-      elevation: 0,
-      color: AppColors.surface(isDark),
-      shape: Border(bottom: BorderSide(color: AppColors.line(isDark))),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Маркер перетаскивания (Reorder Drag Handle)
-            if (itemIndex != null && !isSent && !isLocked)
-              ReorderableDragStartListener(
-                index: itemIndex,
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 13),
+      decoration: BoxDecoration(
+        color: isSent ? AppColors.hover(isDark) : AppColors.selected(isDark),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        children: [
+          if (itemIndex != null && !isSent && !isLocked)
+            ReorderableDragStartListener(
+              index: itemIndex,
+              child: Tooltip(
+                message: 'Перетащить для изменения порядка',
                 child: Padding(
-                  padding: const EdgeInsets.only(right: 6, top: 4),
-                  child: Tooltip(
-                    message: 'Перетащить для изменения порядка',
-                    child: Icon(
-                      Icons.drag_indicator,
-                      size: 18,
-                      color: AppColors.muted(isDark),
-                    ),
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Icon(
+                    Icons.drag_indicator,
+                    size: 16,
+                    color: AppColors.muted(isDark),
                   ),
                 ),
               ),
-
-            // Колонка времени
-            SizedBox(
-              width: 150,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          '$startStr — $endStr',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (segment.isFixed) ...[
-                        const SizedBox(width: 4),
-                        Tooltip(
-                          message: 'Время зафиксировано',
-                          child: Icon(
-                            Icons.lock,
-                            size: 12,
-                            color: Colors.amber.shade800,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  Text(
-                    durationStr,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).colorScheme.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
             ),
-            const SizedBox(width: 8),
-            // Описание и задача
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 7,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.selected(isDark),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: AppColors.primary(isDark).withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: Text(
-                          issue.key,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primary(isDark),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          issue.summary,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      _buildSendStateBadge(context, segment.sendState),
-                      if (segment.jiraWorklogId != null) ...[
-                        const SizedBox(width: 6),
-                        Text(
-                          '#${segment.jiraWorklogId}',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    segment.description.isNotEmpty
-                        ? segment.description
-                        : '(без описания)',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.muted(isDark),
-                    ),
-                  ),
-                  if (segment.lastError != null &&
-                      segment.lastError!.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      segment.lastError!,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: segment.sendState == SendState.unknown
-                            ? Colors.amber.shade900
-                            : Colors.red.shade800,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ],
-                  if (segment.sendState == SendState.unknown) ...[
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        OutlinedButton.icon(
-                          icon: const Icon(Icons.sync, size: 14),
-                          label: const Text(
-                            'Сверить результат (A15)',
-                            style: TextStyle(fontSize: 11),
-                          ),
-                          onPressed: () =>
-                              _handleReconcileSegment(context, segment),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            visualDensity: VisualDensity.compact,
-                          ),
-                        ),
-                        TextButton.icon(
-                          icon: const Icon(Icons.help_outline, size: 14),
-                          label: const Text(
-                            'Разрешить вручную (A15)',
-                            style: TextStyle(fontSize: 11),
-                          ),
-                          onPressed: () =>
-                              _openManualResolveDialog(context, segment),
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            visualDensity: VisualDensity.compact,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            // Кнопки действий: вверх, вниз, замок, разбить, объединить, редактировать, удалить
-            Row(
-              mainAxisSize: MainAxisSize.min,
+          SizedBox(
+            width: 116,
+            child: Row(
               children: [
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.arrow_upward, size: 16),
-                  tooltip: 'Переместить вверх',
-                  onPressed: canMoveUp ? () => appState.moveSegmentUp(segment.id) : null,
-                ),
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.arrow_downward, size: 16),
-                  tooltip: 'Переместить вниз',
-                  onPressed: canMoveDown ? () => appState.moveSegmentDown(segment.id) : null,
-                ),
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  icon: Icon(
-                    segment.isFixed ? Icons.lock : Icons.lock_open_outlined,
-                    size: 18,
-                    color: segment.isFixed ? Colors.amber.shade800 : AppColors.muted(isDark),
+                Expanded(
+                  child: Text(
+                    '$startStr — $endStr',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: 'IBM Plex Mono',
+                      fontSize: 11,
+                    ),
                   ),
-                  tooltip: segment.isFixed ? 'Снять фиксацию времени' : 'Зафиксировать время',
-                  onPressed: isSent || isLocked ? null : () => appState.toggleSegmentFixed(segment.id),
                 ),
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.call_split, size: 18),
-                  tooltip: 'Разбить интервал',
-                  onPressed: isSent || isLocked
-                      ? null
-                      : () => SplitSegmentDialog.show(
-                            context,
-                            appState: appState,
-                            segment: segment,
-                            issueKey: issue.key,
-                          ),
-                ),
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.merge_type, size: 18),
-                  tooltip: 'Объединить интервалы',
-                  onPressed: isSent || isLocked || appState.currentSegments.length <= 1
-                      ? null
-                      : () => MergeSegmentsDialog.show(
-                            context,
-                            appState: appState,
-                            segment: segment,
-                          ),
-                ),
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.edit_outlined, size: 18),
-                  tooltip: isSent
-                      ? 'Уже отправлено в Jira'
-                      : 'Редактировать интервал (A13)',
-                  onPressed: isSent
-                      ? null
-                      : () =>
-                            _openEditSegmentDialog(context, segment, issue.key),
-                ),
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.delete_outline, size: 18),
-                  tooltip: isSent
-                      ? 'Уже отправлено в Jira'
-                      : 'Удалить интервал (A13)',
-                  onPressed: isSent
-                      ? null
-                      : () => _confirmDeleteSegment(context, segment),
-                ),
+                if (segment.isFixed)
+                  Tooltip(
+                    message: 'Время зафиксировано',
+                    child: Icon(
+                      Icons.lock,
+                      size: 12,
+                      color: AppColors.primary(isDark),
+                    ),
+                  ),
               ],
             ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      issue.key,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.primary(isDark),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        issue.summary,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _buildSendStateBadge(context, segment.sendState),
+                    if (segment.jiraWorklogId != null) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        '#${segment.jiraWorklogId}',
+                        style: TextStyle(
+                          fontFamily: 'IBM Plex Mono',
+                          fontSize: 10,
+                          color: AppColors.muted(isDark),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  segment.description.isNotEmpty
+                      ? segment.description
+                      : '(без описания)',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.muted(isDark),
+                  ),
+                ),
+                if (segment.lastError?.isNotEmpty == true)
+                  Text(
+                    segment.lastError!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: AppColors.warn(isDark),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 54,
+            child: Text(
+              durationStr,
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontFamily: 'IBM Plex Mono', fontSize: 11),
+            ),
+          ),
+          IconButton(
+            key: ValueKey('edit-segment-$segIndex'),
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.edit_outlined, size: 16),
+            tooltip: isSent
+                ? 'Уже отправлено в Jira'
+                : 'Редактировать интервал (A13)',
+            onPressed:
+                isSent ||
+                    appState.isReadOnly ||
+                    segment.sendState == SendState.unknown ||
+                    segment.sendState == SendState.sending
+                ? null
+                : () => _openEditSegmentDialog(
+                    context,
+                    segment,
+                    '${issue.key} · ${issue.summary}',
+                  ),
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Другие действия',
+            onSelected: (action) {
+              switch (action) {
+                case 'up':
+                  appState.moveSegmentUp(segment.id);
+                case 'down':
+                  appState.moveSegmentDown(segment.id);
+                case 'fixed':
+                  appState.toggleSegmentFixed(segment.id);
+                case 'split':
+                  SplitSegmentDialog.show(
+                    context,
+                    appState: appState,
+                    segment: segment,
+                    issueKey: issue.key,
+                  );
+                case 'merge':
+                  MergeSegmentsDialog.show(
+                    context,
+                    appState: appState,
+                    segment: segment,
+                  );
+                case 'delete':
+                  _confirmDeleteSegment(context, segment);
+                case 'reconcile':
+                  _handleReconcileSegment(context, segment);
+                case 'resolve':
+                  _openManualResolveDialog(context, segment);
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'up',
+                enabled: canMoveUp,
+                child: const Text('Переместить вверх'),
+              ),
+              PopupMenuItem(
+                value: 'down',
+                enabled: canMoveDown,
+                child: const Text('Переместить вниз'),
+              ),
+              PopupMenuItem(
+                value: 'fixed',
+                enabled: !isSent && !isLocked,
+                child: Tooltip(
+                  message: segment.isFixed
+                      ? 'Снять фиксацию времени'
+                      : 'Зафиксировать время',
+                  child: Text(
+                    segment.isFixed ? 'Снять фиксацию' : 'Зафиксировать время',
+                  ),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'split',
+                enabled: !isSent && !isLocked,
+                child: const Tooltip(
+                  message: 'Разбить интервал',
+                  child: Text('Разбить интервал'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'merge',
+                enabled:
+                    !isSent && !isLocked && appState.currentSegments.length > 1,
+                child: const Tooltip(
+                  message: 'Объединить интервалы',
+                  child: Text('Объединить интервалы'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'delete',
+                enabled: !isSent && !isLocked,
+                child: const Text('Удалить интервал'),
+              ),
+              if (segment.sendState == SendState.unknown) ...[
+                const PopupMenuDivider(),
+                PopupMenuItem(
+                  value: 'reconcile',
+                  enabled: !appState.isReadOnly,
+                  child: Text('Сверить результат (A15)'),
+                ),
+                PopupMenuItem(
+                  value: 'resolve',
+                  enabled: !appState.isReadOnly,
+                  child: Text('Разрешить вручную (A15)'),
+                ),
+              ],
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -996,36 +1447,41 @@ class DayScreen extends StatelessWidget {
 
     return InkWell(
       onTap: isLocked ? null : () => _openGapActionsDialog(context, breakItem),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: AppColors.bg(isDark),
-          border: Border(bottom: BorderSide(color: AppColors.line(isDark))),
-        ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         child: Row(
           children: [
-            Icon(
-              Icons.coffee,
-              size: 16,
-              color: foreground,
+            SizedBox(
+              width: 116,
+              child: Text(
+                '$startStr — $endStr',
+                style: TextStyle(
+                  fontFamily: 'IBM Plex Mono',
+                  fontSize: 11,
+                  color: foreground,
+                ),
+              ),
             ),
+            const SizedBox(width: 12),
+            Icon(Icons.coffee_outlined, size: 15, color: foreground),
             const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Пауза',
+                style: TextStyle(fontSize: 12, color: foreground),
+              ),
+            ),
             Text(
-              'Перерыв',
+              durationStr,
               style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
+                fontFamily: 'IBM Plex Mono',
+                fontSize: 11,
                 color: foreground,
               ),
             ),
-            const SizedBox(width: 16),
-            Text(
-              '$startStr — $endStr ($durationStr)',
-              style: TextStyle(fontSize: 12, color: foreground),
-            ),
-            const Spacer(),
             IconButton(
-              icon: const Icon(Icons.edit_outlined, size: 18),
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.edit_outlined, size: 16),
               tooltip: 'Редактировать интервал',
               onPressed: isLocked
                   ? null
@@ -1037,7 +1493,6 @@ class DayScreen extends StatelessWidget {
     );
   }
 
-
   Widget _buildExistingWorklogCard(BuildContext context, ImportedWorklog ew) {
     final startLocal = ew.startUtc.toLocal();
     final endLocal = ew.endUtc.toLocal();
@@ -1048,34 +1503,27 @@ class DayScreen extends StatelessWidget {
     final durationStr = LogClock.formatHoursMinutes(ew.durationSeconds);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Card(
-      margin: EdgeInsets.zero,
-      color: AppColors.selected(isDark),
-      elevation: 0,
-      shape: Border(bottom: BorderSide(color: AppColors.line(isDark))),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      decoration: BoxDecoration(
+        color: AppColors.hover(isDark),
+        borderRadius: BorderRadius.circular(6),
+      ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         child: Row(
           children: [
             SizedBox(
-              width: 140,
+              width: 116,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     '$startStr — $endStr',
                     style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
+                      fontFamily: 'IBM Plex Mono',
+                      fontSize: 11,
                       color: AppColors.text(isDark),
-                    ),
-                  ),
-                  Text(
-                    durationStr,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.muted(isDark),
-                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
@@ -1130,6 +1578,18 @@ class DayScreen extends StatelessWidget {
                 ],
               ),
             ),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 54,
+              child: Text(
+                durationStr,
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                  fontFamily: 'IBM Plex Mono',
+                  fontSize: 11,
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -1137,6 +1597,7 @@ class DayScreen extends StatelessWidget {
   }
 
   Widget _buildSendStateBadge(BuildContext context, SendState state) {
+    if (state == SendState.pending) return const SizedBox.shrink();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     Color bg;
     Color fg;
@@ -1189,40 +1650,53 @@ class DayScreen extends StatelessWidget {
     final isCompleted = appState.currentDraft?.status == DraftStatus.completed;
     final hasUnknown = segments.any((s) => s.sendState == SendState.unknown);
     final hasFailed = segments.any((s) => s.sendState == SendState.failed);
+    final firstUnknown = segments
+        .where((s) => s.sendState == SendState.unknown)
+        .firstOrNull;
     final total = LogClock.formatHoursMinutes(
       appState.totalSegmentsDurationSeconds,
     );
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 27),
       decoration: BoxDecoration(
-        color: AppColors.surface(isDark),
+        color: AppColors.inset(isDark),
         border: Border(top: BorderSide(color: AppColors.line(isDark))),
       ),
       child: Row(
         children: [
+          Icon(
+            appState.validationErrors.isEmpty
+                ? Icons.check_circle_outline
+                : Icons.error_outline,
+            size: 18,
+            color: appState.validationErrors.isEmpty
+                ? AppColors.green(isDark)
+                : AppColors.error(isDark),
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  isCompleted
-                      ? 'День готов'
-                      : '${segments.length} записей · $total',
+                  appState.validationErrors.isEmpty
+                      ? 'Пересечений нет'
+                      : 'В расписании есть ошибки',
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
                 Text(
-                  hasUnknown
-                      ? 'Есть запись с неизвестным результатом'
-                      : isCompleted
-                      ? 'Логи перемещены в историю'
-                      : appState.isDraftLockedFromRebuild
-                      ? 'Подтверждённые записи повторно не отправляются'
-                      : 'Будет добавлено к существующему времени в Jira',
+                  isCompleted
+                      ? '$total · ${segments.length} записей отправлено'
+                      : hasUnknown
+                      ? 'Сначала проверьте неизвестный результат в Jira'
+                      : hasFailed
+                      ? '$total · ${segments.length} записей, есть ошибки отправки'
+                      : 'В Jira будет добавлено $total · ${segments.length} записей',
                   style: TextStyle(
                     fontSize: 11,
                     color: AppColors.muted(isDark),
@@ -1233,12 +1707,26 @@ class DayScreen extends StatelessWidget {
           ),
           if (isCompleted)
             FilledButton(
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, 36),
+                visualDensity: VisualDensity.standard,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                textStyle: const TextStyle(fontSize: 13),
+              ),
               onPressed: () => appState.selectTab(0),
               child: const Text('Вернуться к работе'),
             )
           else
             FilledButton.icon(
-              icon: appState.isSubmittingDay
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, 36),
+                visualDensity: VisualDensity.standard,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                textStyle: const TextStyle(fontSize: 13),
+              ),
+              icon: hasUnknown
+                  ? const Icon(Icons.sync, size: 18)
+                  : appState.isSubmittingDay
                   ? const SizedBox(
                       width: 16,
                       height: 16,
@@ -1246,15 +1734,21 @@ class DayScreen extends StatelessWidget {
                     )
                   : const Icon(Icons.cloud_upload_outlined, size: 18),
               label: Text(
-                hasFailed ? 'Повторить отправку' : 'Отправить в Jira',
+                hasUnknown
+                    ? 'Проверить в Jira'
+                    : hasFailed
+                    ? 'Повторить отправку'
+                    : 'Отправить в Jira',
               ),
               onPressed:
-                  (appState.validationErrors.isNotEmpty ||
-                      appState.isBuildingDay ||
+                  (appState.isBuildingDay ||
                       appState.isSubmittingDay ||
+                      segments.isEmpty ||
                       appState.isReadOnly ||
-                      segments.isEmpty)
+                      (!hasUnknown && appState.validationErrors.isNotEmpty))
                   ? null
+                  : hasUnknown
+                  ? () => _handleReconcileSegment(context, firstUnknown!)
                   : () => _handleSendDraft(context),
             ),
         ],
@@ -1264,6 +1758,31 @@ class DayScreen extends StatelessWidget {
 
   String _formatTime(DateTime date) =>
       '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+
+  String _weekdayName(int weekday) => const [
+    'Понедельник',
+    'Вторник',
+    'Среда',
+    'Четверг',
+    'Пятница',
+    'Суббота',
+    'Воскресенье',
+  ][weekday - 1];
+
+  String _monthName(int month) => const [
+    'января',
+    'февраля',
+    'марта',
+    'апреля',
+    'мая',
+    'июня',
+    'июля',
+    'августа',
+    'сентября',
+    'октября',
+    'ноября',
+    'декабря',
+  ][month - 1];
 
   void _handleBuildDay(BuildContext context) async {
     try {
@@ -1286,7 +1805,7 @@ class DayScreen extends StatelessWidget {
       builder: (context) => AlertDialog(
         title: const Text('Умная пересборка дня?'),
         content: const Text(
-          'Расписание будет оптимизировано с реалистичными перерывами и обедом. Задачи дольше 1 часа будут разделены на части.',
+          'Текущий черновик будет заменён, а ручные правки времени исчезнут. Расписание будет оптимизировано с перерывами и разделением длинных задач.',
         ),
         actions: [
           TextButton(
@@ -1305,12 +1824,39 @@ class DayScreen extends StatelessWidget {
     );
   }
 
+  void _confirmRebuildCurrentDay(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Пересобрать день?'),
+        content: const Text(
+          'Расписание будет построено заново с сохранением порядка и закреплённых интервалов. Ручные правки времени будут заменены.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              _handleRebuildCurrentDay(context);
+            },
+            child: const Text('Пересобрать'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _handleRebuildCurrentDay(BuildContext context) async {
     try {
       await appState.rebuildCurrentDay();
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('День пересобран с сохранением порядка и якорей.')),
+          const SnackBar(
+            content: Text('День пересобран с сохранением порядка и якорей.'),
+          ),
         );
       }
     } catch (e) {
@@ -1347,9 +1893,15 @@ class DayScreen extends StatelessWidget {
   ) {
     showDialog(
       context: context,
-      builder: (context) => EditSegmentDialog(
+      builder: (dialogContext) => EditSegmentDialog(
         segment: segment,
         taskTitle: taskTitle,
+        onDelete: appState.isReadOnly || appState.isDraftLockedFromRebuild
+            ? null
+            : () {
+                Navigator.of(dialogContext).pop();
+                _confirmDeleteSegment(context, segment);
+              },
         onSave:
             ({
               required DateTime startUtc,
@@ -1367,10 +1919,7 @@ class DayScreen extends StatelessWidget {
     );
   }
 
-  void _openGapActionsDialog(
-    BuildContext context,
-    Break breakItem,
-  ) {
+  void _openGapActionsDialog(BuildContext context, Break breakItem) {
     if (appState.isReadOnly || appState.isDraftLockedFromRebuild) return;
     final neighbors = appState.findGapNeighbors(breakItem);
 
@@ -1382,13 +1931,17 @@ class DayScreen extends StatelessWidget {
         onSnap: () {
           appState.snapGap(breakItem);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Пауза схлопнута, задачи подтянуты вплотную.')),
+            const SnackBar(
+              content: Text('Пауза схлопнута, задачи подтянуты вплотную.'),
+            ),
           );
         },
         onFillLeft: () {
           appState.fillGapWithLeftSegment(breakItem);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Предыдущая задача продлена на время паузы.')),
+            const SnackBar(
+              content: Text('Предыдущая задача продлена на время паузы.'),
+            ),
           );
         },
         onSetDuration: (newDurationSeconds) {
@@ -1413,7 +1966,6 @@ class DayScreen extends StatelessWidget {
       ),
     );
   }
-
 
   void _confirmDeleteSegment(BuildContext context, Segment segment) {
     showDialog(
@@ -1607,9 +2159,15 @@ class DayScreen extends StatelessWidget {
 class _DayMetric extends StatelessWidget {
   final String label;
   final String value;
+  final String? detail;
   final Color? color;
 
-  const _DayMetric({required this.label, required this.value, this.color});
+  const _DayMetric({
+    required this.label,
+    required this.value,
+    this.detail,
+    this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1626,12 +2184,21 @@ class _DayMetric extends StatelessWidget {
         Text(
           value,
           style: TextStyle(
-            fontSize: 18,
+            fontFamily: 'IBM Plex Mono',
+            fontSize: 24,
             fontWeight: FontWeight.w500,
             color: color ?? AppColors.text(isDark),
-            fontFeatures: const [FontFeature.tabularFigures()],
           ),
         ),
+        if (detail != null) ...[
+          const SizedBox(height: 5),
+          Text(
+            detail!,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 11, color: AppColors.muted(isDark)),
+          ),
+        ],
       ],
     );
   }

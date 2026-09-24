@@ -67,124 +67,148 @@ void main() {
     );
   }
 
-  testWidgets(
-    'Отображает бейдж фиксированного времени старта на карточке лога',
-    (WidgetTester tester) async {
-      final appState = createAppState();
-      appState.addManualLog(
-        issueId: '10001',
-        durationSeconds: 3600,
-        fixedStartTime: '10:30',
-      );
-
-      await tester.pumpWidget(JiraTimeTrackerApp(appState: appState));
+  Future<void> revealLogRow(WidgetTester tester, String id) async {
+    final row = find.byKey(ValueKey('log-$id'));
+    final pageScroll = find.byType(SingleChildScrollView);
+    if (row.evaluate().isEmpty && pageScroll.evaluate().isNotEmpty) {
+      await tester.drag(pageScroll.first, const Offset(0, -420));
       await tester.pumpAndSettle();
+    }
+    await tester.ensureVisible(row);
+    await tester.pumpAndSettle();
+  }
 
-      expect(find.text('10:30'), findsOneWidget);
-      expect(find.byIcon(Icons.lock), findsOneWidget);
-    },
-  );
+  testWidgets('Показывает фиксированное время старта в строке лога', (
+    WidgetTester tester,
+  ) async {
+    final appState = createAppState();
+    await appState.addManualLog(
+      issueId: '10001',
+      durationSeconds: 3600,
+      fixedStartTime: '10:30',
+    );
+    final logId = appState.unconsumedLogs.single.id;
 
-  testWidgets(
-    'Разделение лога через меню «Разбить»',
-    (WidgetTester tester) async {
-      final appState = createAppState();
-      appState.addManualLog(
-        issueId: '10001',
-        durationSeconds: 7200,
-        description: 'Общая работа',
-      );
+    await tester.pumpWidget(JiraTimeTrackerApp(appState: appState));
+    await tester.pumpAndSettle();
 
-      await tester.pumpWidget(JiraTimeTrackerApp(appState: appState));
-      await tester.pumpAndSettle();
+    await revealLogRow(tester, logId);
+    expect(find.text('10:30'), findsOneWidget);
+    expect(find.byIcon(Icons.lock_outline), findsOneWidget);
+  });
 
-      expect(appState.unconsumedLogs.length, 1);
-      expect(find.text('2ч 00м'), findsOneWidget);
+  testWidgets('Разделение лога через меню «Разбить»', (
+    WidgetTester tester,
+  ) async {
+    final appState = createAppState();
+    await appState.addManualLog(
+      issueId: '10001',
+      durationSeconds: 7200,
+      description: 'Общая работа',
+    );
+    final logId = appState.unconsumedLogs.single.id;
 
-      // Нажимаем на меню действий лога (три точки)
-      final menuBtn = find.byTooltip('Дополнительные действия').first;
-      await tester.tap(menuBtn);
-      await tester.pumpAndSettle();
+    await tester.pumpWidget(JiraTimeTrackerApp(appState: appState));
+    await tester.pumpAndSettle();
 
-      // Нажимаем «Разбить»
-      await tester.tap(find.text('Разбить'));
-      await tester.pumpAndSettle();
+    await revealLogRow(tester, logId);
 
-      // Проверяем открытие диалога
-      expect(find.text('Разбить запись времени'), findsOneWidget);
+    expect(appState.unconsumedLogs.length, 1);
+    expect(find.text('2ч 00м'), findsOneWidget);
 
-      // Вводим 1 час для первой части
-      final h1Field = find.widgetWithText(TextField, 'Часы').first;
-      await tester.enterText(h1Field, '1');
-      await tester.pumpAndSettle();
+    // Нажимаем на меню действий лога (три точки)
+    final menuBtn = find.byTooltip('Действия с логом').first;
+    await tester.tap(menuBtn);
+    await tester.pumpAndSettle();
 
-      // Нажимаем подтвердить «Разбить»
-      final submitBtn = find.widgetWithText(FilledButton, 'Разбить');
-      await tester.tap(submitBtn);
-      await tester.pumpAndSettle();
+    // Нажимаем «Разбить»
+    await tester.tap(find.text('Разбить'));
+    await tester.pumpAndSettle();
 
-      // Проверяем результат: теперь 2 лога по 1ч
-      expect(appState.unconsumedLogs.length, 2);
-      expect(appState.unconsumedLogs[0].accumulatedSeconds, 3600);
-      expect(appState.unconsumedLogs[1].accumulatedSeconds, 3600);
-      expect(find.text('1ч 00м'), findsNWidgets(2));
-    },
-  );
+    // Проверяем открытие диалога
+    expect(find.text('Разбить запись времени'), findsOneWidget);
 
-  testWidgets(
-    'Объединение логов через меню «Объединить с...»',
-    (WidgetTester tester) async {
-      final appState = createAppState();
-      appState.addManualLog(
-        issueId: '10001',
-        durationSeconds: 3600,
-        description: 'Часть 1',
-      );
-      appState.addManualLog(
-        issueId: '10001',
-        durationSeconds: 7200,
-        description: 'Часть 2',
-      );
+    // Вводим 1 час для первой части
+    final h1Field = find
+        .descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(TextField),
+        )
+        .first;
+    await tester.enterText(h1Field, '1');
+    await tester.pumpAndSettle();
 
-      await tester.pumpWidget(JiraTimeTrackerApp(appState: appState));
-      await tester.pumpAndSettle();
+    // Нажимаем подтвердить «Разбить»
+    final submitBtn = find.widgetWithText(FilledButton, 'Разбить');
+    await tester.tap(submitBtn);
+    await tester.pumpAndSettle();
 
-      expect(appState.unconsumedLogs.length, 2);
+    // Проверяем результат: теперь 2 лога по 1ч
+    expect(appState.unconsumedLogs.length, 2);
+    expect(appState.unconsumedLogs[0].accumulatedSeconds, 3600);
+    expect(appState.unconsumedLogs[1].accumulatedSeconds, 3600);
+    expect(find.text('1ч 00м'), findsNWidgets(2));
+  });
 
-      // Открываем меню первого лога
-      final menuBtn = find.byTooltip('Дополнительные действия').first;
-      await tester.tap(menuBtn);
-      await tester.pumpAndSettle();
+  testWidgets('Объединение логов через меню «Объединить с...»', (
+    WidgetTester tester,
+  ) async {
+    final appState = createAppState();
+    await appState.addManualLog(
+      issueId: '10001',
+      durationSeconds: 3600,
+      description: 'Часть 1',
+    );
+    final firstLogId = appState.unconsumedLogs.first.id;
+    await appState.addManualLog(
+      issueId: '10001',
+      durationSeconds: 7200,
+      description: 'Часть 2',
+    );
+    final secondLogId = appState.unconsumedLogs.last.id;
+    expect(secondLogId, isNot(firstLogId));
 
-      // Нажимаем «Объединить с...»
-      await tester.tap(find.text('Объединить с...'));
-      await tester.pumpAndSettle();
+    await tester.pumpWidget(JiraTimeTrackerApp(appState: appState));
+    await tester.pumpAndSettle();
 
-      // Проверяем диалог
-      expect(find.text('Объединить с другим логом'), findsOneWidget);
-      expect(find.text('Выберите лог для объединения:'), findsOneWidget);
+    await revealLogRow(tester, firstLogId);
 
-      // Выбираем второй лог внутри диалога
-      final candidateTile = find.descendant(
-        of: find.byType(MergeLogsDialog),
-        matching: find.text('Часть 2'),
-      );
-      await tester.tap(candidateTile);
-      await tester.pumpAndSettle();
+    expect(appState.unconsumedLogs.length, 2);
 
-      // Нажимаем объединить
-      final mergeBtn = find.descendant(
-        of: find.byType(MergeLogsDialog),
-        matching: find.widgetWithText(FilledButton, 'Объединить'),
-      );
-      await tester.tap(mergeBtn);
-      await tester.pumpAndSettle();
+    // Открываем меню первого лога
+    final menuBtn = find.byTooltip('Действия с логом').first;
+    await tester.tap(menuBtn);
+    await tester.pumpAndSettle();
 
-      // Теперь 1 лог с длительностью 3 часа (10800 сек)
-      expect(appState.unconsumedLogs.length, 1);
-      expect(appState.unconsumedLogs.first.accumulatedSeconds, 10800);
-      expect(find.text('3ч 00м'), findsOneWidget);
-      expect(find.text('Всего: 3ч 00м'), findsOneWidget);
-    },
-  );
+    // Нажимаем «Объединить с...»
+    await tester.tap(find.text('Объединить с…'));
+    await tester.pumpAndSettle();
+
+    // Проверяем диалог
+    expect(find.text('Объединить с другим логом'), findsOneWidget);
+    expect(find.text('Выберите лог для объединения:'), findsOneWidget);
+
+    // Выбираем второй лог внутри диалога
+    // (оба источника остаются перечислены в меню диалога)
+    final candidateTile = find.descendant(
+      of: find.byType(MergeLogsDialog),
+      matching: find.text('Часть 2'),
+    );
+    await tester.tap(candidateTile);
+    await tester.pumpAndSettle();
+
+    // Нажимаем объединить
+    final mergeBtn = find.descendant(
+      of: find.byType(MergeLogsDialog),
+      matching: find.widgetWithText(FilledButton, 'Объединить'),
+    );
+    await tester.tap(mergeBtn);
+    await tester.pumpAndSettle();
+
+    // Теперь 1 лог с длительностью 3 часа (10800 сек)
+    expect(appState.unconsumedLogs.length, 1);
+    expect(appState.unconsumedLogs.first.accumulatedSeconds, 10800);
+    expect(find.text('3ч 00м'), findsOneWidget);
+    expect(find.text('Всего 3ч 00м'), findsOneWidget);
+  });
 }

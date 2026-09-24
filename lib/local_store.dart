@@ -147,7 +147,9 @@ class LocalStore {
     }
 
     // Для существующих баз гарантируем наличие колонки fixed_start_time
-    final hasFixedStartTime = logColumns.any((c) => c['name'] == 'fixed_start_time');
+    final hasFixedStartTime = logColumns.any(
+      (c) => c['name'] == 'fixed_start_time',
+    );
     if (!hasFixedStartTime) {
       _db.execute('ALTER TABLE local_logs ADD COLUMN fixed_start_time TEXT;');
     }
@@ -164,12 +166,45 @@ class LocalStore {
     if (currentVersion < 2) {
       _db.execute('PRAGMA user_version = 2;');
     }
+
+    if (currentVersion < 3) {
+      _db.execute('BEGIN TRANSACTION;');
+      try {
+        _db.execute('''
+          CREATE TABLE IF NOT EXISTS app_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+          );
+          PRAGMA user_version = 3;
+        ''');
+        _db.execute('COMMIT;');
+      } catch (e) {
+        _db.execute('ROLLBACK;');
+        rethrow;
+      }
+    }
   }
 
   void _checkWritable() {
     if (isReadOnly) {
       throw const ReadOnlyException();
     }
+  }
+
+  String? getSetting(String key) {
+    final rows = _db.select('SELECT value FROM app_settings WHERE key = ?', [
+      key,
+    ]);
+    return rows.isEmpty ? null : rows.first['value'] as String;
+  }
+
+  void setSetting(String key, String value) {
+    _checkWritable();
+    _db.execute(
+      'INSERT INTO app_settings (key, value) VALUES (?, ?) '
+      'ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+      [key, value],
+    );
   }
 
   /// Восстановление после аварии: переводит зависшие sending в unknown (сценарий A19).
@@ -595,10 +630,7 @@ class LocalStore {
   }
 
   /// Полная замена списка перерывов черновика в базе данных.
-  void replaceBreaks({
-    required String draftId,
-    required List<Break> breaks,
-  }) {
+  void replaceBreaks({required String draftId, required List<Break> breaks}) {
     _checkWritable();
     _db.execute('BEGIN TRANSACTION;');
     try {

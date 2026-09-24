@@ -20,6 +20,19 @@ void main() {
 
   DateTime testNow() => currentTime;
 
+  Future<void> tapRowAction(
+    WidgetTester tester,
+    String action, {
+    int rowIndex = 0,
+  }) async {
+    final rowMenus = find.byTooltip('Другие действия');
+    await tester.ensureVisible(rowMenus.at(rowIndex));
+    await tester.tap(rowMenus.at(rowIndex));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(action).last);
+    await tester.pumpAndSettle();
+  }
+
   setUp(() {
     db = sqlite3.openInMemory();
     store = LocalStore(db);
@@ -67,8 +80,14 @@ void main() {
   }
 
   Future<void> seedDraftWithSegments(AppState appState) async {
-    final log1 = await appState.addManualLog(issueId: '10001', durationSeconds: 3600);
-    final log2 = await appState.addManualLog(issueId: '10002', durationSeconds: 3600);
+    final log1 = await appState.addManualLog(
+      issueId: '10001',
+      durationSeconds: 3600,
+    );
+    final log2 = await appState.addManualLog(
+      issueId: '10002',
+      durationSeconds: 3600,
+    );
 
     final draft = DayDraft(
       id: 'draft-1',
@@ -133,179 +152,175 @@ void main() {
       final appState = createAppState();
       await seedDraftWithSegments(appState);
 
-      await tester.pumpWidget(
-        MaterialApp(home: DayScreen(appState: appState)),
-      );
+      await tester.pumpWidget(MaterialApp(home: DayScreen(appState: appState)));
       await tester.pumpAndSettle();
 
       expect(appState.currentSegments[0].isFixed, isFalse);
 
-      // Нажимаем кнопку фиксации времени на первом сегменте
-      final lockBtn = find.byTooltip('Зафиксировать время').first;
-      await tester.tap(lockBtn);
-      await tester.pumpAndSettle();
+      // Открываем компактное меню действий и фиксируем время сегмента.
+      await tapRowAction(tester, 'Зафиксировать время');
 
       expect(appState.currentSegments[0].isFixed, isTrue);
       expect(find.byTooltip('Время зафиксировано'), findsOneWidget);
+      // Снимаем фиксацию через то же меню действий.
+      final firstMenu = find.byTooltip('Другие действия').first;
+      await tester.tap(firstMenu);
+      await tester.pumpAndSettle();
       expect(find.byTooltip('Снять фиксацию времени'), findsOneWidget);
-
-      // Снимаем фиксацию
-      final unlockBtn = find.byTooltip('Снять фиксацию времени').first;
-      await tester.tap(unlockBtn);
+      await tester.tap(find.text('Снять фиксацию'));
       await tester.pumpAndSettle();
 
       expect(appState.currentSegments[0].isFixed, isFalse);
     },
   );
 
-  testWidgets(
-    'Кнопки «Вверх» и «Вниз» перемещают сегменты в списке',
-    (WidgetTester tester) async {
-      tester.view.physicalSize = const Size(1280, 800);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() => tester.view.resetPhysicalSize());
+  testWidgets('Кнопки «Вверх» и «Вниз» перемещают сегменты в списке', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
 
-      final appState = createAppState();
-      await seedDraftWithSegments(appState);
+    final appState = createAppState();
+    await seedDraftWithSegments(appState);
 
-      await tester.pumpWidget(
-        MaterialApp(home: DayScreen(appState: appState)),
-      );
-      await tester.pumpAndSettle();
+    await tester.pumpWidget(MaterialApp(home: DayScreen(appState: appState)));
+    await tester.pumpAndSettle();
 
-      expect(appState.currentSegments.map((s) => s.id).toList(), ['seg-1', 'seg-2']);
+    expect(appState.currentSegments.map((s) => s.id).toList(), [
+      'seg-1',
+      'seg-2',
+    ]);
 
-      // Нажимаем переместить вниз на первом сегменте
-      final moveDownBtn = find.byTooltip('Переместить вниз').first;
-      await tester.tap(moveDownBtn);
-      await tester.pumpAndSettle();
+    // Нажимаем переместить вниз на первом сегменте
+    await tapRowAction(tester, 'Переместить вниз');
 
-      // Порядок изменился
-      expect(appState.currentSegments.map((s) => s.id).toList(), ['seg-2', 'seg-1']);
+    // Порядок изменился
+    expect(appState.currentSegments.map((s) => s.id).toList(), [
+      'seg-2',
+      'seg-1',
+    ]);
 
-      // Нажимаем переместить вверх на seg-1 (он теперь второй)
-      final moveUpBtns = find.byTooltip('Переместить вверх');
-      // seg-1 находится на позиции 1, его кнопка активна
-      await tester.tap(moveUpBtns.last);
-      await tester.pumpAndSettle();
+    // Нажимаем переместить вверх на seg-1 (он теперь второй)
+    // seg-1 находится на позиции 1, его меню — второе.
+    await tapRowAction(tester, 'Переместить вверх', rowIndex: 1);
 
-      // Порядок вернулся
-      expect(appState.currentSegments.map((s) => s.id).toList(), ['seg-1', 'seg-2']);
-    },
-  );
+    // Порядок вернулся
+    expect(appState.currentSegments.map((s) => s.id).toList(), [
+      'seg-1',
+      'seg-2',
+    ]);
+  });
 
-  testWidgets(
-    'Разбиение сегмента через SplitSegmentDialog',
-    (WidgetTester tester) async {
-      tester.view.physicalSize = const Size(1280, 800);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() => tester.view.resetPhysicalSize());
+  testWidgets('Разбиение сегмента через SplitSegmentDialog', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
 
-      final appState = createAppState();
-      await seedDraftWithSegments(appState);
+    final appState = createAppState();
+    await seedDraftWithSegments(appState);
 
-      await tester.pumpWidget(
-        MaterialApp(home: DayScreen(appState: appState)),
-      );
-      await tester.pumpAndSettle();
+    await tester.pumpWidget(MaterialApp(home: DayScreen(appState: appState)));
+    await tester.pumpAndSettle();
 
-      expect(appState.currentSegments.length, 2);
+    expect(appState.currentSegments.length, 2);
 
-      // Нажимаем «Разбить интервал» на первом сегменте (3600 сек)
-      final splitBtn = find.byTooltip('Разбить интервал').first;
-      await tester.tap(splitBtn);
-      await tester.pumpAndSettle();
+    // Нажимаем «Разбить интервал» на первом сегменте (3600 сек)
+    await tapRowAction(tester, 'Разбить интервал');
 
-      expect(find.byType(SplitSegmentDialog), findsOneWidget);
-      expect(find.text('Разбить интервал'), findsOneWidget);
+    expect(find.byType(SplitSegmentDialog), findsOneWidget);
+    expect(find.text('Разбить интервал'), findsOneWidget);
 
-      // Диалог по умолчанию предлагает 30 мин (половина)
-      // Нажимаем подтвердить «Разбить»
-      final submitBtn = find.descendant(
-        of: find.byType(SplitSegmentDialog),
-        matching: find.widgetWithText(FilledButton, 'Разбить'),
-      );
-      await tester.tap(submitBtn);
-      await tester.pumpAndSettle();
+    // Диалог по умолчанию предлагает 30 мин (половина)
+    // Нажимаем подтвердить «Разбить»
+    final submitBtn = find.descendant(
+      of: find.byType(SplitSegmentDialog),
+      matching: find.widgetWithText(FilledButton, 'Разбить'),
+    );
+    await tester.tap(submitBtn);
+    await tester.pumpAndSettle();
 
-      // Диалог закрыт, сегментов стало 3
-      expect(find.byType(SplitSegmentDialog), findsNothing);
-      expect(appState.currentSegments.length, 3);
-      expect(appState.currentSegments[0].durationSeconds, 1800);
-      expect(appState.currentSegments[1].durationSeconds, 1800);
-    },
-  );
+    // Диалог закрыт, сегментов стало 3
+    expect(find.byType(SplitSegmentDialog), findsNothing);
+    expect(appState.currentSegments.length, 3);
+    expect(appState.currentSegments[0].durationSeconds, 1800);
+    expect(appState.currentSegments[1].durationSeconds, 1800);
+  });
 
-  testWidgets(
-    'Объединение сегментов через MergeSegmentsDialog',
-    (WidgetTester tester) async {
-      tester.view.physicalSize = const Size(1280, 800);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() => tester.view.resetPhysicalSize());
+  testWidgets('Объединение сегментов через MergeSegmentsDialog', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
 
-      final appState = createAppState();
-      await seedDraftWithSegments(appState);
+    final appState = createAppState();
+    await seedDraftWithSegments(appState);
 
-      await tester.pumpWidget(
-        MaterialApp(home: DayScreen(appState: appState)),
-      );
-      await tester.pumpAndSettle();
+    await tester.pumpWidget(MaterialApp(home: DayScreen(appState: appState)));
+    await tester.pumpAndSettle();
 
-      expect(appState.currentSegments.length, 2);
+    expect(appState.currentSegments.length, 2);
 
-      // Нажимаем «Объединить интервалы» на первом сегменте
-      final mergeBtn = find.byTooltip('Объединить интервалы').first;
-      await tester.tap(mergeBtn);
-      await tester.pumpAndSettle();
+    // Нажимаем «Объединить интервалы» на первом сегменте
+    await tapRowAction(tester, 'Объединить интервалы');
 
-      expect(find.byType(MergeSegmentsDialog), findsOneWidget);
-      expect(find.text('Объединить интервалы'), findsOneWidget);
+    expect(find.byType(MergeSegmentsDialog), findsOneWidget);
+    expect(find.text('Объединить интервалы'), findsOneWidget);
 
-      // Выбираем второй сегмент (PROJ-2)
-      final candidateTile = find.descendant(
-        of: find.byType(MergeSegmentsDialog),
-        matching: find.text('Работа по PROJ-2'),
-      );
-      await tester.tap(candidateTile);
-      await tester.pumpAndSettle();
+    // Выбираем второй сегмент (PROJ-2)
+    final candidateTile = find.descendant(
+      of: find.byType(MergeSegmentsDialog),
+      matching: find.text('Работа по PROJ-2'),
+    );
+    await tester.tap(candidateTile);
+    await tester.pumpAndSettle();
 
-      // Нажимаем «Объединить»
-      final submitBtn = find.descendant(
-        of: find.byType(MergeSegmentsDialog),
-        matching: find.widgetWithText(FilledButton, 'Объединить'),
-      );
-      await tester.tap(submitBtn);
-      await tester.pumpAndSettle();
+    // Нажимаем «Объединить»
+    final submitBtn = find.descendant(
+      of: find.byType(MergeSegmentsDialog),
+      matching: find.widgetWithText(FilledButton, 'Объединить'),
+    );
+    await tester.tap(submitBtn);
+    await tester.pumpAndSettle();
 
-      // Диалог закрыт, сегментов стал 1
-      expect(find.byType(MergeSegmentsDialog), findsNothing);
-      expect(appState.currentSegments.length, 1);
-      expect(appState.currentSegments.first.durationSeconds, 7200);
-    },
-  );
+    // Диалог закрыт, сегментов стал 1
+    expect(find.byType(MergeSegmentsDialog), findsNothing);
+    expect(appState.currentSegments.length, 1);
+    expect(appState.currentSegments.first.durationSeconds, 7200);
+  });
 
-  testWidgets(
-    'Кнопка «Пересобрать день» в шапке пересчитывает расписание',
-    (WidgetTester tester) async {
-      tester.view.physicalSize = const Size(1280, 800);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() => tester.view.resetPhysicalSize());
+  testWidgets('Кнопка «Пересобрать день» в шапке пересчитывает расписание', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
 
-      final appState = createAppState();
-      await seedDraftWithSegments(appState);
+    final appState = createAppState();
+    await seedDraftWithSegments(appState);
 
-      await tester.pumpWidget(
-        MaterialApp(home: DayScreen(appState: appState)),
-      );
-      await tester.pumpAndSettle();
+    await tester.pumpWidget(MaterialApp(home: DayScreen(appState: appState)));
+    await tester.pumpAndSettle();
 
-      expect(find.text('Пересобрать день'), findsOneWidget);
+    final menu = find.byTooltip('Другие действия с расписанием');
+    await tester.tap(menu);
+    await tester.pumpAndSettle();
+    expect(find.text('Пересобрать день'), findsOneWidget);
+    await tester.tap(find.text('Пересобрать день'));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('Ручные правки времени будут заменены.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Пересобрать'));
+    await tester.pumpAndSettle();
 
-      final rebuildBtn = find.widgetWithText(OutlinedButton, 'Пересобрать день');
-      await tester.tap(rebuildBtn);
-      await tester.pumpAndSettle();
-
-      expect(find.text('День пересобран с сохранением порядка и якорей.'), findsOneWidget);
-    },
-  );
+    expect(
+      find.text('День пересобран с сохранением порядка и якорей.'),
+      findsOneWidget,
+    );
+  });
 }

@@ -584,7 +584,7 @@ void main() {
         await tester.pumpAndSettle();
 
         // Проверяем отображение заголовка, дат и метрик дня
-        expect(find.text('Весь день'), findsOneWidget);
+        expect(find.textContaining('Весь день:'), findsOneWidget);
         expect(find.text('Паузы'), findsWidgets);
         expect(find.text('Новое время'), findsOneWidget);
         expect(find.text('PROJ-1'), findsWidgets);
@@ -672,10 +672,9 @@ void main() {
         appState.toggleLogSelection('log-1');
         await appState.buildDay(customSeed: 42);
 
-        expect(
-          appState.currentDraftLogs.map((d) => d.sourceLogId).toList(),
-          ['log-1'],
-        );
+        expect(appState.currentDraftLogs.map((d) => d.sourceLogId).toList(), [
+          'log-1',
+        ]);
         expect(appState.isLogInDraft('log-1'), isTrue);
         expect(appState.isLogInDraft('log-2'), isFalse);
 
@@ -683,19 +682,18 @@ void main() {
         appState.toggleLogSelection('log-2');
         await appState.buildDay(customSeed: 42);
 
-        expect(
-          appState.currentDraftLogs.map((d) => d.sourceLogId).toSet(),
-          {'log-1', 'log-2'},
-        );
+        expect(appState.currentDraftLogs.map((d) => d.sourceLogId).toSet(), {
+          'log-1',
+          'log-2',
+        });
         expect(appState.isLogInDraft('log-1'), isTrue);
         expect(appState.isLogInDraft('log-2'), isTrue);
 
         // 3. Исключаем log-1 из черновика
         appState.removeLogFromDraft('log-1');
-        expect(
-          appState.currentDraftLogs.map((d) => d.sourceLogId).toList(),
-          ['log-2'],
-        );
+        expect(appState.currentDraftLogs.map((d) => d.sourceLogId).toList(), [
+          'log-2',
+        ]);
         expect(appState.isLogInDraft('log-1'), isFalse);
         expect(appState.isLogInDraft('log-2'), isTrue);
         expect(appState.selectedLogIds, {'log-2'});

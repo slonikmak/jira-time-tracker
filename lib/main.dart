@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_driver/driver_extension.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
@@ -12,6 +13,9 @@ import 'ui/app_theme.dart';
 import 'ui/shell_screen.dart';
 
 void main() async {
+  if (const bool.fromEnvironment('ENABLE_FLUTTER_DRIVER')) {
+    enableFlutterDriverExtension();
+  }
   WidgetsFlutterBinding.ensureInitialized();
 
   final appDir = await getApplicationSupportDirectory();
@@ -51,18 +55,48 @@ void main() async {
 }
 
 class JiraTimeTrackerApp extends StatelessWidget {
+  // The compact Pencil page is the original 1440×1000 layout scaled to 1152×800.
+  static const double _uiScale = 0.8;
+
   final AppState appState;
 
   const JiraTimeTrackerApp({super.key, required this.appState});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Jira Time Tracker',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      home: ShellScreen(appState: appState),
+    return ValueListenableBuilder<UiThemeMode>(
+      valueListenable: appState.themeMode,
+      builder: (context, mode, _) => MaterialApp(
+        title: 'Jira Time Tracker',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.lightTheme,
+        darkTheme: AppTheme.darkTheme,
+        themeMode: const bool.fromEnvironment('UI_PREVIEW_LIGHT')
+            ? ThemeMode.light
+            : const bool.fromEnvironment('UI_PREVIEW_DARK')
+            ? ThemeMode.dark
+            : switch (mode) {
+                UiThemeMode.system => ThemeMode.system,
+                UiThemeMode.light => ThemeMode.light,
+                UiThemeMode.dark => ThemeMode.dark,
+              },
+        builder: (context, child) {
+          final media = MediaQuery.of(context);
+          final layoutSize = media.size / _uiScale;
+          return FittedBox(
+            fit: BoxFit.fill,
+            alignment: Alignment.topLeft,
+            child: SizedBox.fromSize(
+              size: layoutSize,
+              child: MediaQuery(
+                data: media.copyWith(size: layoutSize),
+                child: child!,
+              ),
+            ),
+          );
+        },
+        home: ShellScreen(appState: appState),
+      ),
     );
   }
 }

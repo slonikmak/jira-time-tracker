@@ -33,6 +33,24 @@ class _EditLogDialogState extends State<EditLogDialog> {
   String? _errorMessage;
   bool _isSaving = false;
 
+  Future<void> _pickFixedStartTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _fixedStartTime != null
+          ? TimeOfDay(
+              hour: int.parse(_fixedStartTime!.split(':')[0]),
+              minute: int.parse(_fixedStartTime!.split(':')[1]),
+            )
+          : const TimeOfDay(hour: 11, minute: 0),
+    );
+    if (picked != null) {
+      setState(() {
+        _fixedStartTime =
+            '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+      });
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -97,7 +115,31 @@ class _EditLogDialogState extends State<EditLogDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Редактировать запись времени'),
+      titlePadding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
+      contentPadding: const EdgeInsets.fromLTRB(28, 18, 28, 8),
+      actionsPadding: const EdgeInsets.fromLTRB(20, 6, 20, 20),
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Редактировать запись времени',
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontSize: 22),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            widget.log.titleSnapshot,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 13,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
       content: SizedBox(
         width: 440,
         child: SingleChildScrollView(
@@ -105,18 +147,28 @@ class _EditLogDialogState extends State<EditLogDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                widget.log.titleSnapshot,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              const Text(
-                'Длительность',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Часы',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Минуты',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 6),
               Row(
@@ -126,11 +178,16 @@ class _EditLogDialogState extends State<EditLogDialog> {
                       controller: _hoursController,
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      style: const TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w600,
+                      ),
                       decoration: const InputDecoration(
-                        labelText: 'Часы',
-                        border: OutlineInputBorder(),
                         isDense: true,
-                        suffixText: 'ч',
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 13,
+                        ),
                       ),
                     ),
                   ),
@@ -140,95 +197,80 @@ class _EditLogDialogState extends State<EditLogDialog> {
                       controller: _minutesController,
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      style: const TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w600,
+                      ),
                       decoration: const InputDecoration(
-                        labelText: 'Минуты',
-                        border: OutlineInputBorder(),
                         isDense: true,
-                        suffixText: 'м',
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 13,
+                        ),
                       ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
-
-              const Text(
-                'Что сделано (описание)',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-              ),
-              const SizedBox(height: 6),
-              TextField(
-                controller: _descController,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  hintText: 'Краткое описание работы...',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Фиксированное время начала
-              const Text(
-                'Фиксированное время начала (необязательно)',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-              ),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.access_time, size: 18),
-                      label: Text(
-                        _fixedStartTime != null
-                            ? 'Старт: $_fixedStartTime'
-                            : 'Указать фиксированное время',
-                      ),
-                      onPressed: () async {
-                        final picked = await showTimePicker(
-                          context: context,
-                          initialTime: _fixedStartTime != null
-                              ? TimeOfDay(
-                                  hour: int.parse(_fixedStartTime!.split(':')[0]),
-                                  minute: int.parse(_fixedStartTime!.split(':')[1]),
-                                )
-                              : const TimeOfDay(hour: 11, minute: 0),
-                        );
-                        if (picked != null) {
-                          final hh = picked.hour.toString().padLeft(2, '0');
-                          final mm = picked.minute.toString().padLeft(2, '0');
-                          setState(() {
-                            _fixedStartTime = '$hh:$mm';
-                          });
-                        }
-                      },
-                    ),
-                  ),
-                  if (_fixedStartTime != null) ...[
-                    const SizedBox(width: 8),
-                    IconButton(
-                      icon: const Icon(Icons.clear, size: 18),
-                      tooltip: 'Очистить фиксированное время',
-                      onPressed: () {
-                        setState(() {
-                          _fixedStartTime = null;
-                        });
-                      },
-                    ),
-                  ],
-                ],
-              ),
-
               if (_errorMessage != null) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 Text(
                   _errorMessage!,
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.error,
-                    fontSize: 13,
+                    fontSize: 12,
                   ),
                 ),
               ],
+              const SizedBox(height: 16),
+
+              const Text(
+                'Что сделано (описание)',
+                style: TextStyle(fontSize: 12),
+              ),
+              const SizedBox(height: 6),
+              SizedBox(
+                height: 98,
+                child: TextField(
+                  controller: _descController,
+                  expands: true,
+                  maxLines: null,
+                  minLines: null,
+                  decoration: const InputDecoration(
+                    hintText: 'Краткое описание работы...',
+                    isDense: true,
+                    contentPadding: EdgeInsets.all(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              const SizedBox(height: 4),
+              if (_fixedStartTime == null)
+                TextButton.icon(
+                  onPressed: _pickFixedStartTime,
+                  icon: const Icon(Icons.schedule, size: 16),
+                  label: const Text('Указать время начала'),
+                )
+              else
+                Row(
+                  children: [
+                    const Text(
+                      'Фиксированное начало',
+                      style: TextStyle(fontSize: 11),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: _pickFixedStartTime,
+                      child: Text(_fixedStartTime!),
+                    ),
+                    IconButton(
+                      tooltip: 'Очистить фиксированное время',
+                      onPressed: () => setState(() => _fixedStartTime = null),
+                      icon: const Icon(Icons.close, size: 16),
+                    ),
+                  ],
+                ),
             ],
           ),
         ),

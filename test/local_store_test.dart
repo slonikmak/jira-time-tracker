@@ -20,9 +20,9 @@ void main() {
       store.close();
     });
 
-    test('Initializes schema v2 and enforces foreign keys', () {
+    test('Initializes schema v3 and enforces foreign keys', () {
       final versionRow = db.select('PRAGMA user_version;');
-      expect(versionRow.first.values.first, equals(2));
+      expect(versionRow.first.values.first, equals(3));
 
       final fkRow = db.select('PRAGMA foreign_keys;');
       expect(fkRow.first.values.first, equals(1));
@@ -270,15 +270,21 @@ void main() {
 
       final segmentsAfterInsert = store.getSegments(draftId: 'draft-1');
       expect(segmentsAfterInsert.length, equals(2));
-      expect(segmentsAfterInsert.any((s) => s.id == 'seg-fixed-2' && !s.isFixed), isTrue);
+      expect(
+        segmentsAfterInsert.any((s) => s.id == 'seg-fixed-2' && !s.isFixed),
+        isTrue,
+      );
 
       // Update segment isFixed
       store.updateSegment(seg2.copyWith(isFixed: true));
       final updatedSegments = store.getSegments(draftId: 'draft-1');
-      expect(updatedSegments.firstWhere((s) => s.id == 'seg-fixed-2').isFixed, isTrue);
+      expect(
+        updatedSegments.firstWhere((s) => s.id == 'seg-fixed-2').isFixed,
+        isTrue,
+      );
     });
 
-    test('Migrates existing schema v1 to v2 adding columns and updating version', () {
+    test('Migrates existing schema v1 to v3 adding columns and settings', () {
       final oldDb = sqlite3.openInMemory();
       // Setup v1 schema manually
       oldDb.execute('''
@@ -339,13 +345,16 @@ void main() {
       oldStore.init();
 
       final versionRow = oldDb.select('PRAGMA user_version;');
-      expect(versionRow.first.values.first, equals(2));
+      expect(versionRow.first.values.first, equals(3));
 
       final logCols = oldDb.select('PRAGMA table_info(local_logs);');
       expect(logCols.any((c) => c['name'] == 'fixed_start_time'), isTrue);
 
       final segCols = oldDb.select('PRAGMA table_info(segments);');
       expect(segCols.any((c) => c['name'] == 'is_fixed'), isTrue);
+
+      oldStore.setSetting('theme_mode', 'dark');
+      expect(oldStore.getSetting('theme_mode'), 'dark');
 
       oldStore.close();
     });

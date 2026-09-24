@@ -5,32 +5,38 @@ import 'day_screen.dart';
 import 'settings_dialog.dart';
 import 'work_screen.dart';
 
-/// Главный экран-оболочка с десктопным заголовком, навигацией в стиле HTML-макета
-/// и переключением экранов «Работа» и «День».
-class ShellScreen extends StatelessWidget {
+/// Десктопная оболочка с навигацией и общими состояниями приложения.
+class ShellScreen extends StatefulWidget {
   final AppState appState;
 
   const ShellScreen({super.key, required this.appState});
+
+  @override
+  State<ShellScreen> createState() => _ShellScreenState();
+}
+
+class _ShellScreenState extends State<ShellScreen> {
+  bool _settingsOpen = false;
+
+  void _selectTab(int index) {
+    setState(() => _settingsOpen = false);
+    widget.appState.selectTab(index);
+  }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return ListenableBuilder(
-      listenable: appState,
+      listenable: widget.appState,
       builder: (context, _) {
-        final unconsumedCount = appState.unconsumedLogs.length;
-        final hasDraft = appState.currentDraft != null;
-
+        final appState = widget.appState;
         return Scaffold(
           body: Column(
             children: [
-              // Десктопная панель навигации с названием приложения (.jt-nav)
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
+                height: 76,
+                padding: const EdgeInsets.symmetric(horizontal: 40),
                 decoration: BoxDecoration(
                   color: AppColors.surface(isDark),
                   border: Border(
@@ -39,104 +45,91 @@ class ShellScreen extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    // Название приложения
-                    Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: AppColors.primary(isDark),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Icon(
-                        Icons.timer,
-                        size: 15,
-                        color: Colors.white,
-                      ),
+                    Icon(
+                      Icons.timer_outlined,
+                      size: 18,
+                      color: AppColors.text(isDark),
                     ),
-                    const SizedBox(width: 9),
+                    const SizedBox(width: 8),
                     Text(
                       'Jira Time Tracker',
                       style: TextStyle(
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w600,
                         fontSize: 14,
                         color: AppColors.text(isDark),
                       ),
                     ),
-                    const SizedBox(width: 14),
-                    Container(
-                      height: 18,
-                      width: 1,
-                      color: AppColors.line(isDark),
+                    SizedBox(
+                      width: MediaQuery.sizeOf(context).width >= 1200
+                          ? 152
+                          : 28,
                     ),
-                    const SizedBox(width: 14),
 
                     // Вкладка «Работа»
                     _NavTabButton(
                       label: 'Работа',
                       icon: Icons.layers_outlined,
-                      count: unconsumedCount > 0 ? unconsumedCount : null,
-                      isSelected: appState.selectedTabIndex == 0,
-                      onPressed: () => appState.selectTab(0),
+                      isSelected:
+                          !_settingsOpen && appState.selectedTabIndex == 0,
+                      onPressed: () => _selectTab(0),
                       isDark: isDark,
                     ),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 20),
 
                     // Вкладка «День»
                     _NavTabButton(
                       label: 'День',
                       icon: Icons.calendar_today_outlined,
-                      count: hasDraft ? 1 : null,
-                      isSelected: appState.selectedTabIndex == 1,
-                      onPressed: () => appState.selectTab(1),
+                      isSelected:
+                          !_settingsOpen && appState.selectedTabIndex == 1,
+                      onPressed: () => _selectTab(1),
                       isDark: isDark,
                     ),
 
                     const Spacer(),
 
-                    // Кнопка «Настройки» справа (.jt-right)
-                    InkWell(
-                      borderRadius: BorderRadius.circular(7),
-                      onTap: () => _openSettingsDialog(context),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 11,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(7),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.settings_outlined,
-                              size: 16,
-                              color: AppColors.text(isDark),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Настройки',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.text(isDark),
-                              ),
-                            ),
-                          ],
-                        ),
+                    if (appState.currentConnection != null) ...[
+                      Icon(
+                        Icons.check_circle_outline,
+                        color: AppColors.green(isDark),
+                        size: 16,
                       ),
+                      const SizedBox(width: 8),
+                      if (MediaQuery.sizeOf(context).width >= 1050)
+                        Text(
+                          'Jira подключена',
+                          style: TextStyle(
+                            color: AppColors.muted(isDark),
+                            fontSize: 12,
+                          ),
+                        ),
+                      const SizedBox(width: 28),
+                    ],
+
+                    OutlinedButton.icon(
+                      onPressed: () => setState(() => _settingsOpen = true),
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: _settingsOpen
+                            ? AppColors.selected(isDark)
+                            : AppColors.surface(isDark),
+                        minimumSize: const Size(0, 36),
+                        visualDensity: VisualDensity.standard,
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        textStyle: const TextStyle(fontSize: 13),
+                      ),
+                      icon: const Icon(Icons.tune, size: 15),
+                      label: const Text('Настройки'),
                     ),
                   ],
                 ),
               ),
 
-              // 3. Уведомление статуса (.jt-toast)
               if (appState.statusMessage != null &&
                   appState.statusMessage!.isNotEmpty)
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
+                    horizontal: 40,
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
@@ -176,12 +169,11 @@ class ShellScreen extends StatelessWidget {
                   ),
                 ),
 
-              // 4. Баннер read-only режима (A19)
               if (appState.isReadOnly)
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
+                    horizontal: 40,
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
@@ -213,13 +205,20 @@ class ShellScreen extends StatelessWidget {
                   ),
                 ),
 
-              // 5. Тело экранов (IndexedStack)
               Expanded(
                 child: IndexedStack(
-                  index: appState.selectedTabIndex,
+                  index: _settingsOpen ? 2 : appState.selectedTabIndex,
                   children: [
                     WorkScreen(appState: appState),
                     DayScreen(appState: appState),
+                    if (_settingsOpen)
+                      SettingsPage(
+                        appState: appState,
+                        onSaved: () => setState(() => _settingsOpen = false),
+                        onCancel: () => setState(() => _settingsOpen = false),
+                      )
+                    else
+                      const SizedBox.shrink(),
                   ],
                 ),
               ),
@@ -229,17 +228,11 @@ class ShellScreen extends StatelessWidget {
       },
     );
   }
-
-  void _openSettingsDialog(BuildContext context) {
-    SettingsDialog.show(context, appState);
-  }
 }
 
-/// Кнопка вкладки в стиле .jt-tab
 class _NavTabButton extends StatelessWidget {
   final String label;
   final IconData icon;
-  final int? count;
   final bool isSelected;
   final VoidCallback onPressed;
   final bool isDark;
@@ -247,7 +240,6 @@ class _NavTabButton extends StatelessWidget {
   const _NavTabButton({
     required this.label,
     required this.icon,
-    this.count,
     required this.isSelected,
     required this.onPressed,
     required this.isDark,
@@ -257,27 +249,29 @@ class _NavTabButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final fgColor = isSelected
         ? AppColors.primary(isDark)
-        : AppColors.text(isDark);
-    final bgColor = isSelected
-        ? AppColors.selected(isDark)
-        : Colors.transparent;
-
+        : AppColors.muted(isDark);
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(7),
         onTap: onPressed,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          height: 76,
+          padding: const EdgeInsets.symmetric(horizontal: 7),
           decoration: BoxDecoration(
-            color: bgColor,
-            borderRadius: BorderRadius.circular(7),
+            border: Border(
+              bottom: BorderSide(
+                color: isSelected
+                    ? AppColors.primary(isDark)
+                    : Colors.transparent,
+                width: 2,
+              ),
+            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 16, color: fgColor),
+              Icon(icon, size: 15, color: fgColor),
               const SizedBox(width: 6),
               Text(
                 label,
@@ -287,31 +281,6 @@ class _NavTabButton extends StatelessWidget {
                   color: fgColor,
                 ),
               ),
-              if (count != null) ...[
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 5,
-                    vertical: 1,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? AppColors.primary(isDark).withValues(alpha: 0.15)
-                        : AppColors.hover(isDark),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    '$count',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: isSelected
-                          ? AppColors.primary(isDark)
-                          : AppColors.muted(isDark),
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
         ),

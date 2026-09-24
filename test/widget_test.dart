@@ -7,6 +7,7 @@ import 'package:jira_time_tracker/jira_client.dart';
 import 'package:jira_time_tracker/local_store.dart';
 import 'package:jira_time_tracker/main.dart';
 import 'package:jira_time_tracker/secure_storage.dart';
+import 'package:jira_time_tracker/ui/settings_dialog.dart';
 
 void main() {
   late Database db;
@@ -57,9 +58,9 @@ void main() {
     expect(find.text('День'), findsWidgets);
 
     // Начальный экран - Работа
-    expect(find.text('Ключ, ID или ссылка на задачу Jira'), findsOneWidget);
-    expect(find.text('Добавить'), findsOneWidget);
-    expect(find.text('Недавние задачи (0)'), findsOneWidget);
+    expect(find.textContaining('задачу Jira'), findsWidgets);
+    expect(find.textContaining('Добавить задач'), findsWidgets);
+    expect(find.textContaining('Недавние задачи'), findsWidgets);
 
     // Переключение на вкладку «День»
     await tester.tap(find.text('День').first);
@@ -67,20 +68,19 @@ void main() {
     expect(find.text('Соберите день из своих логов'), findsOneWidget);
 
     // Кнопка настроек
-    expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
-    await tester.tap(find.byIcon(Icons.settings_outlined));
+    final settingsButton = find.widgetWithText(OutlinedButton, 'Настройки');
+    expect(settingsButton, findsOneWidget);
+    await tester.tap(settingsButton);
     await tester.pumpAndSettle();
 
-    // Открылся диалог настроек
-    expect(find.text('Настройки подключения к Jira'), findsOneWidget);
-    expect(find.text('URL Jira Cloud'), findsOneWidget);
-    expect(find.text('Email аккаунта Atlassian'), findsOneWidget);
-    expect(find.text('API токен Atlassian'), findsOneWidget);
+    // Открылась страница настроек с прежними полями подключения.
+    expect(find.text('Подключение к Jira'), findsOneWidget);
+    expect(find.byType(TextField), findsAtLeastNWidgets(3));
 
-    // Кнопка отмены закрывает диалог
-    await tester.tap(find.text('Отмена'));
+    // Возврат к работе сохраняет навигацию.
+    await tester.tap(find.text('Работа').first);
     await tester.pumpAndSettle();
-    expect(find.text('Настройки подключения к Jira'), findsNothing);
+    expect(find.text('Подключение к Jira'), findsNothing);
 
     // В обычном режиме баннер read-only отсутствует
     expect(find.byIcon(Icons.lock_outline), findsNothing);
@@ -98,6 +98,88 @@ void main() {
     expect(
       find.textContaining('Режим только чтения: другой экземпляр приложения'),
       findsOneWidget,
+    );
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Настройки'));
+    await tester.pumpAndSettle();
+    final themePicker = tester.widget<SegmentedButton<UiThemeMode>>(
+      find.byType(SegmentedButton<UiThemeMode>),
+    );
+    expect(themePicker.onSelectionChanged, isNull);
+    expect(
+      find.text('В режиме только чтения изменить тему нельзя.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+    'Отмена настроек сбрасывает несохранённые поля при следующем открытии',
+    (WidgetTester tester) async {
+      final appState = createTestAppState();
+      await tester.pumpWidget(JiraTimeTrackerApp(appState: appState));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Настройки'));
+      await tester.pumpAndSettle();
+      final initialUrl = tester
+          .widget<TextField>(find.byType(TextField).first)
+          .controller!
+          .text;
+      await tester.enterText(
+        find.byType(TextField).first,
+        'https://changed.example',
+      );
+      await tester.tap(find.text('Отмена'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Настройки'));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+        initialUrl,
+      );
+    },
+  );
+
+  testWidgets('Theme setting changes the app and survives a restart', (
+    WidgetTester tester,
+  ) async {
+    final appState = createTestAppState();
+    await tester.pumpWidget(JiraTimeTrackerApp(appState: appState));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Настройки'));
+    await tester.pumpAndSettle();
+    expect(find.text('Тема оформления'), findsOneWidget);
+    expect(appState.themeMode.value, UiThemeMode.system);
+
+    await tester.tap(find.text('Тёмная'));
+    await tester.pumpAndSettle();
+    expect(
+      Theme.of(tester.element(find.byType(SettingsPage))).brightness,
+      Brightness.dark,
+    );
+    expect(store.getSetting('theme_mode'), 'dark');
+
+    await tester.tap(find.text('Светлая'));
+    await tester.pumpAndSettle();
+    expect(
+      Theme.of(tester.element(find.byType(SettingsPage))).brightness,
+      Brightness.light,
+    );
+
+    await tester.tap(find.text('Тёмная'));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox.shrink());
+    appState.dispose();
+
+    final restored = createTestAppState();
+    await tester.pumpWidget(JiraTimeTrackerApp(appState: restored));
+    await tester.pumpAndSettle();
+    expect(restored.themeMode.value, UiThemeMode.dark);
+    expect(
+      Theme.of(tester.element(find.text('Jira Time Tracker'))).brightness,
+      Brightness.dark,
     );
   });
 }

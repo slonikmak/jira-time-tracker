@@ -89,58 +89,108 @@ class _WorkScreenState extends State<WorkScreen> {
         final isDark = Theme.of(context).brightness == Brightness.dark;
         return LayoutBuilder(
           builder: (context, constraints) {
-            final isNarrow = constraints.maxWidth < 650;
-            final taskWidth = constraints.maxWidth < 1000 ? 320.0 : 380.0;
-
-            final tasksCol = _buildTasksColumn(context);
-            final queueCol = _buildQueueColumn(context);
+            final isNarrow = constraints.maxWidth < 1125;
+            final contentWidth = constraints.maxWidth - 80;
+            final taskWidth = (contentWidth - 65) * .46;
+            final dateLabel = _formatHeaderDate(widget.appState.selectedDate);
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(22, 18, 22, 0),
+                  padding: const EdgeInsets.fromLTRB(40, 32, 40, 0),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Работа',
-                        style: Theme.of(context).textTheme.titleLarge,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Работа',
+                                  style: Theme.of(context).textTheme.titleLarge
+                                      ?.copyWith(
+                                        fontSize: 29,
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: -0.7,
+                                      ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  dateLabel,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: AppColors.muted(isDark),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: OutlinedButton.icon(
+                              key: const ValueKey('add-time-global'),
+                              onPressed: () => AddTimeDialog.show(
+                                context,
+                                appState: widget.appState,
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size(0, 36),
+                                visualDensity: VisualDensity.standard,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                ),
+                                textStyle: const TextStyle(fontSize: 14),
+                              ),
+                              icon: const Icon(Icons.add, size: 17),
+                              label: const Text('Добавить время'),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Записывайте время сейчас. Распределяйте по дням позже.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.muted(isDark),
-                        ),
-                      ),
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 24),
                       _buildAddIssueRow(context),
                     ],
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 26),
                 Expanded(
                   child: isNarrow
                       ? SingleChildScrollView(
-                          padding: const EdgeInsets.symmetric(horizontal: 18),
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
                           child: Column(
                             children: [
-                              SizedBox(height: 420, child: tasksCol),
-                              const SizedBox(height: 20),
-                              queueCol,
+                              SizedBox(
+                                height: 310,
+                                child: _buildTasksColumn(context),
+                              ),
+                              const SizedBox(height: 24),
+                              SizedBox(
+                                height: 360,
+                                child: _buildQueueColumn(context),
+                              ),
                             ],
                           ),
                         )
                       : Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 22),
+                          padding: const EdgeInsets.symmetric(horizontal: 40),
                           child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              SizedBox(width: taskWidth, child: tasksCol),
-                              const SizedBox(width: 22),
-                              Expanded(child: queueCol),
+                              SizedBox(
+                                width: taskWidth,
+                                child: _buildTasksColumn(context),
+                              ),
+                              const SizedBox(width: 31),
+                              VerticalDivider(
+                                width: 1,
+                                thickness: 1,
+                                color: AppColors.line(isDark),
+                              ),
+                              const SizedBox(width: 32),
+                              Expanded(child: _buildQueueColumn(context)),
                             ],
                           ),
                         ),
@@ -162,29 +212,54 @@ class _WorkScreenState extends State<WorkScreen> {
     return Row(
       children: [
         Expanded(
-          child: TextField(
-            controller: _addController,
-            decoration: const InputDecoration(
-              hintText: 'Ключ, ID или ссылка на задачу Jira',
-              border: OutlineInputBorder(),
-              isDense: true,
+          child: SizedBox(
+            height: 44,
+            child: TextField(
+              controller: _addController,
+              decoration: InputDecoration(
+                hintText: 'Вставьте ID или ссылку на задачу Jira',
+                prefixIcon: const Icon(Icons.search, size: 18),
+                prefixIconConstraints: const BoxConstraints(
+                  minWidth: 44,
+                  minHeight: 44,
+                ),
+                isDense: true,
+                filled: true,
+                fillColor: isDark
+                    ? AppColors.insetDark
+                    : AppColors.hover(false),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+              onSubmitted: (_) => _handleAddIssue(),
             ),
-            onSubmitted: (_) => _handleAddIssue(),
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 10),
         OutlinedButton.icon(
           onPressed: _isAdding ? null : _handleAddIssue,
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(0, 44),
+            visualDensity: VisualDensity.standard,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            textStyle: const TextStyle(fontSize: 14),
+          ),
           icon: _isAdding
               ? const SizedBox(
                   width: 16,
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Icon(Icons.add, size: 18),
-          label: const Text('Добавить'),
+              : const Icon(Icons.arrow_forward, size: 16),
+          label: const Text('Добавить задачу'),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 10),
         PopupMenuButton<ServiceTicket>(
           tooltip: 'Выбрать служебный тикет (EG Project)',
           offset: const Offset(0, 36),
@@ -258,36 +333,21 @@ class _WorkScreenState extends State<WorkScreen> {
             }).toList();
           },
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            constraints: const BoxConstraints(minHeight: 44),
+            padding: const EdgeInsets.symmetric(horizontal: 9),
             decoration: BoxDecoration(
               border: Border.all(color: AppColors.line(isDark)),
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(6),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  Icons.bookmark_outline,
-                  size: 16,
-                  color: AppColors.primary(isDark),
-                ),
-                const SizedBox(width: 6),
-                const Text(
-                  'Служебный тикет',
-                  style: TextStyle(fontSize: 13),
-                ),
+                const Text('Служебный тикет', style: TextStyle(fontSize: 14)),
                 const SizedBox(width: 4),
                 const Icon(Icons.arrow_drop_down, size: 18),
               ],
             ),
           ),
-        ),
-        const SizedBox(width: 8),
-        TextButton.icon(
-          onPressed: () =>
-              AddTimeDialog.show(context, appState: widget.appState),
-          icon: const Icon(Icons.more_time, size: 18),
-          label: const Text('Записать время'),
         ),
       ],
     );
@@ -295,111 +355,102 @@ class _WorkScreenState extends State<WorkScreen> {
 
   Widget _buildTasksColumn(BuildContext context) {
     final filteredIssues = widget.appState.filteredIssues;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Поиск
-        TextField(
-          controller: _searchController,
-          decoration: InputDecoration(
-            hintText: 'Поиск по ключу или названию...',
-            prefixIcon: const Icon(Icons.search, size: 20),
-            isDense: true,
-            border: const OutlineInputBorder(),
-            suffixIcon: _searchController.text.isNotEmpty
-                ? IconButton(
-                    icon: const Icon(Icons.clear, size: 18),
-                    onPressed: () {
-                      _searchController.clear();
-                      widget.appState.setIssueSearchQuery('');
-                    },
-                  )
-                : null,
-          ),
-          onChanged: (val) => widget.appState.setIssueSearchQuery(val),
-        ),
-        const SizedBox(height: 8),
-
-        // Фильтры давности и кнопка выбора
-        Wrap(
-          alignment: WrapAlignment.spaceBetween,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 8,
-          runSpacing: 4,
+        Row(
           children: [
-            SegmentedButton<IssueFilterPeriod>(
-              showSelectedIcon: false,
-              style: const ButtonStyle(
-                visualDensity: VisualDensity.compact,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            Expanded(
+              child: Text(
+                'Недавние задачи',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                ),
               ),
-              segments: const [
-                ButtonSegment(
-                  value: IssueFilterPeriod.days7,
-                  label: Text('7 дн'),
-                ),
-                ButtonSegment(
-                  value: IssueFilterPeriod.days30,
-                  label: Text('30 дн'),
-                ),
-                ButtonSegment(value: IssueFilterPeriod.all, label: Text('Все')),
-              ],
-              selected: {widget.appState.filterPeriod},
-              onSelectionChanged: (set) {
-                widget.appState.setIssueFilterPeriod(set.first);
-              },
             ),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (_isSelectionMode &&
-                    widget.appState.selectedIssueIds.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: FilledButton.tonalIcon(
-                      style: FilledButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      onPressed: () => widget.appState.startSelectedIssues(),
-                      icon: const Icon(Icons.play_arrow, size: 16),
-                      label: Text(
-                        'Запустить выбранные (${widget.appState.selectedIssueIds.length})',
-                      ),
-                    ),
-                  ),
-                TextButton.icon(
-                  style: TextButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  onPressed: () {
-                    setState(() {
-                      _isSelectionMode = !_isSelectionMode;
-                      if (!_isSelectionMode) {
-                        widget.appState.clearIssueSelection();
-                      }
-                    });
-                  },
-                  icon: Icon(
-                    _isSelectionMode ? Icons.close : Icons.checklist,
-                    size: 18,
-                  ),
-                  label: Text(_isSelectionMode ? 'Отмена' : 'Выбрать'),
+            if (_isSelectionMode && widget.appState.selectedIssueIds.isNotEmpty)
+              TextButton.icon(
+                onPressed: () => widget.appState.startSelectedIssues(),
+                icon: const Icon(Icons.play_arrow, size: 17),
+                label: Text(
+                  'Запустить (${widget.appState.selectedIssueIds.length})',
                 ),
-              ],
+              ),
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  _isSelectionMode = !_isSelectionMode;
+                  if (!_isSelectionMode) widget.appState.clearIssueSelection();
+                });
+              },
+              child: Text(_isSelectionMode ? 'Отмена' : 'Выбрать несколько'),
             ),
           ],
         ),
-        const SizedBox(height: 8),
-
-        // Заголовок списка задач
-        Text(
-          'Недавние задачи (${filteredIssues.length})',
-          style: const TextStyle(fontWeight: FontWeight.bold),
+        const SizedBox(height: 2),
+        Row(
+          children: [
+            Icon(Icons.search, size: 17, color: AppColors.muted(isDark)),
+            const SizedBox(width: 7),
+            Expanded(
+              child: TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'Поиск по задачам',
+                  isDense: true,
+                  filled: false,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 16),
+                          tooltip: 'Очистить поиск',
+                          onPressed: () {
+                            _searchController.clear();
+                            widget.appState.setIssueSearchQuery('');
+                          },
+                        )
+                      : null,
+                ),
+                onChanged: widget.appState.setIssueSearchQuery,
+              ),
+            ),
+            PopupMenuButton<IssueFilterPeriod>(
+              tooltip: 'Фильтр активности',
+              onSelected: widget.appState.setIssueFilterPeriod,
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: IssueFilterPeriod.days7,
+                  child: Text('За 7 дней'),
+                ),
+                PopupMenuItem(
+                  value: IssueFilterPeriod.days30,
+                  child: Text('За 30 дней'),
+                ),
+                PopupMenuItem(
+                  value: IssueFilterPeriod.all,
+                  child: Text('За всё время'),
+                ),
+              ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                child: Row(
+                  children: [
+                    Text(_filterPeriodLabel(widget.appState.filterPeriod)),
+                    const SizedBox(width: 3),
+                    const Icon(Icons.expand_more, size: 17),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
-        const Divider(),
-
-        // Список задач
+        Divider(height: 1, color: AppColors.line(isDark)),
         Expanded(
           child: filteredIssues.isEmpty
               ? Center(
@@ -408,10 +459,10 @@ class _WorkScreenState extends State<WorkScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.assignment_outlined,
                           size: 36,
-                          color: Colors.grey,
+                          color: AppColors.muted(isDark),
                         ),
                         const SizedBox(height: 8),
                         Text(
@@ -419,14 +470,16 @@ class _WorkScreenState extends State<WorkScreen> {
                               ? 'Нет добавленных задач.\nВведите ключ, ID или ссылку выше.'
                               : 'Нет задач, соответствующих фильтру.',
                           textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.grey),
+                          style: TextStyle(color: AppColors.muted(isDark)),
                         ),
                       ],
                     ),
                   ),
                 )
-              : ListView.builder(
+              : ListView.separated(
                   itemCount: filteredIssues.length,
+                  separatorBuilder: (context, index) =>
+                      Divider(height: 1, color: AppColors.line(isDark)),
                   itemBuilder: (context, index) {
                     final issue = filteredIssues[index];
                     final isSelected = widget.appState.selectedIssueIds
@@ -435,238 +488,145 @@ class _WorkScreenState extends State<WorkScreen> {
                       issue.issueId,
                     );
                     final isRunning = currentLog?.isRunning ?? false;
-
-                    final elapsedSeconds = currentLog != null
-                        ? LogClock.calculateElapsed(
+                    final elapsedSeconds = currentLog == null
+                        ? 0
+                        : LogClock.calculateElapsed(
                             log: currentLog,
                             nowUtc: widget.appState.nowProvider(),
-                          ).elapsedSeconds
-                        : 0;
+                          ).elapsedSeconds;
+                    final ticket = findServiceTicket(issue.key);
 
-                    final isDark =
-                        Theme.of(context).brightness == Brightness.dark;
-                    return Card(
-                      elevation: 0,
-                      margin: const EdgeInsets.symmetric(vertical: 4),
-                      color: AppColors.surface(isDark),
-                      shape: RoundedRectangleBorder(
-                        side: BorderSide(
-                          color: isRunning
-                              ? AppColors.green(isDark).withValues(alpha: 0.6)
-                              : AppColors.line(isDark),
-                          width: isRunning ? 1.5 : 1,
-                        ),
-                        borderRadius: BorderRadius.circular(9),
+                    return Container(
+                      key: ValueKey('issue-${issue.issueId}'),
+                      color: isSelected || isRunning
+                          ? AppColors.selected(isDark)
+                          : null,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 13,
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(10),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Верхняя строка: чекбокс и ключ задачи слева, статус задачи у правого края
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (_isSelectionMode) ...[
-                                      Checkbox(
-                                        value: isSelected,
-                                        onChanged: (_) => widget.appState
-                                            .toggleIssueSelection(issue.issueId),
-                                      ),
-                                      const SizedBox(width: 4),
-                                    ],
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 7,
-                                        vertical: 2,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: isRunning
-                                            ? AppColors.greenBg(isDark)
-                                            : AppColors.selected(isDark),
-                                        borderRadius: BorderRadius.circular(5),
-                                      ),
-                                      child: Text(
-                                        issue.key,
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 12,
-                                          color: isRunning
-                                              ? AppColors.green(isDark)
-                                              : AppColors.primary(isDark),
-                                        ),
-                                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              if (_isSelectionMode)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 6),
+                                  child: SizedBox(
+                                    width: 20,
+                                    height: 24,
+                                    child: Checkbox(
+                                      value: isSelected,
+                                      onChanged: (_) => widget.appState
+                                          .toggleIssueSelection(issue.issueId),
                                     ),
-                                  ],
+                                  ),
                                 ),
-                                if (issue.status != null &&
-                                    issue.status!.isNotEmpty)
-                                  Flexible(
-                                    child: Padding(
-                                      padding: const EdgeInsets.only(left: 8),
-                                      child: _buildStatusBadge(
-                                        issue.status!,
-                                        isDark,
+                              Text(
+                                issue.key,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isRunning
+                                      ? AppColors.primary(isDark)
+                                      : AppColors.muted(isDark),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const Spacer(),
+                              if (issue.status != null &&
+                                  issue.status!.isNotEmpty)
+                                Expanded(
+                                  child: Align(
+                                    alignment: Alignment.centerRight,
+                                    child: Text(
+                                      issue.status!,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: TextAlign.right,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: AppColors.muted(isDark),
                                       ),
                                     ),
                                   ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-
-                            // Средняя строка: название задачи
-                            Text(
-                              issue.summary,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w500,
-                                fontSize: 13,
-                              ),
-                            ),
-                            if (findServiceTicket(issue.key) != null) ...[
-                              const SizedBox(height: 2),
-                              Text(
-                                findServiceTicket(issue.key)!.description,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.muted(isDark),
                                 ),
+                            ],
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            issue.summary,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            ticket?.description ??
+                                'Активность: ${_formatDateTime(issue.lastUsedAtUtc)}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.muted(isDark),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              Icon(
+                                isRunning
+                                    ? Icons.stop_circle_outlined
+                                    : Icons.play_arrow,
+                                size: 17,
+                                color: isRunning
+                                    ? AppColors.primary(isDark)
+                                    : AppColors.muted(isDark),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                LogClock.formatDigital(elapsedSeconds),
+                                style: TextStyle(
+                                  color: isRunning
+                                      ? AppColors.primary(isDark)
+                                      : AppColors.muted(isDark),
+                                  fontFamily: 'IBM Plex Mono',
+                                  fontSize: 13,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
+                                  ],
+                                ),
+                              ),
+                              TextButton(
+                                style: TextButton.styleFrom(
+                                  foregroundColor: isRunning
+                                      ? AppColors.primary(isDark)
+                                      : AppColors.muted(isDark),
+                                ),
+                                onPressed: () {
+                                  if (isRunning) {
+                                    widget.appState.pauseTimer(issue.issueId);
+                                  } else {
+                                    widget.appState.playTimer(issue.issueId);
+                                  }
+                                },
+                                child: Text(
+                                  isRunning ? 'Остановить' : 'Начать',
+                                ),
+                              ),
+                              const Spacer(),
+                              TextButton.icon(
+                                onPressed: () => AddTimeDialog.show(
+                                  context,
+                                  appState: widget.appState,
+                                  issue: issue,
+                                ),
+                                icon: const Icon(Icons.add, size: 15),
+                                label: const Text('Добавить время'),
                               ),
                             ],
-                            const SizedBox(height: 6),
-
-                            // Нижняя строка: активность и кнопки действий (запуск таймера и добавление времени)
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                  child: Wrap(
-                                    crossAxisAlignment:
-                                        WrapCrossAlignment.center,
-                                    spacing: 8,
-                                    runSpacing: 4,
-                                    children: [
-                                      Text(
-                                        'Активность: ${_formatDateTime(issue.lastUsedAtUtc)}',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: AppColors.muted(isDark),
-                                        ),
-                                      ),
-                                      if (isRunning)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 6,
-                                            vertical: 2,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: AppColors.greenBg(isDark),
-                                            borderRadius: BorderRadius.circular(4),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Container(
-                                                width: 6,
-                                                height: 6,
-                                                decoration: BoxDecoration(
-                                                  color: AppColors.green(isDark),
-                                                  shape: BoxShape.circle,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                LogClock.formatDigital(
-                                                  elapsedSeconds,
-                                                ),
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: AppColors.green(isDark),
-                                                  fontFeatures: const [
-                                                    FontFeature.tabularFigures(),
-                                                  ],
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        )
-                                      else if (elapsedSeconds > 0)
-                                        Text(
-                                          '(${LogClock.formatHoursMinutes(elapsedSeconds)})',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: AppColors.muted(isDark),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Container(
-                                      decoration: BoxDecoration(
-                                        color: isRunning
-                                            ? AppColors.greenBg(isDark)
-                                            : AppColors.selected(isDark),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: IconButton(
-                                        visualDensity: VisualDensity.compact,
-                                        icon: Icon(
-                                          isRunning
-                                              ? Icons.pause_circle_filled
-                                              : Icons.play_circle_filled,
-                                          color: isRunning
-                                              ? AppColors.green(isDark)
-                                              : AppColors.primary(isDark),
-                                          size: 22,
-                                        ),
-                                        tooltip: isRunning
-                                            ? 'Остановить таймер'
-                                            : 'Запустить таймер',
-                                        onPressed: () {
-                                          if (isRunning) {
-                                            widget.appState.pauseTimer(
-                                              issue.issueId,
-                                            );
-                                          } else {
-                                            widget.appState.playTimer(
-                                              issue.issueId,
-                                            );
-                                          }
-                                        },
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    IconButton(
-                                      visualDensity: VisualDensity.compact,
-                                      icon: const Icon(
-                                        Icons.more_time,
-                                        size: 18,
-                                      ),
-                                      tooltip: 'Добавить время вручную',
-                                      onPressed: () {
-                                        AddTimeDialog.show(
-                                          context,
-                                          appState: widget.appState,
-                                          issue: issue,
-                                        );
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     );
                   },
@@ -687,111 +647,43 @@ class _WorkScreenState extends State<WorkScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Вкладки Очередь / История и кнопка общей паузы
-        Wrap(
-          alignment: WrapAlignment.spaceBetween,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 8,
-          runSpacing: 4,
+        Row(
           children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildQueueTab(
-                  context,
-                  tab: WorkScreenQueueTab.queue,
-                  label: 'Не отправлены',
-                  count: unconsumed.length,
-                ),
-                const SizedBox(width: 15),
-                _buildQueueTab(
-                  context,
-                  tab: WorkScreenQueueTab.history,
-                  label: 'История',
-                  count: consumed.length,
-                ),
-              ],
+            _buildQueueTab(
+              context,
+              tab: WorkScreenQueueTab.queue,
+              label: 'Очередь',
+              count: unconsumed.length,
             ),
+            const SizedBox(width: 18),
+            _buildQueueTab(
+              context,
+              tab: WorkScreenQueueTab.history,
+              label: 'История',
+              count: consumed.length,
+            ),
+            const Spacer(),
+            if (_currentQueueTab == WorkScreenQueueTab.queue &&
+                unconsumed.isNotEmpty)
+              Text(
+                'Всего ${LogClock.formatHoursMinutes(widget.appState.totalUnconsumedSeconds)}',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: AppColors.muted(isDark),
+                  fontFamily: 'IBM Plex Mono',
+                ),
+              ),
             if (hasRunningTimers &&
                 _currentQueueTab == WorkScreenQueueTab.queue)
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.greenBg(isDark),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: AppColors.green(isDark).withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: AppColors.green(isDark),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    TextButton.icon(
-                      style: TextButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        foregroundColor: AppColors.green(isDark),
-                        padding: EdgeInsets.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      onPressed: () => widget.appState.pauseAllTimers(),
-                      icon: const Icon(Icons.pause, size: 14),
-                      label: const Text(
-                        'Пауза для всех',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+              IconButton(
+                tooltip: 'Поставить все таймеры на паузу',
+                visualDensity: VisualDensity.compact,
+                onPressed: widget.appState.pauseAllTimers,
+                icon: const Icon(Icons.pause, size: 17),
               ),
           ],
         ),
-        const SizedBox(height: 8),
-
-        // Заголовок и суммарное время
-        if (_currentQueueTab == WorkScreenQueueTab.queue) ...[
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 8,
-            children: [
-              Text(
-                'Логи к сборке (${unconsumed.length})',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              Text(
-                'Всего: ${LogClock.formatHoursMinutes(widget.appState.totalUnconsumedSeconds)}',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.muted(isDark),
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-            ],
-          ),
-        ] else ...[
-          Text(
-            'Использованные логи (${consumed.length})',
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-        ],
-        Divider(color: AppColors.line(isDark)),
-
-        // Содержимое
+        Divider(height: 1, color: AppColors.line(isDark)),
         Expanded(
           child: _currentQueueTab == WorkScreenQueueTab.queue
               ? _buildQueueList(context, unconsumed)
@@ -813,18 +705,10 @@ class _WorkScreenState extends State<WorkScreen> {
       onTap: () => setState(() => _currentQueueTab = tab),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: selected ? AppColors.primary(isDark) : Colors.transparent,
-              width: 2,
-            ),
-          ),
-        ),
         child: Text(
           count == 0 ? label : '$label  $count',
           style: TextStyle(
-            fontSize: 13,
+            fontSize: selected ? 16 : 14,
             fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
             color: selected ? AppColors.text(isDark) : AppColors.muted(isDark),
           ),
@@ -834,21 +718,26 @@ class _WorkScreenState extends State<WorkScreen> {
   }
 
   Widget _buildQueueList(BuildContext context, List<LocalLog> logs) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     if (logs.isEmpty) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.access_time_outlined, size: 48, color: Colors.grey),
-            SizedBox(height: 8),
-            Text(
-              'Очередь логов пуста',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            Icon(
+              Icons.access_time_outlined,
+              size: 36,
+              color: AppColors.muted(isDark),
             ),
-            SizedBox(height: 4),
+            const SizedBox(height: 8),
+            const Text(
+              'Очередь логов пуста',
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 4),
             Text(
               'Запустите таймер на задаче или добавьте время вручную.',
-              style: TextStyle(color: Colors.grey),
+              style: TextStyle(color: AppColors.muted(isDark), fontSize: 12),
               textAlign: TextAlign.center,
             ),
           ],
@@ -858,10 +747,8 @@ class _WorkScreenState extends State<WorkScreen> {
 
     return ListView.separated(
       itemCount: logs.length,
-      separatorBuilder: (context, index) => Divider(
-        height: 1,
-        color: AppColors.line(Theme.of(context).brightness == Brightness.dark),
-      ),
+      separatorBuilder: (context, index) =>
+          Divider(height: 1, color: AppColors.line(isDark)),
       itemBuilder: (context, index) {
         final log = logs[index];
         final clockResult = LogClock.calculateElapsed(
@@ -869,318 +756,252 @@ class _WorkScreenState extends State<WorkScreen> {
           nowUtc: widget.appState.nowProvider(),
         );
         final isSelected = widget.appState.selectedLogIds.contains(log.id);
-
         final isInDraft = widget.appState.isLogInDraft(log.id);
         final draftDate = widget.appState.getDraftDateForLog(log.id);
         final canRemoveFromDraft =
             isInDraft && widget.appState.canRemoveLogFromDraft(log.id);
 
-        final isDark = Theme.of(context).brightness == Brightness.dark;
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 12),
-          decoration: BoxDecoration(
-            color: isSelected ? AppColors.selected(isDark) : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
-          ),
+          key: ValueKey('log-${log.id}'),
+          color: log.isRunning
+              ? (isDark ? AppColors.insetDark : AppColors.selectedLight)
+              : isSelected && !isDark
+              ? AppColors.selectedLight
+              : null,
+          padding: const EdgeInsets.fromLTRB(0, 11, 4, 10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  if (isInDraft)
-                    Tooltip(
-                      message: canRemoveFromDraft
-                          ? 'Убрать лог из черновика на $draftDate'
-                          : 'После начала отправки состав дня изменить нельзя',
-                      child: Checkbox(
-                        value: true,
-                        onChanged: canRemoveFromDraft
-                            ? (_) => _removeLogFromDraft(context, log.id)
-                            : null,
+                  if (log.isRunning)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Icon(
+                        Icons.sensors,
+                        size: 15,
+                        color: AppColors.primary(isDark),
+                      ),
+                    )
+                  else if (isInDraft)
+                    SizedBox(
+                      width: 22,
+                      height: 24,
+                      child: Tooltip(
+                        message: canRemoveFromDraft
+                            ? 'Убрать лог из черновика на $draftDate'
+                            : 'После начала отправки состав дня изменить нельзя',
+                        child: Checkbox(
+                          value: true,
+                          onChanged: canRemoveFromDraft
+                              ? (_) => _removeLogFromDraft(context, log.id)
+                              : null,
+                        ),
                       ),
                     )
                   else
-                    Tooltip(
-                      message: log.isRunning
-                          ? 'Поставьте таймер на паузу перед выбором для сборки дня'
-                          : 'Выбрать для сборки дня',
-                      child: Checkbox(
-                        value: isSelected,
-                        onChanged: log.isRunning
-                            ? null
-                            : (_) => widget.appState.toggleLogSelection(log.id),
+                    SizedBox(
+                      width: 22,
+                      height: 24,
+                      child: Tooltip(
+                        message: 'Выбрать для сборки дня',
+                        child: Checkbox(
+                          value: isSelected,
+                          onChanged: (_) =>
+                              widget.appState.toggleLogSelection(log.id),
+                        ),
                       ),
                     ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
+                  const SizedBox(width: 8),
+                  Text(
+                    _getIssueKey(log.issueId),
+                    style: TextStyle(
                       color: log.isRunning
-                          ? AppColors.greenBg(isDark)
-                          : AppColors.selected(isDark),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      _getIssueKey(log.issueId),
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11,
-                        color: log.isRunning
-                            ? AppColors.green(isDark)
-                            : AppColors.primary(isDark),
-                      ),
+                          ? AppColors.primary(isDark)
+                          : AppColors.muted(isDark),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                   if (log.fixedStartTime != null) ...[
-                    const SizedBox(width: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 5,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary(isDark).withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                          color: AppColors.primary(isDark).withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.lock, size: 11, color: AppColors.primary(isDark)),
-                          const SizedBox(width: 3),
-                          Text(
-                            log.fixedStartTime!,
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 10,
-                              color: AppColors.primary(isDark),
-                            ),
-                          ),
-                        ],
+                    const SizedBox(width: 10),
+                    Icon(
+                      Icons.lock_outline,
+                      size: 13,
+                      color: AppColors.muted(isDark),
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      log.fixedStartTime!,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.muted(isDark),
                       ),
                     ),
                   ],
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      log.titleSnapshot,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w500),
+                  const Spacer(),
+                  Text(
+                    log.isRunning
+                        ? LogClock.formatDigital(clockResult.elapsedSeconds)
+                        : LogClock.formatHoursMinutes(
+                            clockResult.elapsedSeconds,
+                          ),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: log.isRunning
+                          ? AppColors.primary(isDark)
+                          : AppColors.text(isDark),
+                      fontFamily: 'IBM Plex Mono',
+                      fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
-                  if (isInDraft && draftDate != null) ...[
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Tooltip(
-                        message: 'Открыть черновик за $draftDate',
-                        child: TextButton.icon(
-                          key: ValueKey('open-draft-${log.id}'),
-                          style: TextButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(horizontal: 7),
-                            foregroundColor: AppColors.primary(isDark),
-                            backgroundColor: AppColors.selected(isDark),
-                          ),
-                          onPressed: () => _openDraft(draftDate),
-                          icon: const Icon(Icons.open_in_new, size: 13),
-                          label: Text(
-                            'Открыть день · ${_formatDraftDate(draftDate)}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
+                  if (log.isRunning)
+                    Tooltip(
+                      message:
+                          'Поставьте таймер на паузу перед выбором для сборки дня',
+                      child: SizedBox(
+                        width: 28,
+                        height: 28,
+                        child: Checkbox(value: false, onChanged: null),
                       ),
                     ),
-                  ],
                   if (log.isRunning)
                     IconButton(
                       visualDensity: VisualDensity.compact,
-                      icon: const Icon(Icons.pause, color: Colors.orange),
-                      tooltip: 'Поставить на паузу',
+                      tooltip: 'Поставить таймер на паузу',
                       onPressed: () => widget.appState.pauseLog(log.id),
-                    )
-                  else if (!isInDraft) ...[
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      icon: const Icon(Icons.edit_outlined, size: 18),
-                      tooltip: 'Редактировать лог',
-                      onPressed: () => EditLogDialog.show(
-                        context,
-                        appState: widget.appState,
-                        log: log,
-                      ),
+                      icon: const Icon(Icons.pause, size: 17),
                     ),
-                    PopupMenuButton<String>(
-                      tooltip: 'Дополнительные действия',
-                      icon: const Icon(Icons.more_vert, size: 18),
-                      onSelected: (val) {
-                        switch (val) {
-                          case 'split':
-                            SplitLogDialog.show(
-                              context,
-                              appState: widget.appState,
-                              log: log,
-                            );
-                            break;
-                          case 'merge':
-                            MergeLogsDialog.show(
-                              context,
-                              appState: widget.appState,
-                              log: log,
-                            );
-                            break;
-                          case 'delete':
-                            _confirmDeleteLog(context, log);
-                            break;
-                        }
-                      },
-                      itemBuilder: (ctx) => [
-                        const PopupMenuItem(
-                          value: 'split',
-                          child: Row(
-                            children: [
-                              Icon(Icons.call_split, size: 16),
-                              SizedBox(width: 8),
-                              Text('Разбить'),
-                            ],
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'merge',
-                          child: Row(
-                            children: [
-                              Icon(Icons.merge_type, size: 16),
-                              SizedBox(width: 8),
-                              Text('Объединить с...'),
-                            ],
-                          ),
-                        ),
-                        const PopupMenuDivider(),
-                        const PopupMenuItem(
-                          value: 'delete',
-                          child: Row(
-                            children: [
-                              Icon(Icons.delete_outline, size: 16, color: Colors.red),
-                              SizedBox(width: 8),
-                              Text('Удалить', style: TextStyle(color: Colors.red)),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
                 ],
+              ),
+              Padding(
+                padding: const EdgeInsets.only(left: 30, top: 5),
+                child: Text(
+                  log.titleSnapshot,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 14),
+                ),
               ),
               if (log.description.isNotEmpty)
                 Padding(
-                  padding: const EdgeInsets.only(left: 36, bottom: 4),
+                  padding: const EdgeInsets.only(left: 30, top: 3),
                   child: Text(
                     log.description,
-                    maxLines: 2,
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 11,
+                      color: AppColors.muted(isDark),
+                    ),
+                  ),
+                ),
+              if (log.isRunning)
+                Padding(
+                  padding: const EdgeInsets.only(left: 30, top: 3),
+                  child: Text(
+                    'Остановите таймер, чтобы добавить запись в день.',
+                    style: TextStyle(
+                      fontSize: 11,
                       color: AppColors.muted(isDark),
                     ),
                   ),
                 ),
               if (clockResult.hasClockRollback)
                 Padding(
-                  padding: const EdgeInsets.only(left: 36, bottom: 4),
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: Colors.amber.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.warning_amber,
-                          size: 14,
-                          color: Colors.amber,
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            clockResult.errorMessage ??
-                                'Обнаружен откат системного времени!',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: Colors.brown,
-                            ),
+                  padding: const EdgeInsets.only(left: 30, top: 4),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.warning_amber,
+                        size: 14,
+                        color: Colors.amber,
+                      ),
+                      const SizedBox(width: 5),
+                      Expanded(
+                        child: Text(
+                          clockResult.errorMessage ??
+                              'Обнаружен откат системного времени!',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.brown,
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               Padding(
-                padding: const EdgeInsets.only(left: 36, top: 2),
-                child: Wrap(
-                  alignment: WrapAlignment.spaceBetween,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 8,
-                  runSpacing: 4,
+                padding: const EdgeInsets.only(left: 30, top: 4),
+                child: Row(
                   children: [
-                    Text(
-                      'Создан: ${_formatDateTime(log.createdAtUtc)}',
-                      style: const TextStyle(fontSize: 11, color: Colors.grey),
+                    Expanded(
+                      child: Text(
+                        'Создан: ${_formatDateTime(log.createdAtUtc)}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.muted(isDark),
+                        ),
+                      ),
                     ),
-                    if (log.isRunning)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.green.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: Colors.green.withValues(alpha: 0.4),
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.play_arrow,
-                              size: 14,
-                              color: Colors.green,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              LogClock.formatDigital(
-                                clockResult.elapsedSeconds,
-                              ),
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.green(isDark),
-                                fontFeatures: const [
-                                  FontFeature.tabularFigures(),
-                                ],
-                              ),
-                            ),
-                          ],
+                    if (isInDraft && draftDate != null)
+                      TextButton.icon(
+                        key: ValueKey('open-draft-${log.id}'),
+                        onPressed: () => _openDraft(draftDate),
+                        icon: const Icon(Icons.open_in_new, size: 14),
+                        label: Text(
+                          'Открыть день · ${_formatDraftDate(draftDate)}',
                         ),
                       )
-                    else
-                      Text(
-                        LogClock.formatHoursMinutes(clockResult.elapsedSeconds),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                          fontFeatures: [FontFeature.tabularFigures()],
-                        ),
+                    else if (!log.isRunning)
+                      PopupMenuButton<String>(
+                        tooltip: 'Действия с логом',
+                        icon: const Icon(Icons.more_horiz, size: 19),
+                        onSelected: (value) {
+                          switch (value) {
+                            case 'edit':
+                              EditLogDialog.show(
+                                context,
+                                appState: widget.appState,
+                                log: log,
+                              );
+                              break;
+                            case 'split':
+                              SplitLogDialog.show(
+                                context,
+                                appState: widget.appState,
+                                log: log,
+                              );
+                              break;
+                            case 'merge':
+                              MergeLogsDialog.show(
+                                context,
+                                appState: widget.appState,
+                                log: log,
+                              );
+                              break;
+                            case 'delete':
+                              _confirmDeleteLog(context, log);
+                              break;
+                          }
+                        },
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(
+                            value: 'edit',
+                            child: Text('Редактировать'),
+                          ),
+                          PopupMenuItem(value: 'split', child: Text('Разбить')),
+                          PopupMenuItem(
+                            value: 'merge',
+                            child: Text('Объединить с…'),
+                          ),
+                          PopupMenuDivider(),
+                          PopupMenuItem(
+                            value: 'delete',
+                            child: Text('Удалить'),
+                          ),
+                        ],
                       ),
                   ],
                 ),
@@ -1193,58 +1014,139 @@ class _WorkScreenState extends State<WorkScreen> {
   }
 
   Widget _buildHistoryList(BuildContext context, List<LocalLog> logs) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     if (logs.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           'История отправленных логов пока пуста.',
-          style: TextStyle(color: Colors.grey),
+          style: TextStyle(color: AppColors.muted(isDark)),
         ),
       );
     }
 
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return ListView.builder(
-      itemCount: logs.length,
-      itemBuilder: (context, index) {
-        final log = logs[index];
-        return Card(
-          elevation: 0,
-          margin: const EdgeInsets.symmetric(vertical: 4),
-          color: AppColors.surface(isDark),
-          shape: RoundedRectangleBorder(
-            side: BorderSide(color: AppColors.line(isDark)),
-            borderRadius: BorderRadius.circular(9),
-          ),
-          child: ListTile(
-            dense: true,
-            leading: Icon(
-              Icons.check_circle,
-              color: AppColors.green(isDark),
-              size: 20,
+    final sortedLogs = [...logs]
+      ..sort(
+        (a, b) => (b.consumedAtUtc ?? b.createdAtUtc).compareTo(
+          a.consumedAtUtc ?? a.createdAtUtc,
+        ),
+      );
+    final children = <Widget>[];
+    DateTime? previousDate;
+    for (final log in sortedLogs) {
+      final sentAt = (log.consumedAtUtc ?? log.createdAtUtc).toLocal();
+      final date = DateTime(sentAt.year, sentAt.month, sentAt.day);
+      if (date != previousDate) {
+        children.add(
+          Padding(
+            padding: EdgeInsets.only(
+              top: children.isEmpty ? 12 : 20,
+              bottom: 8,
             ),
-            title: Text(
-              log.titleSnapshot,
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
-            subtitle: Text(
-              '${LogClock.formatHoursMinutes(log.accumulatedSeconds)} • Отправлен: ${_formatDateTime(log.consumedAtUtc ?? log.createdAtUtc)}',
-              style: TextStyle(color: AppColors.muted(isDark)),
+            child: Text(
+              _formatHistoryDate(date),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.muted(isDark),
+              ),
             ),
           ),
         );
-      },
-    );
+        previousDate = date;
+      }
+      children.add(
+        Container(
+          key: ValueKey('history-${log.id}'),
+          padding: const EdgeInsets.fromLTRB(0, 10, 4, 10),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: AppColors.line(isDark))),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    _getIssueKey(log.issueId),
+                    style: TextStyle(
+                      color: AppColors.primary(isDark),
+                      fontSize: 12,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    LogClock.formatHoursMinutes(log.accumulatedSeconds),
+                    style: const TextStyle(
+                      fontFamily: 'IBM Plex Mono',
+                      fontFeatures: [FontFeature.tabularFigures()],
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 5),
+              Text(
+                log.titleSnapshot,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (log.description.isNotEmpty)
+                Text(
+                  log.description,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.muted(isDark),
+                  ),
+                ),
+              Text(
+                _formatDateTime(log.consumedAtUtc ?? log.createdAtUtc),
+                style: TextStyle(fontSize: 11, color: AppColors.muted(isDark)),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    return ListView(padding: EdgeInsets.zero, children: children);
   }
+
+  String _formatHistoryDate(DateTime date) =>
+      _formatHeaderDate(date, includeWeekday: false);
 
   Widget _buildBottomAssemblyBar(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (_currentQueueTab == WorkScreenQueueTab.history) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 27),
+        decoration: BoxDecoration(
+          color: AppColors.inset(isDark),
+          border: Border(top: BorderSide(color: AppColors.line(isDark))),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.archive_outlined,
+              size: 18,
+              color: AppColors.muted(isDark),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              'История отправок хранится на этом устройстве',
+              style: TextStyle(fontSize: 13, color: AppColors.muted(isDark)),
+            ),
+          ],
+        ),
+      );
+    }
     final count = widget.appState.selectedLogIds.length;
     final totalSec = widget.appState.totalSelectedSeconds;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 27),
       decoration: BoxDecoration(
-        color: AppColors.surface(isDark),
+        color: AppColors.inset(isDark),
         border: Border(top: BorderSide(color: AppColors.line(isDark))),
       ),
       child: Row(
@@ -1255,36 +1157,63 @@ class _WorkScreenState extends State<WorkScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  '$count ${count == 1 ? 'лог' : 'логов'} · ${LogClock.formatHoursMinutes(totalSec)}',
+                  'Выбрано $count ${_logWord(count)}',
                   style: const TextStyle(
                     fontWeight: FontWeight.w500,
                     fontSize: 13,
                   ),
                 ),
-                Text(
-                  'Выбрано для сборки · исходное время',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: AppColors.muted(isDark),
+                Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: LogClock.formatHoursMinutes(totalSec),
+                        style: const TextStyle(fontFamily: 'IBM Plex Mono'),
+                      ),
+                      TextSpan(
+                        text: ' исходного времени',
+                        style: TextStyle(color: AppColors.muted(isDark)),
+                      ),
+                    ],
                   ),
+                  style: const TextStyle(fontSize: 11),
                 ),
               ],
             ),
           ),
+          Text(
+            'Собрать на',
+            style: TextStyle(fontSize: 12, color: AppColors.muted(isDark)),
+          ),
+          const SizedBox(width: 24),
           OutlinedButton.icon(
             onPressed: () => _pickAssemblyDate(context),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(0, 36),
+              visualDensity: VisualDensity.standard,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              textStyle: const TextStyle(fontSize: 13),
+            ),
             icon: const Icon(Icons.calendar_today_outlined, size: 16),
-            label: Text(_formatAssemblyDate(widget.appState.selectedDate)),
+            label: Text(
+              _formatHeaderDate(
+                widget.appState.selectedDate,
+                includeYear: true,
+              ),
+            ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 24),
           FilledButton.icon(
             style: FilledButton.styleFrom(
-              backgroundColor: AppColors.primary(isDark),
-              foregroundColor: AppColors.onPrimary(isDark),
+              backgroundColor: AppColors.action(isDark),
+              foregroundColor: AppColors.onAction(isDark),
+              minimumSize: const Size(0, 36),
+              visualDensity: VisualDensity.standard,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(6),
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              textStyle: const TextStyle(fontSize: 13),
             ),
             onPressed: count == 0 ? null : () => _handleBuildDay(context),
             icon: const Icon(Icons.arrow_forward, size: 16),
@@ -1322,6 +1251,56 @@ class _WorkScreenState extends State<WorkScreen> {
 
   String _formatAssemblyDate(DateTime date) =>
       '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';
+
+  String _formatHeaderDate(
+    DateTime date, {
+    bool includeYear = false,
+    bool includeWeekday = true,
+  }) {
+    const months = [
+      'января',
+      'февраля',
+      'марта',
+      'апреля',
+      'мая',
+      'июня',
+      'июля',
+      'августа',
+      'сентября',
+      'октября',
+      'ноября',
+      'декабря',
+    ];
+    const weekdays = [
+      'понедельник',
+      'вторник',
+      'среда',
+      'четверг',
+      'пятница',
+      'суббота',
+      'воскресенье',
+    ];
+    final dateText = '${date.day} ${months[date.month - 1]}';
+    if (includeYear) return '$dateText ${date.year}';
+    if (!includeWeekday) return dateText;
+    final weekday = weekdays[date.weekday - 1];
+    return '${weekday[0].toUpperCase()}${weekday.substring(1)}, $dateText';
+  }
+
+  String _filterPeriodLabel(IssueFilterPeriod period) => switch (period) {
+    IssueFilterPeriod.days7 => 'За 7 дней',
+    IssueFilterPeriod.days30 => 'За 30 дней',
+    IssueFilterPeriod.all => 'За всё время',
+  };
+
+  String _logWord(int count) {
+    final lastTwo = count % 100;
+    final last = count % 10;
+    if (lastTwo >= 11 && lastTwo <= 14) return 'записей';
+    if (last == 1) return 'запись';
+    if (last >= 2 && last <= 4) return 'записи';
+    return 'записей';
+  }
 
   String _formatDraftDate(String date) {
     final parsed = DateTime.tryParse(date);
@@ -1385,58 +1364,5 @@ class _WorkScreenState extends State<WorkScreen> {
     final day = local.day.toString().padLeft(2, '0');
     final mon = local.month.toString().padLeft(2, '0');
     return '$day.$mon $h:$m';
-  }
-
-  Widget _buildStatusBadge(String status, bool isDark) {
-    final lower = status.toLowerCase();
-    Color bg;
-    Color fg;
-    Color border;
-
-    if (lower.contains('done') ||
-        lower.contains('готов') ||
-        lower.contains('закрыт') ||
-        lower.contains('resolved')) {
-      bg = AppColors.greenBg(isDark);
-      fg = AppColors.green(isDark);
-      border = AppColors.green(isDark).withValues(alpha: 0.3);
-    } else if (lower.contains('progress') ||
-        lower.contains('работ') ||
-        lower.contains('in dev') ||
-        lower.contains('development')) {
-      bg = AppColors.selected(isDark);
-      fg = AppColors.primary(isDark);
-      border = AppColors.primary(isDark).withValues(alpha: 0.3);
-    } else if (lower.contains('review') ||
-        lower.contains('тест') ||
-        lower.contains('test') ||
-        lower.contains('qa')) {
-      bg = AppColors.warnBg(isDark);
-      fg = AppColors.warn(isDark);
-      border = AppColors.warn(isDark).withValues(alpha: 0.3);
-    } else {
-      bg = AppColors.hover(isDark);
-      fg = AppColors.muted(isDark);
-      border = AppColors.line(isDark);
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: border),
-      ),
-      child: Text(
-        status,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: fg,
-        ),
-      ),
-    );
   }
 }

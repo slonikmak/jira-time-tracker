@@ -36,6 +36,7 @@ class AddTimeDialog extends StatefulWidget {
   }) async {
     return showDialog(
       context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.30),
       builder: (ctx) => AddTimeDialog(appState: appState, initialIssue: issue),
     );
   }
@@ -50,12 +51,33 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
     text: '1',
   );
   final TextEditingController _minutesController = TextEditingController(
-    text: '0',
+    text: '00',
   );
   final TextEditingController _descController = TextEditingController();
   String? _fixedStartTime;
   String? _errorMessage;
   bool _isSaving = false;
+
+  int get _durationSeconds =>
+      ((int.tryParse(_hoursController.text.trim()) ?? 0) * 3600) +
+      ((int.tryParse(_minutesController.text.trim()) ?? 0) * 60);
+
+  Future<void> _pickFixedStartTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _fixedStartTime != null
+          ? TimeOfDay(
+              hour: int.parse(_fixedStartTime!.split(':')[0]),
+              minute: int.parse(_fixedStartTime!.split(':')[1]),
+            )
+          : const TimeOfDay(hour: 11, minute: 0),
+    );
+    if (picked != null) {
+      final hh = picked.hour.toString().padLeft(2, '0');
+      final mm = picked.minute.toString().padLeft(2, '0');
+      setState(() => _fixedStartTime = '$hh:$mm');
+    }
+  }
 
   List<_TicketOption> _getTicketOptions() {
     final List<_TicketOption> options = [];
@@ -127,7 +149,9 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
     }
 
     Issue? selectedIssue = widget.appState.issues
-        .where((i) => i.issueId == _selectedIssueId || i.key == _selectedIssueId)
+        .where(
+          (i) => i.issueId == _selectedIssueId || i.key == _selectedIssueId,
+        )
         .firstOrNull;
 
     if (selectedIssue == null && _selectedIssueId != null) {
@@ -192,19 +216,54 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final options = _getTicketOptions();
-    if (options.isNotEmpty &&
-        !options.any((o) => o.id == _selectedIssueId)) {
+    if (options.isNotEmpty && !options.any((o) => o.id == _selectedIssueId)) {
       final matchedByKey = options
           .where((o) => o.key.toUpperCase() == _selectedIssueId?.toUpperCase())
           .firstOrNull;
       _selectedIssueId = matchedByKey?.id ?? options.first.id;
     }
-    final selectedOpt = options
-        .where((o) => o.id == _selectedIssueId)
-        .firstOrNull;
-
     return AlertDialog(
-      title: const Text('Добавить время'),
+      constraints: const BoxConstraints(
+        minWidth: 520,
+        maxWidth: 520,
+        minHeight: 598,
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      titlePadding: const EdgeInsets.fromLTRB(28, 28, 28, 0),
+      contentPadding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
+      actionsPadding: const EdgeInsets.fromLTRB(28, 4, 28, 27),
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Добавить время',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontSize: 24),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Закрыть',
+                onPressed: () => Navigator.of(context).pop(),
+                icon: Icon(
+                  Icons.close,
+                  size: 18,
+                  color: AppColors.muted(isDark),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 22),
+          Text(
+            'Запись появится в очереди. Таймер запускать не нужно.',
+            style: TextStyle(fontSize: 13, color: AppColors.muted(isDark)),
+          ),
+        ],
+      ),
       content: SizedBox(
         width: 460,
         child: SingleChildScrollView(
@@ -213,17 +272,21 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Выбор задачи
-              const Text(
+              Text(
                 'Задача',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                style: TextStyle(fontSize: 12, color: AppColors.muted(isDark)),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 3),
               if (widget.initialIssue != null) ...[
                 Builder(
                   builder: (context) {
                     final service = findServiceTicket(widget.initialIssue!.key);
                     return Container(
-                      padding: const EdgeInsets.all(8),
+                      constraints: const BoxConstraints(minHeight: 64),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: AppColors.hover(isDark),
                         borderRadius: BorderRadius.circular(6),
@@ -231,6 +294,7 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Row(
                             children: [
@@ -286,260 +350,284 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
                   style: TextStyle(color: Colors.red),
                 )
               else ...[
-                DropdownButtonFormField<String>(
-                  initialValue: _selectedIssueId,
-                  isExpanded: true,
-                  itemHeight: null,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 8,
+                SizedBox(
+                  height: 64,
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _selectedIssueId,
+                    isDense: false,
+                    isExpanded: true,
+                    itemHeight: null,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 15,
+                      ),
                     ),
-                  ),
-                  selectedItemBuilder: (context) {
-                    return options.map((opt) {
-                      final descPart = opt.description != null
-                          ? ' — ${opt.description}'
-                          : '';
-                      return Text(
-                        '${opt.key}: ${opt.title}$descPart',
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 13),
-                      );
-                    }).toList();
-                  },
-                  items: options.map((opt) {
-                    return DropdownMenuItem<String>(
-                      value: opt.id,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Row(
+                    selectedItemBuilder: (context) => options
+                        .map(
+                          (opt) => Text.rich(
+                            TextSpan(
                               children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 5,
-                                    vertical: 1,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: opt.isService
-                                        ? AppColors.selected(isDark)
-                                        : AppColors.hover(isDark),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    opt.key,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 11,
-                                      color: opt.isService
-                                          ? AppColors.primary(isDark)
-                                          : null,
-                                    ),
+                                TextSpan(
+                                  text: '${opt.key}\n',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.primary(isDark),
                                   ),
                                 ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    opt.title,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
+                                TextSpan(
+                                  text: opt.title,
+                                  style: const TextStyle(fontSize: 13),
                                 ),
                               ],
                             ),
-                            if (opt.description != null &&
-                                opt.description!.isNotEmpty) ...[
-                              const SizedBox(height: 2),
-                              Text(
-                                opt.description!,
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 2,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.muted(isDark),
-                                ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(height: 1.15),
+                          ),
+                        )
+                        .toList(),
+                    items: options.map((opt) {
+                      return DropdownMenuItem<String>(
+                        value: opt.id,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 5,
+                                      vertical: 1,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: opt.isService
+                                          ? AppColors.selected(isDark)
+                                          : AppColors.hover(isDark),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      opt.key,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 11,
+                                        color: opt.isService
+                                            ? AppColors.primary(isDark)
+                                            : null,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      opt.title,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
+                              if (opt.description != null &&
+                                  opt.description!.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  opt.description!,
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 2,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.muted(isDark),
+                                  ),
+                                ),
+                              ],
                             ],
-                          ],
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                  onChanged: (val) {
-                    setState(() {
-                      _selectedIssueId = val;
-                      final selected = options
-                          .where((o) => o.id == val)
-                          .firstOrNull;
-                      if (selected?.description != null &&
-                          _descController.text.trim().isEmpty) {
-                        _descController.text = selected!.description!;
-                      }
-                    });
-                  },
-                ),
-                if (selectedOpt?.description != null) ...[
-                  const SizedBox(height: 6),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.hover(isDark),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: AppColors.line(isDark)),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          Icons.info_outline,
-                          size: 15,
-                          color: AppColors.primary(isDark),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            selectedOpt!.description!,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: AppColors.muted(isDark),
-                            ),
                           ),
                         ),
-                      ],
-                    ),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      setState(() {
+                        _selectedIssueId = val;
+                        final selected = options
+                            .where((o) => o.id == val)
+                            .firstOrNull;
+                        if (selected?.description != null &&
+                            _descController.text.trim().isEmpty) {
+                          _descController.text = selected!.description!;
+                        }
+                      });
+                    },
                   ),
-                ],
+                ),
               ],
-              const SizedBox(height: 16),
+              const SizedBox(height: 25),
 
               // Поля длительности (часы и минуты)
-              const Text(
-                'Длительность',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-              ),
-              const SizedBox(height: 6),
               Row(
                 children: [
                   Expanded(
-                    child: TextField(
-                      controller: _hoursController,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      decoration: const InputDecoration(
-                        labelText: 'Часы',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                        suffixText: 'ч',
+                    child: Text(
+                      'Часы',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.muted(isDark),
                       ),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: TextField(
-                      controller: _minutesController,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      decoration: const InputDecoration(
-                        labelText: 'Минуты',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                        suffixText: 'м',
+                    child: Text(
+                      'Минуты',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.muted(isDark),
                       ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
-
-              // Описание сделанной работы (необязательно)
-              const Text(
-                'Что сделано (необязательно)',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-              ),
-              const SizedBox(height: 6),
-              TextField(
-                controller: _descController,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  hintText: 'Краткое описание работы...',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Фиксированное время начала
-              const Text(
-                'Фиксированное время начала (необязательно)',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-              ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 7),
               Row(
                 children: [
                   Expanded(
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.access_time, size: 18),
-                      label: Text(
-                        _fixedStartTime != null
-                            ? 'Старт: $_fixedStartTime'
-                            : 'Указать фиксированное время',
+                    child: SizedBox(
+                      height: 60,
+                      child: TextField(
+                        controller: _hoursController,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 13,
+                          ),
+                        ),
+                        onChanged: (_) => setState(() {}),
                       ),
-                      onPressed: () async {
-                        final picked = await showTimePicker(
-                          context: context,
-                          initialTime: _fixedStartTime != null
-                              ? TimeOfDay(
-                                  hour: int.parse(_fixedStartTime!.split(':')[0]),
-                                  minute: int.parse(_fixedStartTime!.split(':')[1]),
-                                )
-                              : const TimeOfDay(hour: 11, minute: 0),
-                        );
-                        if (picked != null) {
-                          final hh = picked.hour.toString().padLeft(2, '0');
-                          final mm = picked.minute.toString().padLeft(2, '0');
-                          setState(() {
-                            _fixedStartTime = '$hh:$mm';
-                          });
-                        }
-                      },
                     ),
                   ),
-                  if (_fixedStartTime != null) ...[
-                    const SizedBox(width: 8),
-                    IconButton(
-                      icon: const Icon(Icons.clear, size: 18),
-                      tooltip: 'Очистить фиксированное время',
-                      onPressed: () {
-                        setState(() {
-                          _fixedStartTime = null;
-                        });
-                      },
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SizedBox(
+                      height: 60,
+                      child: TextField(
+                        controller: _minutesController,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 13,
+                          ),
+                        ),
+                        onChanged: (_) => setState(() {}),
+                      ),
                     ),
-                  ],
+                  ),
                 ],
               ),
-
               if (_errorMessage != null) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 Text(
                   _errorMessage!,
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.error,
-                    fontSize: 13,
+                    fontSize: 12,
                   ),
+                ),
+              ],
+              const SizedBox(height: 19),
+
+              // Описание сделанной работы (необязательно)
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text('Что сделано', style: TextStyle(fontSize: 12)),
+                  ),
+                  Text(
+                    'Необязательно',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.muted(isDark),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              SizedBox(
+                height: 98,
+                child: TextField(
+                  controller: _descController,
+                  expands: true,
+                  maxLines: null,
+                  minLines: null,
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    hintText: 'Например, форма входа и обработка ошибок',
+                    contentPadding: EdgeInsets.all(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 23),
+              if (_durationSeconds > 0) ...[
+                Row(
+                  children: [
+                    InkWell(
+                      onTap: _pickFixedStartTime,
+                      child: Tooltip(
+                        message: 'Указать время начала',
+                        child: Icon(
+                          Icons.access_time,
+                          size: 15,
+                          color: AppColors.primary(isDark),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 7),
+                    Text(
+                      'Новая запись · ${LogClock.formatHoursMinutes(_durationSeconds)}',
+                      style: TextStyle(
+                        color: AppColors.primary(isDark),
+                        fontSize: 12,
+                      ),
+                    ),
+                    if (_fixedStartTime != null) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        '· начало $_fixedStartTime',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.muted(isDark),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 15),
+                        tooltip: 'Очистить фиксированное время',
+                        onPressed: () => setState(() => _fixedStartTime = null),
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ],
@@ -547,19 +635,29 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
         ),
       ),
       actions: [
-        TextButton(
+        OutlinedButton(
           onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(82, 39),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            textStyle: const TextStyle(fontSize: 12),
+          ),
           child: const Text('Отмена'),
         ),
         FilledButton(
           onPressed: _isSaving ? null : _handleSave,
+          style: FilledButton.styleFrom(
+            minimumSize: const Size(150, 39),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            textStyle: const TextStyle(fontSize: 12),
+          ),
           child: _isSaving
               ? const SizedBox(
                   width: 16,
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Сохранить'),
+              : const Text('Сохранить запись'),
         ),
       ],
     );

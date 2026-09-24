@@ -5,6 +5,7 @@ import '../models.dart';
 class EditSegmentDialog extends StatefulWidget {
   final Segment segment;
   final String taskTitle;
+  final VoidCallback? onDelete;
   final void Function({
     required DateTime startUtc,
     required int durationSeconds,
@@ -16,6 +17,7 @@ class EditSegmentDialog extends StatefulWidget {
     super.key,
     required this.segment,
     required this.taskTitle,
+    this.onDelete,
     required this.onSave,
   });
 
@@ -132,99 +134,171 @@ class _EditSegmentDialogState extends State<EditSegmentDialog> {
         '${_computedEndLocal.hour.toString().padLeft(2, '0')}:${_computedEndLocal.minute.toString().padLeft(2, '0')}';
 
     return AlertDialog(
-      title: Text(
-        'Редактировать интервал: ${widget.taskTitle}',
-        style: const TextStyle(fontSize: 18),
+      constraints: BoxConstraints(
+        maxWidth: 620,
+        maxHeight: MediaQuery.sizeOf(context).height * .9,
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+      titlePadding: const EdgeInsets.fromLTRB(28, 27, 28, 0),
+      contentPadding: const EdgeInsets.fromLTRB(28, 23, 28, 8),
+      actionsPadding: const EdgeInsets.fromLTRB(28, 22, 28, 27),
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Изменить интервал',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontSize: 24),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Закрыть',
+                onPressed: () => Navigator.of(context).pop(),
+                constraints: const BoxConstraints.tightFor(
+                  width: 24,
+                  height: 24,
+                ),
+                padding: EdgeInsets.zero,
+                icon: const Icon(Icons.close, size: 17),
+              ),
+            ],
+          ),
+          const SizedBox(height: 25),
+          Text(
+            widget.taskTitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.primary,
+              fontSize: 13,
+            ),
+          ),
+        ],
       ),
       content: SingleChildScrollView(
-        child: SizedBox(
-          width: 440,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (_errorMessage != null)
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.errorContainer,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    _errorMessage!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onErrorContainer,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-              // Время начала
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.access_time),
-                title: const Text('Время начала:'),
-                subtitle: Text(
-                  '$startFormatted (окончание: $endFormatted)',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                trailing: OutlinedButton(
-                  onPressed: _pickTime,
-                  child: const Text('Изменить'),
-                ),
-              ),
-              const SizedBox(height: 12),
-              // Длительность
-              const Text(
-                'Длительность:',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 6),
               Row(
                 children: [
                   Expanded(
-                    child: TextField(
-                      controller: _hoursController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Часы',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      onChanged: (_) => setState(() {}),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Начало', style: TextStyle(fontSize: 12)),
+                        const SizedBox(height: 7),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton(
+                            onPressed: _pickTime,
+                            style: OutlinedButton.styleFrom(
+                              alignment: Alignment.centerLeft,
+                              minimumSize: const Size(0, 46),
+                            ),
+                            child: Text(
+                              startFormatted,
+                              style: const TextStyle(fontSize: 15),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: TextField(
-                      controller: _minutesController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Минуты',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      onChanged: (_) => setState(() {}),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Длительность',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        const SizedBox(height: 7),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _hoursController,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  hintText: 'Часы',
+                                  isDense: true,
+                                ),
+                                onChanged: (_) => setState(() {}),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: TextField(
+                                controller: _minutesController,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  hintText: 'Минуты',
+                                  isDense: true,
+                                ),
+                                onChanged: (_) => setState(() {}),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
-              // Описание
-              const Text(
-                'Описание работы (комментарий Jira):',
-                style: TextStyle(fontWeight: FontWeight.w600),
+              const SizedBox(height: 30),
+              if (_errorMessage != null) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.error_outline,
+                      size: 15,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        _errorMessage!,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              Text(
+                'Окончание: $endFormatted',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
-              const SizedBox(height: 6),
-              TextField(
-                controller: _descriptionController,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  hintText: 'Что было сделано за этот интервал...',
-                  border: OutlineInputBorder(),
+              const SizedBox(height: 22),
+              const Text('Что сделано', style: TextStyle(fontSize: 12)),
+              const SizedBox(height: 7),
+              SizedBox(
+                height: 104,
+                child: TextField(
+                  controller: _descriptionController,
+                  expands: true,
+                  maxLines: null,
+                  minLines: null,
+                  decoration: const InputDecoration(
+                    hintText: 'Что было сделано за этот интервал...',
+                    isDense: true,
+                    contentPadding: EdgeInsets.all(12),
+                  ),
                 ),
               ),
             ],
@@ -232,11 +306,40 @@ class _EditSegmentDialogState extends State<EditSegmentDialog> {
         ),
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Отмена'),
+        Wrap(
+          alignment: WrapAlignment.end,
+          spacing: 10,
+          runSpacing: 8,
+          children: [
+            if (widget.onDelete != null)
+              TextButton(
+                onPressed: widget.onDelete,
+                style: TextButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.error,
+                  textStyle: const TextStyle(fontSize: 12),
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(0, 39),
+                ),
+                child: const Text('Удалить интервал'),
+              ),
+            OutlinedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(82, 39),
+                textStyle: const TextStyle(fontSize: 12),
+              ),
+              child: const Text('Отмена'),
+            ),
+            FilledButton(
+              onPressed: _submit,
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(101, 39),
+                textStyle: const TextStyle(fontSize: 12),
+              ),
+              child: const Text('Сохранить'),
+            ),
+          ],
         ),
-        FilledButton(onPressed: _submit, child: const Text('Сохранить')),
       ],
     );
   }

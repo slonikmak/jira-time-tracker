@@ -51,12 +51,15 @@ class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _tokenController;
   late final TextEditingController _agentUrlController;
   late final TextEditingController _skillPromptController;
+  late final Map<String, TextEditingController> _dayControllers;
 
   bool _isLoading = true;
   bool _isChecking = false;
   bool _obscureToken = true;
   String? _errorMessage;
   JiraConnection? _verifiedConnection;
+  Map<String, String> _dayErrors = {};
+  String? _dayMessage;
 
   @override
   void initState() {
@@ -69,6 +72,24 @@ class _SettingsPageState extends State<SettingsPage> {
     _skillPromptController = TextEditingController(
       text: AgentApiServer.generateSkillPrompt(agentUrl),
     );
+    _dayControllers = {
+      for (final key in [
+        'start-min',
+        'start-max',
+        'duration-min',
+        'duration-max',
+        'long-start-min',
+        'long-start-max',
+        'long-duration-min',
+        'long-duration-max',
+        'short-count-min',
+        'short-count-max',
+        'short-duration-min',
+        'short-duration-max',
+      ])
+        key: TextEditingController(),
+    };
+    _fillDaySettings(widget.appState.daySettings);
     _loadInitialData();
   }
 
@@ -92,7 +113,169 @@ class _SettingsPageState extends State<SettingsPage> {
     _tokenController.dispose();
     _agentUrlController.dispose();
     _skillPromptController.dispose();
+    for (final controller in _dayControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
+  }
+
+  String _clock(int minutes) =>
+      '${(minutes ~/ 60).toString().padLeft(2, '0')}:${(minutes % 60).toString().padLeft(2, '0')}';
+
+  String _duration(int seconds) {
+    final hours = seconds ~/ 3600;
+    final minutes = (seconds % 3600) ~/ 60;
+    if (hours == 0) return '$minutes м';
+    return minutes == 0 ? '$hours ч' : '$hours ч $minutes м';
+  }
+
+  void _fillDaySettings(DaySettings settings) {
+    final values = <String, String>{
+      'start-min': _clock(settings.startMinutesMin),
+      'start-max': _clock(settings.startMinutesMax),
+      'duration-min': _duration(settings.totalDurationSecondsMin),
+      'duration-max': _duration(settings.totalDurationSecondsMax),
+      'long-start-min': _clock(settings.lunchStartMinutesMin),
+      'long-start-max': _clock(settings.lunchStartMinutesMax),
+      'long-duration-min': _duration(settings.lunchDurationSecondsMin),
+      'long-duration-max': _duration(settings.lunchDurationSecondsMax),
+      'short-count-min': '${settings.shortBreakCountMin}',
+      'short-count-max': '${settings.shortBreakCountMax}',
+      'short-duration-min': _duration(settings.shortBreakDurationSecondsMin),
+      'short-duration-max': _duration(settings.shortBreakDurationSecondsMax),
+    };
+    for (final entry in values.entries) {
+      _dayControllers[entry.key]!.text = entry.value;
+    }
+  }
+
+  int? _parseClock(String value) {
+    final match = RegExp(r'^(\d{1,2}):([0-5]\d)$').firstMatch(value.trim());
+    if (match == null) return null;
+    final hour = int.parse(match.group(1)!);
+    if (hour > 23) return null;
+    return hour * 60 + int.parse(match.group(2)!);
+  }
+
+  int? _parseDuration(String value) {
+    final match = RegExp(
+      r'^(?:(\d+)\s*ч)?\s*(?:(\d+)\s*м)?$',
+    ).firstMatch(value.trim());
+    if (match == null || (match.group(1) == null && match.group(2) == null)) {
+      return null;
+    }
+    final hours = int.tryParse(match.group(1) ?? '0');
+    final minutes = int.tryParse(match.group(2) ?? '0');
+    if (hours == null || minutes == null || (hours > 0 && minutes >= 60)) {
+      return null;
+    }
+    return (hours * 60 + minutes) * 60;
+  }
+
+  void _saveDaySettings() {
+    final errors = <String, String>{};
+    int read(
+      String key,
+      String group,
+      int? Function(String) parse,
+      String hint,
+    ) {
+      final value = parse(_dayControllers[key]!.text);
+      if (value == null) errors[group] = hint;
+      return value ?? 0;
+    }
+
+    final settings = DaySettings(
+      startMinutesMin: read(
+        'start-min',
+        'start',
+        _parseClock,
+        'Введите время в формате ЧЧ:ММ.',
+      ),
+      startMinutesMax: read(
+        'start-max',
+        'start',
+        _parseClock,
+        'Введите время в формате ЧЧ:ММ.',
+      ),
+      totalDurationSecondsMin: read(
+        'duration-min',
+        'duration',
+        _parseDuration,
+        'Введите длительность, например 7 ч 30 м.',
+      ),
+      totalDurationSecondsMax: read(
+        'duration-max',
+        'duration',
+        _parseDuration,
+        'Введите длительность, например 8 ч.',
+      ),
+      lunchStartMinutesMin: read(
+        'long-start-min',
+        'long_start',
+        _parseClock,
+        'Введите время в формате ЧЧ:ММ.',
+      ),
+      lunchStartMinutesMax: read(
+        'long-start-max',
+        'long_start',
+        _parseClock,
+        'Введите время в формате ЧЧ:ММ.',
+      ),
+      lunchDurationSecondsMin: read(
+        'long-duration-min',
+        'long_duration',
+        _parseDuration,
+        'Введите длительность, например 30 м.',
+      ),
+      lunchDurationSecondsMax: read(
+        'long-duration-max',
+        'long_duration',
+        _parseDuration,
+        'Введите длительность, например 45 м.',
+      ),
+      shortBreakCountMin: read(
+        'short-count-min',
+        'short_count',
+        int.tryParse,
+        'Введите целое число от 0.',
+      ),
+      shortBreakCountMax: read(
+        'short-count-max',
+        'short_count',
+        int.tryParse,
+        'Введите целое число от 0.',
+      ),
+      shortBreakDurationSecondsMin: read(
+        'short-duration-min',
+        'short_duration',
+        _parseDuration,
+        'Введите длительность, например 5 м.',
+      ),
+      shortBreakDurationSecondsMax: read(
+        'short-duration-max',
+        'short_duration',
+        _parseDuration,
+        'Введите длительность, например 10 м.',
+      ),
+    );
+    if (errors.isEmpty) errors.addAll(settings.validationErrors());
+    if (errors.isNotEmpty) {
+      setState(() {
+        _dayErrors = errors;
+        _dayMessage = null;
+      });
+      return;
+    }
+    try {
+      widget.appState.updateDaySettings(settings);
+      setState(() {
+        _dayErrors = {};
+        _dayMessage = 'Параметры сборки дня сохранены.';
+      });
+    } catch (e) {
+      setState(() => _dayMessage = 'Не удалось сохранить параметры: $e');
+    }
   }
 
   Future<void> _checkConnection() async {
@@ -167,82 +350,49 @@ class _SettingsPageState extends State<SettingsPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Настройки', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 4),
-              Text(
-                'Подключение к Jira и локальный API для агентов.',
-                style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 14),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'Тема оформления',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-              const SizedBox(height: 8),
-              SegmentedButton<UiThemeMode>(
-                showSelectedIcon: false,
-                segments: const [
-                  ButtonSegment(
-                    value: UiThemeMode.system,
-                    label: Text('Как в системе'),
-                  ),
-                  ButtonSegment(
-                    value: UiThemeMode.light,
-                    label: Text('Светлая'),
-                  ),
-                  ButtonSegment(value: UiThemeMode.dark, label: Text('Тёмная')),
-                ],
-                selected: {widget.appState.themeMode.value},
-                onSelectionChanged: widget.appState.isReadOnly
-                    ? null
-                    : (selection) {
-                        try {
-                          widget.appState.selectThemeMode(selection.single);
-                        } catch (e) {
-                          setState(() {});
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Не удалось сохранить тему: $e'),
-                            ),
-                          );
-                        }
-                      },
-                style: ButtonStyle(
-                  visualDensity: VisualDensity.compact,
-                  side: WidgetStatePropertyAll(
-                    BorderSide(color: scheme.outline),
-                  ),
-                  shape: WidgetStatePropertyAll(
-                    RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(5),
-                    ),
-                  ),
-                ),
-              ),
-              if (widget.appState.isReadOnly) ...[
-                const SizedBox(height: 6),
-                Text(
-                  'В режиме только чтения изменить тему нельзя.',
-                  style: TextStyle(
-                    color: scheme.onSurfaceVariant,
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 36),
-              if (constraints.maxWidth >= 1250)
+              if (constraints.maxWidth >= 1100)
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SizedBox(width: 480, child: _buildJiraSection(context)),
-                    const SizedBox(width: 64),
+                    Expanded(child: _buildSettingsHeading(context)),
+                    const SizedBox(width: 24),
+                    _buildThemeSelector(context),
+                  ],
+                )
+              else ...[
+                _buildSettingsHeading(context),
+                const SizedBox(height: 16),
+                _buildThemeSelector(context),
+              ],
+              const SizedBox(height: 32),
+              if (constraints.maxWidth >= 1380)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(width: 380, child: _buildJiraSection(context)),
                     Container(
-                      width: 1,
-                      height: 620,
-                      color: scheme.outlineVariant,
+                      width: 460,
+                      margin: const EdgeInsets.only(left: 40),
+                      padding: const EdgeInsets.only(left: 40),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          left: BorderSide(color: scheme.outlineVariant),
+                        ),
+                      ),
+                      child: _buildDaySection(context),
                     ),
                     const SizedBox(width: 40),
-                    Expanded(child: _buildAgentApiSection(context)),
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.only(left: 40),
+                        decoration: BoxDecoration(
+                          border: Border(
+                            left: BorderSide(color: scheme.outlineVariant),
+                          ),
+                        ),
+                        child: _buildAgentApiSection(context),
+                      ),
+                    ),
                   ],
                 )
               else ...[
@@ -250,9 +400,273 @@ class _SettingsPageState extends State<SettingsPage> {
                 const SizedBox(height: 32),
                 Divider(color: scheme.outlineVariant),
                 const SizedBox(height: 24),
+                _buildDaySection(context),
+                const SizedBox(height: 32),
+                Divider(color: scheme.outlineVariant),
+                const SizedBox(height: 24),
                 _buildAgentApiSection(context),
               ],
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSettingsHeading(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Настройки', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 4),
+        Text(
+          'Подключение к Jira, правила сборки дня и локальный API для AI-агентов.',
+          style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 14),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildThemeSelector(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Тема оформления', style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 8),
+        SegmentedButton<UiThemeMode>(
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(
+              value: UiThemeMode.system,
+              label: Text('Как в системе'),
+            ),
+            ButtonSegment(value: UiThemeMode.light, label: Text('Светлая')),
+            ButtonSegment(value: UiThemeMode.dark, label: Text('Тёмная')),
+          ],
+          selected: {widget.appState.themeMode.value},
+          onSelectionChanged: widget.appState.isReadOnly
+              ? null
+              : (selection) {
+                  try {
+                    widget.appState.selectThemeMode(selection.single);
+                  } catch (e) {
+                    setState(() {});
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Не удалось сохранить тему: $e')),
+                    );
+                  }
+                },
+          style: ButtonStyle(
+            visualDensity: VisualDensity.compact,
+            side: WidgetStatePropertyAll(BorderSide(color: scheme.outline)),
+            shape: WidgetStatePropertyAll(
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+            ),
+          ),
+        ),
+        if (widget.appState.isReadOnly) ...[
+          const SizedBox(height: 6),
+          Text(
+            'В режиме только чтения изменить тему нельзя.',
+            style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildDaySection(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Сборка дня',
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 13),
+        Text(
+          'Умная пересборка выбирает значения внутри этих диапазонов.',
+          style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
+        ),
+        const SizedBox(height: 20),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'ПАРАМЕТР',
+                style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant),
+              ),
+            ),
+            SizedBox(
+              width: 100,
+              child: Text(
+                'ОТ',
+                style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant),
+              ),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 100,
+              child: Text(
+                'ДО',
+                style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _dayRangeRow(context, 'Начало дня', 'start', 'start-min', 'start-max'),
+        _dayRangeRow(
+          context,
+          'Длительность дня',
+          'duration',
+          'duration-min',
+          'duration-max',
+        ),
+        _dayRangeRow(
+          context,
+          'Начало длинной паузы',
+          'long_start',
+          'long-start-min',
+          'long-start-max',
+        ),
+        _dayRangeRow(
+          context,
+          'Длительность длинной паузы',
+          'long_duration',
+          'long-duration-min',
+          'long-duration-max',
+        ),
+        _dayRangeRow(
+          context,
+          'Короткие паузы за день',
+          'short_count',
+          'short-count-min',
+          'short-count-max',
+        ),
+        _dayRangeRow(
+          context,
+          'Длительность короткой паузы',
+          'short_duration',
+          'short-duration-min',
+          'short-duration-max',
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Минимальный рабочий интервал — 15 минут.',
+          style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+        ),
+        if (_dayMessage != null) ...[
+          const SizedBox(height: 12),
+          Text(
+            _dayMessage!,
+            style: TextStyle(
+              color: _dayMessage!.startsWith('Не удалось')
+                  ? scheme.error
+                  : AppColors.green(theme.brightness == Brightness.dark),
+              fontSize: 12,
+            ),
+          ),
+        ],
+        if (widget.appState.isReadOnly) ...[
+          const SizedBox(height: 8),
+          Text(
+            'В режиме только чтения изменить параметры нельзя.',
+            style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11),
+          ),
+        ],
+        const SizedBox(height: 20),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            OutlinedButton(
+              onPressed: widget.appState.isReadOnly
+                  ? null
+                  : () {
+                      setState(() {
+                        _fillDaySettings(const DaySettings());
+                        _dayErrors = {};
+                        _dayMessage = null;
+                      });
+                    },
+              child: const Text('Сбросить'),
+            ),
+            const SizedBox(width: 10),
+            FilledButton(
+              onPressed: widget.appState.isReadOnly ? null : _saveDaySettings,
+              child: const Text('Сохранить параметры'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _dayRangeRow(
+    BuildContext context,
+    String label,
+    String group,
+    String minKey,
+    String maxKey,
+  ) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(label, style: const TextStyle(fontSize: 13)),
+              ),
+              _dayInput(context, minKey),
+              const SizedBox(width: 12),
+              _dayInput(context, maxKey),
+            ],
+          ),
+        ),
+        if (_dayErrors[group] != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              _dayErrors[group]!,
+              style: TextStyle(fontSize: 11, color: scheme.error),
+            ),
+          ),
+        Divider(height: 1, color: scheme.outlineVariant),
+      ],
+    );
+  }
+
+  Widget _dayInput(BuildContext context, String key) {
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      width: 100,
+      height: 42,
+      child: TextField(
+        key: ValueKey('day-$key'),
+        controller: _dayControllers[key],
+        enabled: !widget.appState.isReadOnly,
+        style: const TextStyle(fontSize: 13, fontFamily: 'IBM Plex Mono'),
+        decoration: InputDecoration(
+          isDense: true,
+          filled: true,
+          fillColor: scheme.surfaceContainerLow,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 12,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(6),
+            borderSide: BorderSide.none,
           ),
         ),
       ),
@@ -404,13 +818,13 @@ class _SettingsPageState extends State<SettingsPage> {
           children: [
             Expanded(
               child: Text(
-                'Инструкция для создания скилла агента',
+                'Инструкция для скилла агента',
                 style: theme.textTheme.titleSmall,
               ),
             ),
             FilledButton.tonalIcon(
               icon: const Icon(Icons.copy, size: 16),
-              label: const Text('Скопировать инструкцию для агента'),
+              label: const Text('Скопировать инструкцию'),
               onPressed: () {
                 Clipboard.setData(
                   ClipboardData(text: _skillPromptController.text),
@@ -430,9 +844,22 @@ class _SettingsPageState extends State<SettingsPage> {
         TextField(
           controller: _skillPromptController,
           readOnly: true,
-          maxLines: 10,
-          style: const TextStyle(fontFamily: 'IBM Plex Mono', fontSize: 11),
-          decoration: const InputDecoration(contentPadding: EdgeInsets.all(12)),
+          minLines: 16,
+          maxLines: 16,
+          style: const TextStyle(
+            fontFamily: 'IBM Plex Mono',
+            fontSize: 11,
+            color: Color(0xFFD9DDE5),
+          ),
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: const Color(0xFF20242C),
+            contentPadding: const EdgeInsets.all(16),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(7),
+              borderSide: BorderSide.none,
+            ),
+          ),
         ),
       ],
     );

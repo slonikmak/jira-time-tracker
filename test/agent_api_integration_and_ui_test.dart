@@ -143,7 +143,7 @@ void main() {
       // Проверяем наличие кнопки копирования инструкции для агента
       final copyBtn = find.widgetWithText(
         FilledButton,
-        'Скопировать инструкцию для агента',
+        'Скопировать инструкцию',
       );
       expect(copyBtn, findsOneWidget);
 

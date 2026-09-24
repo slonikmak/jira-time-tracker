@@ -190,7 +190,9 @@ void main() {
       expect(meetSegment.startUtc, expectedMeetStart);
       expect(meetSegment.endUtc, expectedMeetEnd);
 
-      expect(part2.startUtc, expectedMeetEnd);
+      // Нулевое число дополнительных пауз не отменяет обязательный разрыв
+      // между сгенерированными рабочими интервалами.
+      expect(part2.startUtc, expectedMeetEnd.add(const Duration(minutes: 5)));
       expect(part2.durationSeconds, 1800); // 30 мин после созвона
 
       // Суммарное время совпадает с исходным

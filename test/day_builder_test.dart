@@ -160,6 +160,175 @@ void main() {
       },
     );
 
+    test('Ноль дополнительных пауз сохраняет обязательную паузу между сегментами', () {
+      final input = DayBuilderInput(
+        localDate: testDate,
+        timeZoneOffset: testOffset,
+        settings: const DaySettings(
+          shortBreakCountMin: 0,
+          shortBreakCountMax: 0,
+        ),
+        logs: const [
+          DayBuilderLogInput(
+            sourceLogId: 'log-a',
+            issueId: '10001',
+            titleSnapshot: 'PROJ-1',
+            description: 'Работа A',
+            sourceDurationSeconds: 3600,
+          ),
+          DayBuilderLogInput(
+            sourceLogId: 'log-b',
+            issueId: '10002',
+            titleSnapshot: 'PROJ-2',
+            description: 'Работа B',
+            sourceDurationSeconds: 3600,
+          ),
+        ],
+      );
+
+      final plan = DayBuilder.build(input: input, seed: 42);
+      expect(plan.segments.length, greaterThanOrEqualTo(2));
+      expect(plan.breaks, isNotEmpty);
+      expect(DayBuilder.validate(plan: plan), isEmpty);
+    });
+
+    test('Длинная пауза не переносится за пределы выбранного диапазона', () {
+      final input = DayBuilderInput(
+        localDate: testDate,
+        timeZoneOffset: testOffset,
+        settings: const DaySettings(
+          startMinutesMin: 8 * 60,
+          startMinutesMax: 8 * 60,
+          totalDurationSecondsMin: 8 * 3600,
+          totalDurationSecondsMax: 8 * 3600,
+          lunchStartMinutesMin: 23 * 60,
+          lunchStartMinutesMax: 23 * 60,
+          shortBreakCountMin: 0,
+          shortBreakCountMax: 0,
+        ),
+        logs: const [
+          DayBuilderLogInput(
+            sourceLogId: 'log-a',
+            issueId: '10001',
+            titleSnapshot: 'PROJ-1',
+            sourceDurationSeconds: 4 * 3600,
+          ),
+        ],
+      );
+
+      expect(
+        () => DayBuilder.build(input: input, seed: 42),
+        throwsA(isA<DayBuilderException>()),
+      );
+    });
+
+    test('Число коротких пауз соблюдается и для короткого дня', () {
+      final input = DayBuilderInput(
+        localDate: testDate,
+        timeZoneOffset: testOffset,
+        settings: const DaySettings(
+          startMinutesMin: 8 * 60,
+          startMinutesMax: 8 * 60,
+          totalDurationSecondsMin: 3 * 3600,
+          totalDurationSecondsMax: 3 * 3600,
+          lunchDurationSecondsMin: 0,
+          lunchDurationSecondsMax: 0,
+          shortBreakCountMin: 3,
+          shortBreakCountMax: 3,
+          shortBreakDurationSecondsMin: 5 * 60,
+          shortBreakDurationSecondsMax: 10 * 60,
+        ),
+        logs: const [
+          DayBuilderLogInput(
+            sourceLogId: 'log-a',
+            issueId: '10001',
+            titleSnapshot: 'PROJ-1',
+            sourceDurationSeconds: 2 * 3600,
+          ),
+        ],
+      );
+
+      final plan = DayBuilder.build(input: input, seed: 42);
+      // Дополнительные паузы выбираются из диапазона, а обязательные
+      // разделители рабочих частей используют ровно нижнюю границу.
+      expect(plan.breaks.where((b) => b.durationSeconds > 5 * 60).length, 3);
+      expect(DayBuilder.validate(plan: plan), isEmpty);
+    });
+
+    test('Невозможное число коротких пауз приводит к ошибке', () {
+      final input = DayBuilderInput(
+        localDate: testDate,
+        timeZoneOffset: testOffset,
+        settings: const DaySettings(
+          startMinutesMin: 8 * 60,
+          startMinutesMax: 8 * 60,
+          totalDurationSecondsMin: 60 * 60,
+          totalDurationSecondsMax: 60 * 60,
+          lunchDurationSecondsMin: 0,
+          lunchDurationSecondsMax: 0,
+          shortBreakCountMin: 3,
+          shortBreakCountMax: 3,
+          shortBreakDurationSecondsMin: 20 * 60,
+          shortBreakDurationSecondsMax: 20 * 60,
+        ),
+        logs: const [
+          DayBuilderLogInput(
+            sourceLogId: 'log-a',
+            issueId: '10001',
+            titleSnapshot: 'PROJ-1',
+            sourceDurationSeconds: 15 * 60,
+          ),
+        ],
+      );
+
+      expect(
+        () => DayBuilder.build(input: input, seed: 42),
+        throwsA(isA<DayBuilderException>()),
+      );
+    });
+
+    test('Короткие паузы размещаются после ранней длинной паузы', () {
+      final input = DayBuilderInput(
+        localDate: testDate,
+        timeZoneOffset: testOffset,
+        settings: const DaySettings(
+          startMinutesMin: 8 * 60,
+          startMinutesMax: 8 * 60,
+          totalDurationSecondsMin: 8 * 3600,
+          totalDurationSecondsMax: 8 * 3600,
+          lunchStartMinutesMin: 8 * 60,
+          lunchStartMinutesMax: 8 * 60,
+          lunchDurationSecondsMin: 30 * 60,
+          lunchDurationSecondsMax: 30 * 60,
+          shortBreakCountMin: 2,
+          shortBreakCountMax: 2,
+          shortBreakDurationSecondsMin: 5 * 60,
+          shortBreakDurationSecondsMax: 5 * 60,
+        ),
+        logs: const [
+          DayBuilderLogInput(
+            sourceLogId: 'log-a',
+            issueId: '10001',
+            titleSnapshot: 'PROJ-1',
+            sourceDurationSeconds: 4 * 3600,
+          ),
+        ],
+      );
+
+      final plan = DayBuilder.build(input: input, seed: 42);
+      final longBreak = plan.breaks.singleWhere((b) => b.durationSeconds == 30 * 60);
+      expect(
+        plan.breaks.where((b) => b.durationSeconds == 5 * 60).length,
+        greaterThanOrEqualTo(2),
+      );
+      expect(
+        plan.breaks
+            .where((b) => b.id != longBreak.id)
+            .every((b) => !b.startUtc.isBefore(longBreak.endUtc)),
+        isTrue,
+      );
+    });
+
     test(
       'A08: Фиксация одного лога (durationLocked) сохраняет его длительность',
       () {

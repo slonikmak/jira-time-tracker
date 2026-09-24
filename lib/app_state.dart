@@ -85,6 +85,15 @@ class AppState extends ChangeNotifier {
         orElse: () => UiThemeMode.system,
       ),
     );
+    final savedDaySettings = store.getSetting('day_settings');
+    if (savedDaySettings != null) {
+      try {
+        final loaded = DaySettings.fromJson(savedDaySettings);
+        if (loaded.validationErrors().isEmpty) _daySettings = loaded;
+      } catch (_) {
+        _daySettings = const DaySettings();
+      }
+    }
     _initData();
     if (autoStartApiServer && !isReadOnly) {
       startApiServer();
@@ -1058,6 +1067,11 @@ class AppState extends ChangeNotifier {
   }
 
   void updateDaySettings(DaySettings settings) {
+    final errors = settings.validationErrors();
+    if (errors.isNotEmpty) {
+      throw ArgumentError(errors.values.join('\n'));
+    }
+    store.setSetting('day_settings', settings.toJson());
     _daySettings = settings;
     notifyListeners();
   }
@@ -1091,10 +1105,6 @@ class AppState extends ChangeNotifier {
           _lockedSourceLogIds.add(dl.sourceLogId);
         }
       }
-
-      try {
-        _daySettings = DaySettings.fromJson(draft.settingsSnapshot);
-      } catch (_) {}
 
       try {
         final list = jsonDecode(draft.importedWorklogsSnapshot) as List;
@@ -1868,6 +1878,7 @@ class AppState extends ChangeNotifier {
         startUtc: plan.dayStartUtc,
         endUtc: plan.dayEndUtc,
         seed: seed,
+        settingsSnapshot: _daySettings.toJson(),
       );
 
       store.saveDayDraft(

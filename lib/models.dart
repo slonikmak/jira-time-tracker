@@ -234,6 +234,8 @@ class LocalLog {
 
 /// Настройки сборки рабочего дня.
 class DaySettings {
+  static const maxShortBreakCount = 95;
+
   final int startMinutesMin; // 08:00 = 480
   final int startMinutesMax; // 09:00 = 540
   final int totalDurationSecondsMin; // 7h30m = 27000
@@ -261,6 +263,47 @@ class DaySettings {
     this.shortBreakDurationSecondsMin = 5 * 60,
     this.shortBreakDurationSecondsMax = 10 * 60,
   });
+
+  Map<String, String> validationErrors() {
+    final errors = <String, String>{};
+    if (startMinutesMin < 0 ||
+        startMinutesMax >= 24 * 60 ||
+        startMinutesMin > startMinutesMax) {
+      errors['start'] = 'Начало дня: укажите время от 00:00 до 23:59, от ≤ до.';
+    }
+    if (totalDurationSecondsMin <= 0 ||
+        totalDurationSecondsMax > 24 * 3600 ||
+        totalDurationSecondsMin > totalDurationSecondsMax) {
+      errors['duration'] =
+          'Длительность дня: укажите положительное время до 24 часов, от ≤ до.';
+    }
+    if (lunchStartMinutesMin < 0 ||
+        lunchStartMinutesMax >= 24 * 60 ||
+        lunchStartMinutesMin > lunchStartMinutesMax) {
+      errors['long_start'] =
+          'Начало длинной паузы: укажите время от 00:00 до 23:59, от ≤ до.';
+    }
+    if (lunchDurationSecondsMin < 0 ||
+        lunchDurationSecondsMax > 24 * 3600 ||
+        lunchDurationSecondsMin > lunchDurationSecondsMax ||
+        (lunchDurationSecondsMin == 0) != (lunchDurationSecondsMax == 0)) {
+      errors['long_duration'] =
+          'Длительность длинной паузы: укажите 0–0 для отключения или положительное время, от ≤ до.';
+    }
+    if (shortBreakCountMin < 0 ||
+        shortBreakCountMin > shortBreakCountMax ||
+        shortBreakCountMax > maxShortBreakCount) {
+      errors['short_count'] =
+          'Короткие паузы: укажите целое число от 0 до $maxShortBreakCount, от ≤ до.';
+    }
+    if (shortBreakDurationSecondsMin <= 0 ||
+        shortBreakDurationSecondsMax > 24 * 3600 ||
+        shortBreakDurationSecondsMin > shortBreakDurationSecondsMax) {
+      errors['short_duration'] =
+          'Длительность короткой паузы: укажите положительное время, от ≤ до.';
+    }
+    return errors;
+  }
 
   Map<String, dynamic> toMap() {
     return {
@@ -628,7 +671,6 @@ class GapNeighbors {
   }
 }
 
-
 /// Тип маршрута авторизации в Jira Cloud.
 enum JiraAuthRoute {
   direct,
@@ -810,4 +852,3 @@ class AgentSegmentInput {
     this.fixedStartTime,
   });
 }
-

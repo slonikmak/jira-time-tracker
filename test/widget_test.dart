@@ -182,4 +182,87 @@ void main() {
       Brightness.dark,
     );
   });
+
+  testWidgets('Настройки дня сохраняют диапазон для умной пересборки', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final appState = createTestAppState();
+    await tester.pumpWidget(JiraTimeTrackerApp(appState: appState));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Настройки'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Сборка дня'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const ValueKey('day-start-min')),
+      '08:30',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('day-start-max')),
+      '09:30',
+    );
+    await tester.tap(find.text('Сохранить параметры'));
+    await tester.pumpAndSettle();
+
+    expect(appState.daySettings.startMinutesMin, 8 * 60 + 30);
+    expect(appState.daySettings.startMinutesMax, 9 * 60 + 30);
+    expect(store.getSetting('day_settings'), isNotNull);
+  });
+
+  testWidgets('Неверный диапазон не сохраняется, сброс ждёт сохранения', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final appState = createTestAppState();
+    await tester.pumpWidget(JiraTimeTrackerApp(appState: appState));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Настройки'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('day-start-min')),
+      '10:00',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('day-start-max')),
+      '09:00',
+    );
+    await tester.tap(find.text('Сохранить параметры'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Начало дня: укажите'), findsOneWidget);
+    expect(store.getSetting('day_settings'), isNull);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('day-start-min')),
+      '08:30',
+    );
+    await tester.tap(find.text('Сохранить параметры'));
+    await tester.pumpAndSettle();
+    expect(appState.daySettings.startMinutesMin, 8 * 60 + 30);
+
+    await tester.tap(find.text('Сбросить'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const ValueKey('day-start-min')))
+          .controller!
+          .text,
+      '08:00',
+    );
+    expect(appState.daySettings.startMinutesMin, 8 * 60 + 30);
+    await tester.tap(find.text('Сохранить параметры'));
+    await tester.pumpAndSettle();
+    expect(appState.daySettings.startMinutesMin, 8 * 60);
+  });
 }

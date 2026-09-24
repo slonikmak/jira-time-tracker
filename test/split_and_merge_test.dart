@@ -316,6 +316,9 @@ void main() {
           part1Description: 'Часть A',
           part2Description: 'Часть B',
         );
+        appState.updateDaySettings(
+          const DaySettings(shortBreakCountMin: 0, shortBreakCountMax: 0),
+        );
         await appState.rebuildCurrentDay(customSeed: 2);
 
         expect(appState.currentSegments.length, 2);

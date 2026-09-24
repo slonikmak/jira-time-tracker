@@ -611,16 +611,9 @@ class DayBuilder {
     }
 
     final settings = input.settings;
-    if (settings.startMinutesMin > settings.startMinutesMax ||
-        settings.totalDurationSecondsMin > settings.totalDurationSecondsMax ||
-        settings.totalDurationSecondsMax > 24 * 3600 ||
-        settings.lunchStartMinutesMin > settings.lunchStartMinutesMax ||
-        settings.lunchDurationSecondsMin > settings.lunchDurationSecondsMax ||
-        settings.shortBreakCountMin > settings.shortBreakCountMax ||
-        settings.shortBreakDurationSecondsMin <= 0 ||
-        settings.shortBreakDurationSecondsMin >
-            settings.shortBreakDurationSecondsMax) {
-      throw const DayBuilderException('Некорректные настройки рабочего дня.');
+    final settingsErrors = settings.validationErrors();
+    if (settingsErrors.isNotEmpty) {
+      throw DayBuilderException(settingsErrors.values.join('\n'));
     }
 
     final rnd = Random(seed);
@@ -895,10 +888,7 @@ class DayBuilder {
         maximumWorkSeconds: targetWorkSeconds,
         freeIntervals: freeIntervals,
         existingBreaks: breaks,
-        mandatoryPauseSeconds: (settings.shortBreakCountMax > 0 &&
-                settings.shortBreakDurationSecondsMax > 0)
-            ? settings.shortBreakDurationSecondsMin
-            : 0,
+        mandatoryPauseSeconds: settings.shortBreakDurationSecondsMin,
         draftId: input.draftId,
         seed: seed,
         occupiedActivities: occupied.where((o) => o.type != 'Перерыв').toList(),
@@ -1415,10 +1405,10 @@ class DayBuilder {
       );
 
       // Границы поиска обеда
-      var minLunchStart = earliestLunch.isBefore(dayStartUtc)
+      final minLunchStart = earliestLunch.isBefore(dayStartUtc)
           ? dayStartUtc
           : earliestLunch;
-      var maxLunchStart =
+      final maxLunchStart =
           latestLunch.isAfter(
             dayEndUtc.subtract(Duration(seconds: lunchDuration)),
           )
@@ -1426,8 +1416,9 @@ class DayBuilder {
           : latestLunch;
 
       if (maxLunchStart.isBefore(minLunchStart)) {
-        minLunchStart = dayStartUtc;
-        maxLunchStart = dayEndUtc.subtract(Duration(seconds: lunchDuration));
+        throw const DayBuilderException(
+          'Невозможно разместить длинную паузу в заданном диапазоне начала. Измените настройки дня.',
+        );
       }
 
       DateTime? chosenLunchStart;
@@ -1468,7 +1459,7 @@ class DayBuilder {
         }
       }
 
-      // Если случайный подбор не нашёл слот, ищем линейно с шагом 5 минут
+      // Если случайный подбор не нашёл слот, ищем линейно по минутам.
       if (chosenLunchStart == null && !maxLunchStart.isBefore(minLunchStart)) {
         var candidate = minLunchStart;
         while (!candidate.isAfter(maxLunchStart)) {
@@ -1493,31 +1484,13 @@ class DayBuilder {
             chosenLunchStart = candidate;
             break;
           }
-          candidate = candidate.add(const Duration(minutes: 5));
-        }
-      }
-
-      // Если всё ещё нет, ищем любой свободный промежуток дня >= lunchDuration
-      if (chosenLunchStart == null) {
-        var cursor = dayStartUtc;
-        for (final ew in existingWorklogs) {
-          if (ew.startUtc.difference(cursor).inSeconds >= lunchDuration) {
-            chosenLunchStart = cursor;
-            break;
-          }
-          if (ew.endUtc.isAfter(cursor)) {
-            cursor = ew.endUtc;
-          }
-        }
-        if (chosenLunchStart == null &&
-            dayEndUtc.difference(cursor).inSeconds >= lunchDuration) {
-          chosenLunchStart = cursor;
+          candidate = candidate.add(const Duration(minutes: 1));
         }
       }
 
       if (chosenLunchStart == null) {
         throw const DayBuilderException(
-          'Невозможно разместить длинный перерыв: нет свободного времени достаточной длины.',
+          'Невозможно разместить длинную паузу в заданном диапазоне начала: время занято. Измените настройки дня.',
         );
       }
 
@@ -1532,58 +1505,25 @@ class DayBuilder {
     }
 
     // 2. Размещение коротких пауз
-    var breakCount = settings.shortBreakCountMax > settings.shortBreakCountMin
+    final breakCount = settings.shortBreakCountMax > settings.shortBreakCountMin
         ? settings.shortBreakCountMin +
               rnd.nextInt(
                 settings.shortBreakCountMax - settings.shortBreakCountMin + 1,
               )
         : settings.shortBreakCountMin;
 
-    final daySpanHours = dayEndUtc.difference(dayStartUtc).inSeconds / 3600.0;
-    if (daySpanHours <= 3.5) {
-      breakCount = min(breakCount, 1);
-    } else if (daySpanHours <= 5.5) {
-      breakCount = min(breakCount, 2);
-    }
-
     if (breakCount > 0) {
-      if (lunchBreak != null) {
-        final morningBreaksCount = breakCount ~/ 2;
-        final afternoonBreaksCount = breakCount - morningBreaksCount;
-
-        _placeShortBreaksInSpan(
-          spanStart: dayStartUtc,
-          spanEnd: lunchBreak.startUtc,
-          count: morningBreaksCount,
-          settings: settings,
-          existingWorklogs: existingWorklogs,
-          breaks: breaks,
-          draftId: draftId,
-          rnd: rnd,
-        );
-
-        _placeShortBreaksInSpan(
-          spanStart: lunchBreak.endUtc,
-          spanEnd: dayEndUtc,
-          count: afternoonBreaksCount,
-          settings: settings,
-          existingWorklogs: existingWorklogs,
-          breaks: breaks,
-          draftId: draftId,
-          rnd: rnd,
-        );
-      } else {
-        _placeShortBreaksInSpan(
-          spanStart: dayStartUtc,
-          spanEnd: dayEndUtc,
-          count: breakCount,
-          settings: settings,
-          existingWorklogs: existingWorklogs,
-          breaks: breaks,
-          draftId: draftId,
-          rnd: rnd,
-        );
-      }
+      // Ищем по всему дню: длинная пауза и Jira-записи уже отмечены занятыми.
+      _placeShortBreaksInSpan(
+        spanStart: dayStartUtc,
+        spanEnd: dayEndUtc,
+        count: breakCount,
+        settings: settings,
+        existingWorklogs: existingWorklogs,
+        breaks: breaks,
+        draftId: draftId,
+        rnd: rnd,
+      );
     }
 
     breaks.sort((a, b) => a.startUtc.compareTo(b.startUtc));
@@ -1604,7 +1544,11 @@ class DayBuilder {
     if (count <= 0) return;
 
     final spanDuration = spanEnd.difference(spanStart).inSeconds;
-    if (spanDuration < 600) return; // Слишком короткий интервал
+    if (spanDuration < 600) {
+      throw const DayBuilderException(
+        'Невозможно разместить заданное число коротких пауз: слишком короткий свободный промежуток. Измените настройки дня.',
+      );
+    }
 
     for (var i = 0; i < count; i++) {
       final breakDuration = pickSecondsInRange(
@@ -1633,17 +1577,20 @@ class DayBuilder {
         existingBreaks: breaks,
       );
 
-      if (placedStart != null) {
-        breaks.add(
-          Break(
-            id: generateDeterministicUuid(rnd),
-            draftId: draftId,
-            startUtc: placedStart,
-            durationSeconds: breakDuration,
-            kind: BreakKind.short,
-          ),
+      if (placedStart == null) {
+        throw const DayBuilderException(
+          'Невозможно разместить заданное число коротких пауз в свободном времени. Измените настройки дня.',
         );
       }
+      breaks.add(
+        Break(
+          id: generateDeterministicUuid(rnd),
+          draftId: draftId,
+          startUtc: placedStart,
+          durationSeconds: breakDuration,
+          kind: BreakKind.short,
+        ),
+      );
     }
   }
 
@@ -1712,6 +1659,12 @@ class DayBuilder {
       if (!later.isAfter(maxBound) && isValid(later)) {
         return later;
       }
+    }
+
+    for (var candidate = minBound;
+        !candidate.isAfter(maxBound);
+        candidate = candidate.add(const Duration(minutes: 1))) {
+      if (isValid(candidate)) return candidate;
     }
 
     return null;

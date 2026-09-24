@@ -46,6 +46,22 @@ class SettingsDialog {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
+  static const _actionButtonStyle = ButtonStyle(
+    minimumSize: WidgetStatePropertyAll(Size(0, 38)),
+    padding: WidgetStatePropertyAll(
+      EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+    ),
+    shape: WidgetStatePropertyAll(
+      RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(7)),
+      ),
+    ),
+    textStyle: WidgetStatePropertyAll(
+      TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+    ),
+    visualDensity: VisualDensity.standard,
+  );
+
   late final TextEditingController _urlController;
   late final TextEditingController _emailController;
   late final TextEditingController _tokenController;
@@ -429,7 +445,8 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _buildThemeSelector(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -458,12 +475,20 @@ class _SettingsPageState extends State<SettingsPage> {
                     );
                   }
                 },
-          style: ButtonStyle(
-            visualDensity: VisualDensity.compact,
+          style: _actionButtonStyle.copyWith(
             side: WidgetStatePropertyAll(BorderSide(color: scheme.outline)),
-            shape: WidgetStatePropertyAll(
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
-            ),
+            backgroundColor: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.disabled)) return null;
+              return states.contains(WidgetState.selected)
+                  ? AppColors.selected(theme.brightness == Brightness.dark)
+                  : Colors.transparent;
+            }),
+            foregroundColor: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.disabled)) return null;
+              return states.contains(WidgetState.selected)
+                  ? AppColors.primary(theme.brightness == Brightness.dark)
+                  : scheme.onSurface;
+            }),
           ),
         ),
         if (widget.appState.isReadOnly) ...[
@@ -587,6 +612,7 @@ class _SettingsPageState extends State<SettingsPage> {
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
             OutlinedButton(
+              style: _actionButtonStyle,
               onPressed: widget.appState.isReadOnly
                   ? null
                   : () {
@@ -600,6 +626,7 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             const SizedBox(width: 10),
             FilledButton(
+              style: _actionButtonStyle,
               onPressed: widget.appState.isReadOnly ? null : _saveDaySettings,
               child: const Text('Сохранить параметры'),
             ),
@@ -738,18 +765,14 @@ class _SettingsPageState extends State<SettingsPage> {
           runSpacing: 8,
           children: [
             if (widget.onCancel != null)
-              TextButton(
+              OutlinedButton(
+                style: _actionButtonStyle,
                 onPressed: widget.onCancel,
                 child: const Text('Отмена'),
               ),
             OutlinedButton(
               onPressed: _isChecking ? null : _checkConnection,
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(0, 39),
-                visualDensity: VisualDensity.standard,
-                padding: const EdgeInsets.symmetric(horizontal: 21),
-                textStyle: const TextStyle(fontSize: 13),
-              ),
+              style: _actionButtonStyle,
               child: _isChecking
                   ? const SizedBox(
                       width: 16,
@@ -762,12 +785,7 @@ class _SettingsPageState extends State<SettingsPage> {
               onPressed: _isChecking || widget.appState.isReadOnly
                   ? null
                   : _saveConnection,
-              style: FilledButton.styleFrom(
-                minimumSize: const Size(0, 39),
-                visualDensity: VisualDensity.standard,
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                textStyle: const TextStyle(fontSize: 13),
-              ),
+              style: _actionButtonStyle,
               child: const Text('Сохранить'),
             ),
           ],
@@ -822,7 +840,8 @@ class _SettingsPageState extends State<SettingsPage> {
                 style: theme.textTheme.titleSmall,
               ),
             ),
-            FilledButton.tonalIcon(
+            FilledButton.icon(
+              style: _actionButtonStyle,
               icon: const Icon(Icons.copy, size: 16),
               label: const Text('Скопировать инструкцию'),
               onPressed: () {

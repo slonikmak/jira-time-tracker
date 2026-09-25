@@ -758,6 +758,8 @@ class _WorkScreenState extends State<WorkScreen> {
         final isSelected = widget.appState.selectedLogIds.contains(log.id);
         final isInDraft = widget.appState.isLogInDraft(log.id);
         final draftDate = widget.appState.getDraftDateForLog(log.id);
+        final isInSelectedDateDraft =
+            isInDraft && draftDate == widget.appState.selectedDateString;
         final canRemoveFromDraft =
             isInDraft && widget.appState.canRemoveLogFromDraft(log.id);
 
@@ -783,7 +785,7 @@ class _WorkScreenState extends State<WorkScreen> {
                         color: AppColors.primary(isDark),
                       ),
                     )
-                  else if (isInDraft)
+                  else if (isInSelectedDateDraft)
                     SizedBox(
                       width: 22,
                       height: 24,
@@ -796,6 +798,20 @@ class _WorkScreenState extends State<WorkScreen> {
                           onChanged: canRemoveFromDraft
                               ? (_) => _removeLogFromDraft(context, log.id)
                               : null,
+                        ),
+                      ),
+                    )
+                  else if (isInDraft)
+                    SizedBox(
+                      width: 22,
+                      height: 24,
+                      child: Tooltip(
+                        message:
+                            'Запись уже включена в день ${_formatDraftDate(draftDate!)}',
+                        child: Icon(
+                          Icons.event_available_outlined,
+                          size: 17,
+                          color: AppColors.muted(isDark),
                         ),
                       ),
                     )
@@ -945,16 +961,32 @@ class _WorkScreenState extends State<WorkScreen> {
                         ),
                       ),
                     ),
-                    if (isInDraft && draftDate != null)
+                    if (isInDraft && draftDate != null) ...[
                       TextButton.icon(
                         key: ValueKey('open-draft-${log.id}'),
                         onPressed: () => _openDraft(draftDate),
                         icon: const Icon(Icons.open_in_new, size: 14),
                         label: Text(
-                          'Открыть день · ${_formatDraftDate(draftDate)}',
+                          'В дне ${_formatDraftDate(draftDate)} · Открыть',
                         ),
-                      )
-                    else if (!log.isRunning)
+                      ),
+                      if (!isInSelectedDateDraft && canRemoveFromDraft)
+                        PopupMenuButton<String>(
+                          key: ValueKey('draft-actions-${log.id}'),
+                          tooltip: 'Действия с записью в другом дне',
+                          icon: const Icon(Icons.more_horiz, size: 19),
+                          onSelected: (_) =>
+                              _removeLogFromDraft(context, log.id),
+                          itemBuilder: (context) => [
+                            PopupMenuItem(
+                              value: 'remove-from-draft',
+                              child: Text(
+                                'Убрать из дня ${_formatDraftDate(draftDate)}',
+                              ),
+                            ),
+                          ],
+                        ),
+                    ] else if (!log.isRunning)
                       PopupMenuButton<String>(
                         tooltip: 'Действия с логом',
                         icon: const Icon(Icons.more_horiz, size: 19),
@@ -1157,7 +1189,9 @@ class _WorkScreenState extends State<WorkScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Выбрано $count ${_logWord(count)}',
+                  count == 0
+                      ? 'Для ${_formatHeaderDate(widget.appState.selectedDate, includeWeekday: false)} записи не выбраны'
+                      : 'Выбрано $count ${_logWord(count)}',
                   style: const TextStyle(
                     fontWeight: FontWeight.w500,
                     fontSize: 13,

@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Jira Time Tracker — минималистичный редизайн</title>
+<style>
+:root{
+  --bg:#f5f5f6; --surface:#ffffff;
+  --ink:#17171a; --ink2:#55555c; --muted:#9a9aa2;
+  --line:#e8e8ec; --line2:#f1f1f4; --hover:#f6f6f8;
+  --accent:#4f46e5; --accent-ink:#4338ca; --accent-soft:#efeffd;
+  --s1:#4f46e5; --s2:#9b9cf3; --s3:#cfcff9; --existing:#dcdce1; --break:#efeFF2;
+  --ok:#17805e; --ok-soft:#e9f6f1;
+  --warn:#a15c07; --warn-soft:#fcf3e2;
+  --err:#c4304b; --err-soft:#fcecef;
+  --r:12px; --r-sm:9px;
+  --mono:"Cascadia Mono","JetBrains Mono",Consolas,monospace;
+}
+*{margin:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:14px/1.5 "Inter","Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+svg.ic{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.num{font-variant-numeric:tabular-nums}
+/* Доска */
+.board{max-width:1240px;margin:0 auto;padding:52px 28px 90px}
+.kicker{font:600 11px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+.board-head h1{font-size:27px;font-weight:650;letter-spacing:-.02em;margin-top:10px}
+.lead{color:var(--ink2);margin-top:10px;max-width:760px}
+.principles{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px}
+.principle{background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:12.5px;color:var(--ink2)}
+.shot{margin-top:60px}
+.shot-head{display:flex;align-items:baseline;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.shot-num{font:600 12px/1 var(--mono);color:var(--accent-ink);background:var(--accent-soft);border-radius:6px;padding:5px 9px}
+.shot-head h2{font-size:17px;font-weight:600;letter-spacing:-.01em}
+.shot-head p{color:var(--muted);font-size:13px}
+.frame{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 1px 2px #1b1b1f08,0 16px 44px -22px #1b1b1f22}
+/* Каркас приложения */
+.appbar{display:flex;align-items:center;gap:10px;padding:0 20px;height:58px;border-bottom:1px solid var(--line)}
+.logo{display:flex;align-items:center;gap:10px;font-weight:650;font-size:13.5px;letter-spacing:-.01em}
+.logo-mark{width:26px;height:26px;border-radius:8px;background:var(--ink);color:#fff;display:grid;place-items:center}
+.logo-mark svg{width:14px;height:14px}
+.tabs{display:flex;gap:2px;margin-left:14px}
+.tab{border:0;background:none;font:550 13px/1 inherit;color:var(--muted);padding:8px 13px;border-radius:8px;display:inline-flex;align-items:center;gap:7px}
+.tab.on{color:var(--ink);background:var(--hover)}
+.tab .cnt{font:500 11px/1 var(--mono);color:var(--muted)}
+.appbar .right{margin-left:auto;display:flex;gap:4px;align-items:center;color:var(--muted)}
+/* Кнопки и поля */
+.btn{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);border-radius:var(--r-sm);padding:9px 15px;font:550 13px/1 inherit;color:var(--ink)}
+.btn svg{width:15px;height:15px}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:#fff}
+.btn.ghost{border-color:transparent;color:var(--ink2)}
+.btn.mini{padding:6px 10px;font-size:12px}
+.btn:disabled{opacity:.45}
+.iconbtn{width:32px;height:32px;display:grid;place-items:center;border-radius:8px;border:1px solid transparent;background:none;color:var(--ink2)}
+.iconbtn.bordered{border-color:var(--line)}
+.iconbtn.accent{color:var(--accent);background:var(--accent-soft)}
+.input{border:1px solid var(--line);border-radius:var(--r-sm);padding:10px 13px;font:inherit;color:var(--ink);background:var(--surface)}
+.input::placeholder{color:var(--muted)}
+/* Экраны — общее */
+.screen{padding:28px 28px 0}
+.screen-head{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;margin-bottom:20px}
+.screen-head h3{font-size:20px;font-weight:650;letter-spacing:-.02em}
+.screen-head .sub{color:var(--muted);font-size:13px;margin-top:3px}
+.col-label{font:600 11px/1 inherit;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:12px;display:flex;justify-content:space-between;align-items:center}
+.footbar{display:flex;align-items:center;gap:16px;border-top:1px solid var(--line);padding:16px 28px;background:var(--surface)}
+.footbar .sum strong{font-size:14px;font-weight:650}
+.footbar .sum div{font-size:12px;color:var(--muted);margin-top:2px}
+.footbar .spacer{flex:1}
+/* Работа */
+.addrow{display:flex;gap:10px;margin-bottom:26px}
+.addrow .input{flex:1}
+.workgrid{display:grid;grid-template-columns:336px minmax(0,1fr);gap:32px;padding-bottom:30px}
+.task{border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;margin-bottom:10px}
+.task-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.key{font:600 12px/1 var(--mono);color:var(--accent-ink);letter-spacing:.03em}
+.badge{font:550 11px/1 inherit;color:var(--ink2);background:var(--line2);border-radius:999px;padding:5px 10px}
+.task h4{font-size:13.5px;font-weight:550;margin:9px 0 3px}
+.task .meta{font-size:12px;color:var(--muted)}
+.task-acts{display:flex;gap:6px;margin-top:12px;align-items:center}
+.playbtn{width:30px;height:30px;border-radius:999px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;border:0}
+.playbtn svg{width:13px;height:13px}
+.playbtn.stop{background:var(--ok-soft);color:var(--ok)}
+.mininav{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.mininav .tab{border-radius:0;padding:9px 12px}
+.mininav .tab.on{background:none;box-shadow:inset 0 -2px 0 var(--ink)}
+.log{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:14px;padding:14px 8px;border-bottom:1px solid var(--line2);align-items:start}
+.log .lmeta{font-size:11.5px;color:var(--muted);display:flex;gap:6px;align-items:center}
+.log .lmeta .key{font-size:11.5px}
+.log .ltitle{font-weight:550;font-size:13.5px;margin-top:3px}
+.log .ldesc{font-size:12.5px;color:var(--ink2);margin-top:1px}
+.log .right{text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:7px}
+.time{font:600 13px/1 var(--mono);letter-spacing:.02em}
+.check{appearance:none;width:17px;height:17px;border:1.5px solid var(--line);border-radius:5px;margin:2px 0 0;background:var(--surface);position:relative}
+.check.on{background:var(--ink);border-color:var(--ink)}
+.check.on::after{content:"";position:absolute;left:4.5px;top:1.5px;width:5px;height:9px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+.check.off{opacity:.35}
+.log.running{background:var(--accent-soft);border-radius:var(--r);border-bottom-color:transparent;padding:14px 12px;margin:4px -4px}
+.pill{display:inline-flex;align-items:center;gap:6px;font:550 11px/1 inherit;border-radius:999px;padding:5px 10px}
+.pill .dot{width:6px;height:6px;border-radius:99px;background:currentColor}
+.pill.run{color:var(--accent-ink);background:#e3e4fb}
+.pill.ok{color:var(--ok);background:var(--ok-soft)}
+.pill.warn{color:var(--warn);background:var(--warn-soft)}
+.pill.err{color:var(--err);background:var(--err-soft)}
+.pill.plain{color:var(--ink2);background:var(--line2)}
+.band{display:flex;justify-content:space-between;align-items:center;gap:10px;border:1px solid var(--line);border-radius:var(--r);padding:10px 14px;margin-bottom:14px;font-size:12.5px;color:var(--ink2)}
+/* @@CSS */
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5.5v13l11-6.5z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5h3v14H8zM14 5h3v14h-3z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M14.5 5.5l4 4L8 20H4v-4zM13 7l4 4"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M4.5 12.5l5 5 10-11"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V13M12 16.4v.2"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5.2l3.4 2"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="16" rx="3"/><path d="M3.5 10h17M8 2.8V6.5M16 2.8V6.5"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h9M17.5 7H20M4 17h3M11.5 17H20"/><circle cx="15" cy="7" r="2.4"/><circle cx="9" cy="17" r="2.4"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4.5 12h15M14 6.5l5.5 5.5-5.5 5.5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></symbol>
+  <symbol id="i-coffee" viewBox="0 0 24 24"><path d="M5 9h11v6a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4zM16 10h1.5a2.5 2.5 0 0 1 0 5H16M8 5.5V7M12 5.5V7"/></symbol>
+  <symbol id="i-timer" viewBox="0 0 24 24"><circle cx="12" cy="13.5" r="8"/><path d="M12 9.5v4.2l2.8 1.7M9.5 2.5h5"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 3.5v3.6h-3.6"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></symbol>
+</svg>
+<div class="board">
+  <header class="board-head">
+    <p class="kicker">Концепт · 22 сентября 2026</p>
+    <h1>Jira Time Tracker — минималистичный редизайн</h1>
+    <p class="lead">Спокойный нейтральный интерфейс: одна акцентная пара (indigo), типографика вместо украшений, моноширинные цифры времени, hairline-разделители и больше воздуха. Компоновка и правила состояний — по UX.md, изменён только визуальный язык.</p>
+    <div class="principles">
+      <span class="principle">Нейтральная база · 1 акцент</span>
+      <span class="principle">Моноширинные длительности</span>
+      <span class="principle">Разделители 1px вместо рамок</span>
+      <span class="principle">Радиусы 9–12px, без теней в списках</span>
+      <span class="principle">Состояния = текст + иконка</span>
+    </div>
+  </header>
+  <!-- @@BODY -->
+</div>
+</body>
+</html>

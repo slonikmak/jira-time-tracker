@@ -369,6 +369,70 @@ void main() {
   });
 
   testWidgets(
+    'Лог из другого дня показывает статус вместо выбора для текущей даты',
+    (WidgetTester tester) async {
+      final appState = createAppState();
+      final log = await appState.addManualLog(
+        issueId: '10001',
+        durationSeconds: 1800,
+      );
+      appState.setSelectedDate(DateTime(2026, 9, 13));
+      appState.toggleLogSelection(log.id);
+      await appState.buildDay(customSeed: 42);
+      appState.setSelectedDate(DateTime(2026, 9, 14));
+
+      await tester.pumpWidget(JiraTimeTrackerApp(appState: appState));
+      await tester.pumpAndSettle();
+
+      await revealLogRow(tester, log.id);
+      final logRow = find.byKey(ValueKey('log-${log.id}'));
+      expect(
+        find.descendant(of: logRow, matching: find.byType(Checkbox)),
+        findsNothing,
+      );
+      expect(find.text('В дне 13.09.2026 · Открыть'), findsOneWidget);
+      expect(find.text('Для 14 сентября записи не выбраны'), findsOneWidget);
+
+      final buildButton = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Собрать день'),
+      );
+      expect(buildButton.onPressed, isNull);
+    },
+  );
+
+  testWidgets('Лог можно явно убрать из черновика другого дня', (
+    WidgetTester tester,
+  ) async {
+    final appState = createAppState();
+    final log = await appState.addManualLog(
+      issueId: '10001',
+      durationSeconds: 1800,
+    );
+    appState.setSelectedDate(DateTime(2026, 9, 13));
+    appState.toggleLogSelection(log.id);
+    await appState.buildDay(customSeed: 42);
+    appState.setSelectedDate(DateTime(2026, 9, 14));
+
+    await tester.pumpWidget(JiraTimeTrackerApp(appState: appState));
+    await tester.pumpAndSettle();
+
+    await revealLogRow(tester, log.id);
+    await tester.tap(find.byKey(ValueKey('draft-actions-${log.id}')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Убрать из дня 13.09.2026'));
+    await tester.pumpAndSettle();
+
+    expect(appState.isLogInDraft(log.id), isFalse);
+    expect(
+      find.descendant(
+        of: find.byKey(ValueKey('log-${log.id}')),
+        matching: find.byType(Checkbox),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
     'Строка задачи показывает статус и соседние действия таймера и ручного времени',
     (WidgetTester tester) async {
       final appState = createAppState();

@@ -22,6 +22,8 @@ class DayScreen extends StatelessWidget {
       listenable: appState,
       builder: (context, _) {
         final hasDraft = appState.currentDraft != null;
+        final hasExistingWorklogs = appState.importedWorklogs.isNotEmpty;
+        final hasDayData = hasDraft || hasExistingWorklogs;
         return Scaffold(
           body: Column(
             children: [
@@ -33,7 +35,7 @@ class DayScreen extends StatelessWidget {
               if (hasDraft && appState.validationErrors.isNotEmpty)
                 _buildValidationErrors(context),
               Expanded(
-                child: hasDraft
+                child: hasDayData
                     ? _buildDayGrid(context)
                     : _buildEmptyDay(context),
               ),
@@ -171,7 +173,9 @@ class DayScreen extends StatelessWidget {
 
     final draft = appState.currentDraft;
     final subtitle = draft == null
-        ? 'Соберите расписание из выбранных логов'
+        ? appState.importedWorklogs.isEmpty
+              ? 'Соберите расписание из выбранных логов'
+              : 'Записи Jira за выбранный день'
         : draft.status == DraftStatus.completed
         ? 'Все записи отправлены'
         : appState.isDraftLockedFromRebuild
@@ -1026,7 +1030,8 @@ class DayScreen extends StatelessWidget {
   }
 
   Widget _buildSchedulePanel(BuildContext context) {
-    if (appState.currentDraft == null) {
+    final hasDraft = appState.currentDraft != null;
+    if (!hasDraft && appState.importedWorklogs.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1089,7 +1094,9 @@ class DayScreen extends StatelessWidget {
             Text('Расписание', style: Theme.of(context).textTheme.titleSmall),
             const Spacer(),
             Text(
-              'Нажмите на интервал, чтобы изменить',
+              hasDraft
+                  ? 'Нажмите на интервал, чтобы изменить'
+                  : 'Записи Jira доступны только для чтения',
               style: TextStyle(fontSize: 12, color: AppColors.muted(isDark)),
             ),
           ],

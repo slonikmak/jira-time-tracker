@@ -1,0 +1,2 @@
+[server-stderr] 2026/09/22 17:58:07 [MCP] Starting server in stdio mode
+[server-stderr] 2026/09/22 17:58:07 [TransportClient] connected to \\.\pipe\pencil-desktop

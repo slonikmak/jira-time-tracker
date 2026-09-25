@@ -699,5 +699,78 @@ void main() {
         expect(appState.selectedLogIds, {'log-2'});
       },
     );
+
+    testWidgets(
+      'DayScreen продолжает показывать Jira worklogs после удаления последнего локального сегмента',
+      (tester) async {
+        final now = DateTime.utc(2026, 9, 14, 8);
+        final issue = Issue(
+          scope: testScope,
+          issueId: '1001',
+          key: 'PROJ-1',
+          summary: 'Фича',
+          lastUsedAtUtc: now,
+        );
+        store.saveLogAndIssue(
+          issue: issue,
+          log: LocalLog(
+            id: 'log-1',
+            scope: testScope,
+            issueId: issue.issueId,
+            titleSnapshot: issue.summary,
+            accumulatedSeconds: 3600,
+            createdAtUtc: now,
+          ),
+        );
+
+        final appState = AppState(
+          store: store,
+          connectionStore: ConnectionStore(
+            secureStorage: InMemorySecureStorage(),
+          ),
+          jiraClient: JiraClient(),
+          isReadOnly: false,
+          initialConnection: const JiraConnection(
+            baseUrl: 'https://test.atlassian.net',
+            email: 'test@example.com',
+            accountId: 'acc-123',
+            displayName: 'Tester',
+            route: JiraAuthRoute.direct,
+            scope: testScope,
+          ),
+          nowProvider: () => now,
+        );
+        appState.toggleLogSelection('log-1');
+        await appState.buildDay(customSeed: 42);
+        appState.setImportedWorklogs([
+          ImportedWorklog(
+            id: 'jira-worklog-1',
+            issueId: '1001',
+            issueKey: 'PROJ-1',
+            startUtc: DateTime.utc(2026, 9, 14, 7),
+            durationSeconds: 3600,
+            authorAccountId: 'acc-123',
+            comment: 'Уже отправлено в Jira',
+          ),
+        ]);
+
+        tester.view.physicalSize = const Size(1280, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(() => tester.view.resetPhysicalSize());
+
+        await tester.pumpWidget(
+          MaterialApp(home: DayScreen(appState: appState)),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Уже отправлено в Jira'), findsOneWidget);
+
+        appState.deleteSegment(appState.currentSegments.single.id);
+        await tester.pumpAndSettle();
+
+        expect(appState.currentDraft, isNull);
+        expect(appState.importedWorklogs, hasLength(1));
+        expect(find.text('Уже отправлено в Jira'), findsOneWidget);
+      },
+    );
   });
 }

@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import '../app_state.dart';
 import '../log_clock.dart';
 import '../models.dart';
-import '../service_tickets.dart';
 import 'app_theme.dart';
 
 class _TicketOption {
@@ -11,14 +10,16 @@ class _TicketOption {
   final String key;
   final String title;
   final String? description;
-  final bool isService;
+  final bool isQuick;
+  final bool startsGroup;
 
   const _TicketOption({
     required this.id,
     required this.key,
     required this.title,
     this.description,
-    this.isService = false,
+    this.isQuick = false,
+    this.startsGroup = false,
   });
 }
 
@@ -80,40 +81,52 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
   }
 
   List<_TicketOption> _getTicketOptions() {
-    final List<_TicketOption> options = [];
+    final options = <_TicketOption>[];
     final existingIssues = widget.appState.issues;
-    final Set<String> existingKeys = {};
+    final includedIssueIds = <String>{};
 
-    for (final issue in existingIssues) {
-      existingKeys.add(issue.key.toUpperCase());
-      final service = findServiceTicket(issue.key);
-      options.add(
-        _TicketOption(
-          id: issue.issueId,
-          key: issue.key,
-          title: issue.summary,
-          description: service?.description,
-          isService: service != null,
-        ),
-      );
-    }
-
-    // Добавляем все предопределённые служебные тикеты, которых ещё нет в списке недавних
-    for (final service in kServiceTickets) {
-      if (!existingKeys.contains(service.key.toUpperCase())) {
+    for (final quickIssue in widget.appState.quickIssues) {
+      final issue = existingIssues
+          .where((candidate) => candidate.issueId == quickIssue.issueId)
+          .firstOrNull;
+      if (issue != null) {
+        final startsGroup = options.isEmpty;
+        includedIssueIds.add(issue.issueId);
         options.add(
           _TicketOption(
-            id: service.key,
-            key: service.key,
-            title: service.category,
-            description: service.description,
-            isService: true,
+            id: issue.issueId,
+            key: issue.key,
+            title: issue.summary,
+            description: quickIssue.note,
+            isQuick: true,
+            startsGroup: startsGroup,
           ),
         );
       }
     }
 
+    var firstRecent = true;
+    for (final issue in existingIssues) {
+      if (includedIssueIds.contains(issue.issueId)) continue;
+      options.add(
+        _TicketOption(
+          id: issue.issueId,
+          key: issue.key,
+          title: issue.summary,
+          startsGroup: firstRecent,
+        ),
+      );
+      firstRecent = false;
+    }
+
     return options;
+  }
+
+  QuickIssue? _quickIssueFor(String issueId) {
+    for (final quickIssue in widget.appState.quickIssues) {
+      if (quickIssue.issueId == issueId) return quickIssue;
+    }
+    return null;
   }
 
   @override
@@ -153,14 +166,6 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
           (i) => i.issueId == _selectedIssueId || i.key == _selectedIssueId,
         )
         .firstOrNull;
-
-    if (selectedIssue == null && _selectedIssueId != null) {
-      final ticket = findServiceTicket(_selectedIssueId!);
-      if (ticket != null) {
-        selectedIssue = await widget.appState.addServiceTicket(ticket);
-        _selectedIssueId = selectedIssue.issueId;
-      }
-    }
 
     if (selectedIssue == null) {
       setState(() {
@@ -280,7 +285,9 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
               if (widget.initialIssue != null) ...[
                 Builder(
                   builder: (context) {
-                    final service = findServiceTicket(widget.initialIssue!.key);
+                    final quickIssue = _quickIssueFor(
+                      widget.initialIssue!.issueId,
+                    );
                     return Container(
                       constraints: const BoxConstraints(minHeight: 64),
                       padding: const EdgeInsets.symmetric(
@@ -329,10 +336,10 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
                               ),
                             ],
                           ),
-                          if (service != null) ...[
+                          if (quickIssue?.note?.isNotEmpty == true) ...[
                             const SizedBox(height: 4),
                             Text(
-                              service.description,
+                              quickIssue!.note!,
                               style: TextStyle(
                                 fontSize: 11,
                                 color: AppColors.muted(isDark),
@@ -397,6 +404,19 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
                             children: [
+                              if (opt.startsGroup) ...[
+                                Text(
+                                  opt.isQuick
+                                      ? 'БЫСТРЫЕ ЗАДАЧИ'
+                                      : 'НЕДАВНИЕ ЗАДАЧИ',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    letterSpacing: .4,
+                                    color: AppColors.muted(isDark),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                              ],
                               Row(
                                 children: [
                                   Container(
@@ -405,7 +425,7 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
                                       vertical: 1,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: opt.isService
+                                      color: opt.isQuick
                                           ? AppColors.selected(isDark)
                                           : AppColors.hover(isDark),
                                       borderRadius: BorderRadius.circular(4),
@@ -415,7 +435,7 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 11,
-                                        color: opt.isService
+                                        color: opt.isQuick
                                             ? AppColors.primary(isDark)
                                             : null,
                                       ),

@@ -122,6 +122,55 @@ class Issue {
   int get hashCode => Object.hash(scope, issueId);
 }
 
+/// Сохранённая ссылка на существующую Jira-задачу для быстрого выбора.
+class QuickIssue {
+  final String scope;
+  final String issueId;
+  final String? note;
+  final DateTime createdAtUtc;
+
+  const QuickIssue({
+    required this.scope,
+    required this.issueId,
+    this.note,
+    required this.createdAtUtc,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'scope': scope,
+    'issue_id': issueId,
+    'note': note,
+    'created_at_utc': createdAtUtc.toIso8601String(),
+  };
+
+  factory QuickIssue.fromMap(Map<String, dynamic> map) => QuickIssue(
+    scope: map['scope'] as String,
+    issueId: map['issue_id'] as String,
+    note: map['note'] as String?,
+    createdAtUtc: DateTime.parse(map['created_at_utc'] as String),
+  );
+
+  QuickIssue copyWith({String? note, bool clearNote = false}) => QuickIssue(
+    scope: scope,
+    issueId: issueId,
+    note: clearNote ? null : (note ?? this.note),
+    createdAtUtc: createdAtUtc,
+  );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is QuickIssue &&
+          runtimeType == other.runtimeType &&
+          scope == other.scope &&
+          issueId == other.issueId &&
+          note == other.note &&
+          createdAtUtc == other.createdAtUtc;
+
+  @override
+  int get hashCode => Object.hash(scope, issueId, note, createdAtUtc);
+}
+
 /// Исходная локальная запись о затраченном времени.
 class LocalLog {
   final String id;
@@ -834,20 +883,20 @@ class ImportedWorklog {
 
 /// Входной сегмент для формирования дня от внешнего AI-агента.
 class AgentSegmentInput {
-  final String issueKey;
+  final String? issueKey;
   final DateTime startUtc;
   final int durationSeconds;
   final String description;
-  final String? sourceLogId;
+  final String sourceLogId;
   final bool isFixed;
   final String? fixedStartTime;
 
   const AgentSegmentInput({
-    required this.issueKey,
+    required this.sourceLogId,
     required this.startUtc,
     required this.durationSeconds,
+    this.issueKey,
     this.description = '',
-    this.sourceLogId,
     this.isFixed = false,
     this.fixedStartTime,
   });

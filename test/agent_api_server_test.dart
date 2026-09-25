@@ -18,7 +18,9 @@ void main() {
     });
 
     test('Запускается на loopback интерфейсе и останавливается', () async {
-      server = AgentApiServer(initialPort: 0); // 0 = порт назначается ОС для изолированного теста
+      server = AgentApiServer(
+        initialPort: 0,
+      ); // 0 = порт назначается ОС для изолированного теста
       await server.start();
 
       expect(server.isRunning, isTrue);
@@ -40,62 +42,82 @@ void main() {
       expect(body, contains('Jira Time Tracker Local Agent API'));
       expect(body, contains('/api/logs'));
       expect(body, contains('/api/day'));
-      expect(body, contains('curl'));
+      expect(body, contains('/api/issues?q=текст'));
+      expect(body, contains('source_log_id'));
+      expect(body, contains('base_revision'));
+      expect(body, contains('/api/quick-issues'));
+      expect(body, isNot(contains('/api/service-tickets')));
     });
 
-    test('Отвечает на GET /api/openapi.json валидной спецификацией OpenAPI 3.0', () async {
+    test(
+      'Отвечает на GET /api/openapi.json валидной спецификацией OpenAPI 3.0',
+      () async {
+        server = AgentApiServer(initialPort: 0);
+        await server.start();
+
+        final req = await client.getUrl(
+          Uri.parse('${server.url}/api/openapi.json'),
+        );
+        final res = await req.close();
+
+        expect(res.statusCode, equals(HttpStatus.ok));
+        expect(res.headers.contentType?.mimeType, equals('application/json'));
+
+        final body = await res.transform(utf8.decoder).join();
+        final json = jsonDecode(body) as Map<String, dynamic>;
+
+        expect(json['openapi'], equals('3.0.0'));
+        expect(json['info']['title'], equals('Jira Time Tracker Agent API'));
+        expect(json['paths'], contains('/api/logs'));
+        expect(json['paths'], contains('/api/issues'));
+        expect(json['paths'], contains('/api/day'));
+        expect(json['paths'], contains('/api/quick-issues'));
+        expect(json['paths'], isNot(contains('/api/service-tickets')));
+        final quickIssues =
+            json['paths']['/api/quick-issues']['get'] as Map<String, dynamic>;
+        expect(quickIssues['responses'], contains('409'));
+        final itemSchema =
+            quickIssues['responses']['200']['content']['application/json']['schema']['items']
+                as Map<String, dynamic>;
+        expect(itemSchema['properties'], contains('issue_id'));
+        expect(itemSchema['properties'], contains('key'));
+        expect(itemSchema['properties'], contains('summary'));
+        expect(itemSchema['properties'], contains('note'));
+      },
+    );
+
+    test('Старый маршрут /api/service-tickets больше не существует', () async {
       server = AgentApiServer(initialPort: 0);
       await server.start();
 
-      final req = await client.getUrl(Uri.parse('${server.url}/api/openapi.json'));
+      final req = await client.getUrl(
+        Uri.parse('${server.url}/api/service-tickets'),
+      );
       final res = await req.close();
 
-      expect(res.statusCode, equals(HttpStatus.ok));
+      expect(res.statusCode, equals(HttpStatus.notFound));
       expect(res.headers.contentType?.mimeType, equals('application/json'));
 
       final body = await res.transform(utf8.decoder).join();
-      final json = jsonDecode(body) as Map<String, dynamic>;
-
-      expect(json['openapi'], equals('3.0.0'));
-      expect(json['info']['title'], equals('Jira Time Tracker Agent API'));
-      expect(json['paths'], contains('/api/logs'));
-      expect(json['paths'], contains('/api/day'));
-      expect(json['paths'], contains('/api/service-tickets'));
-    });
-
-    test('Отвечает на GET /api/service-tickets списком всех служебных тикетов компании', () async {
-      server = AgentApiServer(initialPort: 0);
-      await server.start();
-
-      final req = await client.getUrl(Uri.parse('${server.url}/api/service-tickets'));
-      final res = await req.close();
-
-      expect(res.statusCode, equals(HttpStatus.ok));
-      expect(res.headers.contentType?.mimeType, equals('application/json'));
-
-      final body = await res.transform(utf8.decoder).join();
-      final list = jsonDecode(body) as List<dynamic>;
-
-      expect(list.length, equals(18));
-      final first = list.first as Map<String, dynamic>;
-      expect(first['key'], equals('EG-294'));
-      expect(first['category'], contains('Meeting'));
-      expect(first['description'], contains('Созвоны'));
-
-      final hr = list.firstWhere((t) => t['key'] == 'EG-304') as Map<String, dynamic>;
-      expect(hr['category'], equals('Recruiting'));
+      expect(jsonDecode(body), containsPair('error', 'Not Found'));
     });
 
     test('Обрабатывает CORS preflight (OPTIONS)', () async {
       server = AgentApiServer(initialPort: 0);
       await server.start();
 
-      final req = await client.openUrl('OPTIONS', Uri.parse('${server.url}/api/logs'));
+      final req = await client.openUrl(
+        'OPTIONS',
+        Uri.parse('${server.url}/api/logs'),
+      );
       final res = await req.close();
 
       expect(res.statusCode, equals(HttpStatus.noContent));
       expect(res.headers.value('access-control-allow-origin'), equals('*'));
-      expect(res.headers.value('access-control-allow-methods'), contains('POST'));
+      expect(
+        res.headers.value('access-control-allow-methods'),
+        contains('POST'),
+      );
     });
   });
 }

@@ -20,9 +20,9 @@ void main() {
       store.close();
     });
 
-    test('Initializes schema v3 and enforces foreign keys', () {
+    test('Initializes schema v4 and enforces foreign keys', () {
       final versionRow = db.select('PRAGMA user_version;');
-      expect(versionRow.first.values.first, equals(3));
+      expect(versionRow.first.values.first, equals(4));
 
       final fkRow = db.select('PRAGMA foreign_keys;');
       expect(fkRow.first.values.first, equals(1));
@@ -284,7 +284,7 @@ void main() {
       );
     });
 
-    test('Migrates existing schema v1 to v3 adding columns and settings', () {
+    test('Migrates existing schema v1 to v4 adding columns and settings', () {
       final oldDb = sqlite3.openInMemory();
       // Setup v1 schema manually
       oldDb.execute('''
@@ -345,7 +345,7 @@ void main() {
       oldStore.init();
 
       final versionRow = oldDb.select('PRAGMA user_version;');
-      expect(versionRow.first.values.first, equals(3));
+      expect(versionRow.first.values.first, equals(4));
 
       final logCols = oldDb.select('PRAGMA table_info(local_logs);');
       expect(logCols.any((c) => c['name'] == 'fixed_start_time'), isTrue);

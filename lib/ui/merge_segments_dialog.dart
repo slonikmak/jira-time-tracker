@@ -22,7 +22,8 @@ class MergeSegmentsDialog extends StatefulWidget {
   }) async {
     return showDialog(
       context: context,
-      builder: (ctx) => MergeSegmentsDialog(appState: appState, segment: segment),
+      builder: (ctx) =>
+          MergeSegmentsDialog(appState: appState, segment: segment),
     );
   }
 
@@ -37,7 +38,12 @@ class _MergeSegmentsDialogState extends State<MergeSegmentsDialog> {
 
   List<Segment> get _candidates {
     return widget.appState.currentSegments
-        .where((s) => s.id != widget.segment.id && s.sendState != SendState.sent)
+        .where(
+          (s) =>
+              s.id != widget.segment.id &&
+              s.sourceLogId == widget.segment.sourceLogId &&
+              s.sendState != SendState.sent,
+        )
         .toList();
   }
 
@@ -82,9 +88,7 @@ class _MergeSegmentsDialogState extends State<MergeSegmentsDialog> {
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Интервалы успешно объединены.'),
-          ),
+          const SnackBar(content: Text('Интервалы успешно объединены.')),
         );
       }
     } catch (e) {
@@ -114,7 +118,10 @@ class _MergeSegmentsDialogState extends State<MergeSegmentsDialog> {
             children: [
               Text(
                 'Текущий интервал: $primaryKey (${_formatTimeRange(widget.segment.startUtc, widget.segment.endUtc)})',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
               ),
               const SizedBox(height: 2),
               Text(
@@ -134,7 +141,10 @@ class _MergeSegmentsDialogState extends State<MergeSegmentsDialog> {
                   child: Center(
                     child: Text(
                       'Нет других интервалов для объединения.',
-                      style: TextStyle(color: AppColors.muted(isDark), fontSize: 13),
+                      style: TextStyle(
+                        color: AppColors.muted(isDark),
+                        fontSize: 13,
+                      ),
                     ),
                   ),
                 )
@@ -148,7 +158,8 @@ class _MergeSegmentsDialogState extends State<MergeSegmentsDialog> {
                   child: ListView.separated(
                     shrinkWrap: true,
                     itemCount: candidates.length,
-                    separatorBuilder: (_, _) => Divider(height: 1, color: AppColors.line(isDark)),
+                    separatorBuilder: (_, _) =>
+                        Divider(height: 1, color: AppColors.line(isDark)),
                     itemBuilder: (context, index) {
                       final candidate = candidates[index];
                       final isSelected = _selectedSegment?.id == candidate.id;
@@ -162,7 +173,10 @@ class _MergeSegmentsDialogState extends State<MergeSegmentsDialog> {
                           });
                         },
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
                           color: isSelected
                               ? AppColors.selected(isDark)
                               : Colors.transparent,
@@ -186,12 +200,21 @@ class _MergeSegmentsDialogState extends State<MergeSegmentsDialog> {
                                       children: [
                                         Text(
                                           candKey,
-                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                          ),
                                         ),
                                         const SizedBox(width: 6),
                                         Text(
-                                          _formatTimeRange(candidate.startUtc, candidate.endUtc),
-                                          style: TextStyle(fontSize: 11, color: AppColors.muted(isDark)),
+                                          _formatTimeRange(
+                                            candidate.startUtc,
+                                            candidate.endUtc,
+                                          ),
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: AppColors.muted(isDark),
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -221,7 +244,9 @@ class _MergeSegmentsDialogState extends State<MergeSegmentsDialog> {
                               ),
                               const SizedBox(width: 8),
                               Text(
-                                LogClock.formatHoursMinutes(candidate.durationSeconds),
+                                LogClock.formatHoursMinutes(
+                                  candidate.durationSeconds,
+                                ),
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 12,
@@ -252,7 +277,9 @@ class _MergeSegmentsDialogState extends State<MergeSegmentsDialog> {
           child: const Text('Отмена'),
         ),
         FilledButton(
-          onPressed: _isSaving || _selectedSegment == null ? null : _handleMerge,
+          onPressed: _isSaving || _selectedSegment == null
+              ? null
+              : _handleMerge,
           child: _isSaving
               ? const SizedBox(
                   width: 16,

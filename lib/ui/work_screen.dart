@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../app_state.dart';
 import '../log_clock.dart';
 import '../models.dart';
-import '../service_tickets.dart';
 import 'add_time_dialog.dart';
 import 'app_theme.dart';
 import 'edit_log_dialog.dart';
@@ -17,8 +16,13 @@ enum WorkScreenQueueTab { queue, history }
 /// - правая колонка: очередь логов и история
 class WorkScreen extends StatefulWidget {
   final AppState appState;
+  final VoidCallback? onOpenQuickIssueSettings;
 
-  const WorkScreen({super.key, required this.appState});
+  const WorkScreen({
+    super.key,
+    required this.appState,
+    this.onOpenQuickIssueSettings,
+  });
 
   @override
   State<WorkScreen> createState() => _WorkScreenState();
@@ -36,6 +40,20 @@ class _WorkScreenState extends State<WorkScreen> {
     _addController.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  Issue? _issueById(String issueId) {
+    for (final issue in widget.appState.issues) {
+      if (issue.issueId == issueId) return issue;
+    }
+    return null;
+  }
+
+  QuickIssue? _quickIssueFor(String issueId) {
+    for (final quickIssue in widget.appState.quickIssues) {
+      if (quickIssue.issueId == issueId) return quickIssue;
+    }
+    return null;
   }
 
   Future<void> _handleAddIssue() async {
@@ -260,77 +278,121 @@ class _WorkScreenState extends State<WorkScreen> {
           label: const Text('Добавить задачу'),
         ),
         const SizedBox(width: 10),
-        PopupMenuButton<ServiceTicket>(
-          tooltip: 'Выбрать служебный тикет (EG Project)',
+        PopupMenuButton<String>(
+          key: const ValueKey('quick-issues-menu'),
+          tooltip: 'Быстрые задачи',
           offset: const Offset(0, 36),
-          onSelected: (ticket) async {
-            final issue = await widget.appState.addServiceTicket(ticket);
-            if (context.mounted) {
-              await AddTimeDialog.show(
-                context,
-                appState: widget.appState,
-                issue: issue,
-              );
+          constraints: const BoxConstraints(minWidth: 300, maxWidth: 340),
+          onSelected: (value) async {
+            if (value == '__settings__') {
+              widget.onOpenQuickIssueSettings?.call();
+              return;
+            }
+            for (final issue in widget.appState.issues) {
+              if (issue.issueId == value && context.mounted) {
+                await AddTimeDialog.show(
+                  context,
+                  appState: widget.appState,
+                  issue: issue,
+                );
+                return;
+              }
             }
           },
           itemBuilder: (context) {
-            return kServiceTickets.map((t) {
-              return PopupMenuItem<ServiceTicket>(
-                value: t,
-                child: SizedBox(
-                  width: 380,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 5,
-                              vertical: 1,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.selected(isDark),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              t.key,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 11,
-                                color: AppColors.primary(isDark),
+            final rows = <PopupMenuEntry<String>>[];
+            for (final quickIssue in widget.appState.quickIssues) {
+              final issue = _issueById(quickIssue.issueId);
+              if (issue == null) continue;
+              rows.add(
+                PopupMenuItem<String>(
+                  value: issue.issueId,
+                  enabled: !widget.appState.isReadOnly,
+                  child: SizedBox(
+                    width: 304,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 1,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.selected(isDark),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                issue.key,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 11,
+                                  color: AppColors.primary(isDark),
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              t.category,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 12,
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                issue.summary,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12,
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              overflow: TextOverflow.ellipsis,
                             ),
+                          ],
+                        ),
+                        if (quickIssue.note?.isNotEmpty == true) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            quickIssue.note!,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.muted(isDark),
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 2,
                           ),
                         ],
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        t.description,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: AppColors.muted(isDark),
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 2,
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               );
-            }).toList();
+            }
+            if (rows.isNotEmpty) return rows;
+            return [
+              PopupMenuItem<String>(
+                enabled: false,
+                child: SizedBox(
+                  width: 248,
+                  child: Text(
+                    'Часто используемые задачи ещё не настроены.',
+                    style: TextStyle(
+                      color: AppColors.muted(isDark),
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem<String>(
+                key: ValueKey('configure-quick-issues'),
+                value: '__settings__',
+                child: Row(
+                  children: [
+                    Icon(Icons.tune, size: 17),
+                    SizedBox(width: 8),
+                    Expanded(child: Text('Настроить быстрые задачи')),
+                  ],
+                ),
+              ),
+            ];
           },
           child: Container(
             constraints: const BoxConstraints(minHeight: 44),
@@ -342,7 +404,9 @@ class _WorkScreenState extends State<WorkScreen> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('Служебный тикет', style: TextStyle(fontSize: 14)),
+                const Icon(Icons.bolt_outlined, size: 16),
+                const SizedBox(width: 6),
+                const Text('Быстрые задачи', style: TextStyle(fontSize: 14)),
                 const SizedBox(width: 4),
                 const Icon(Icons.arrow_drop_down, size: 18),
               ],
@@ -494,7 +558,7 @@ class _WorkScreenState extends State<WorkScreen> {
                             log: currentLog,
                             nowUtc: widget.appState.nowProvider(),
                           ).elapsedSeconds;
-                    final ticket = findServiceTicket(issue.key);
+                    final quickIssue = _quickIssueFor(issue.issueId);
 
                     return Container(
                       key: ValueKey('issue-${issue.issueId}'),
@@ -562,7 +626,7 @@ class _WorkScreenState extends State<WorkScreen> {
                           ),
                           const SizedBox(height: 3),
                           Text(
-                            ticket?.description ??
+                            quickIssue?.note ??
                                 'Активность: ${_formatDateTime(issue.lastUsedAtUtc)}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,

@@ -74,7 +74,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Открылась страница настроек с прежними полями подключения.
-    expect(find.text('Подключение к Jira'), findsOneWidget);
+    expect(find.text('Подключение к Jira'), findsWidgets);
     expect(find.byType(TextField), findsAtLeastNWidgets(3));
 
     // Возврат к работе сохраняет навигацию.
@@ -197,8 +197,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(OutlinedButton, 'Настройки'));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('settings-section-day')));
+    await tester.pumpAndSettle();
 
-    expect(find.text('Сборка дня'), findsOneWidget);
+    expect(find.text('Сборка дня'), findsWidgets);
     await tester.enterText(
       find.byKey(const ValueKey('day-start-min')),
       '08:30',
@@ -215,6 +217,46 @@ void main() {
     expect(store.getSetting('day_settings'), isNotNull);
   });
 
+  testWidgets(
+    'Настройки показывают один выбранный раздел в компактном масштабе',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1152, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      final appState = createTestAppState();
+      await tester.pumpWidget(JiraTimeTrackerApp(appState: appState));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Настройки'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('settings-section-jira')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('settings-section-day')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('settings-section-quick-issues')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('settings-section-agent-api')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('settings-section-day')));
+      await tester.pumpAndSettle();
+      expect(find.text('Сохранить параметры'), findsOneWidget);
+      expect(find.text('Адрес Jira'), findsNothing);
+      expect(find.text('Тема оформления'), findsOneWidget);
+    },
+  );
+
   testWidgets('Неверный диапазон не сохраняется, сброс ждёт сохранения', (
     WidgetTester tester,
   ) async {
@@ -228,6 +270,8 @@ void main() {
     await tester.pumpWidget(JiraTimeTrackerApp(appState: appState));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(OutlinedButton, 'Настройки'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('settings-section-day')));
     await tester.pumpAndSettle();
 
     await tester.enterText(

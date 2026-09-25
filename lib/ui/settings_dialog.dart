@@ -5,16 +5,21 @@ import '../app_state.dart';
 import '../jira_client.dart';
 import '../models.dart';
 import 'app_theme.dart';
+import 'quick_issue_dialog.dart';
+
+enum SettingsSection { jira, day, quickIssues, agentApi }
 
 /// Страница настроек подключения Jira и локального API.
 class SettingsPage extends StatefulWidget {
   final AppState appState;
+  final SettingsSection initialSection;
   final VoidCallback? onSaved;
   final VoidCallback? onCancel;
 
   const SettingsPage({
     super.key,
     required this.appState,
+    this.initialSection = SettingsSection.jira,
     this.onSaved,
     this.onCancel,
   });
@@ -76,10 +81,12 @@ class _SettingsPageState extends State<SettingsPage> {
   JiraConnection? _verifiedConnection;
   Map<String, String> _dayErrors = {};
   String? _dayMessage;
+  late SettingsSection _selectedSection;
 
   @override
   void initState() {
     super.initState();
+    _selectedSection = widget.initialSection;
     _urlController = TextEditingController();
     _emailController = TextEditingController();
     _tokenController = TextEditingController();
@@ -344,16 +351,22 @@ class _SettingsPageState extends State<SettingsPage> {
     );
 
     if (mounted) {
-      widget.onSaved?.call();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Подключение к Jira успешно сохранено')),
       );
     }
   }
 
+  void _invalidateConnectionVerification(String _) {
+    if (_verifiedConnection == null && _errorMessage == null) return;
+    setState(() {
+      _verifiedConnection = null;
+      _errorMessage = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -361,73 +374,296 @@ class _SettingsPageState extends State<SettingsPage> {
     return ColoredBox(
       color: AppColors.bg(Theme.of(context).brightness == Brightness.dark),
       child: LayoutBuilder(
-        builder: (context, constraints) => SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(40, 28, 40, 36),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (constraints.maxWidth >= 1100)
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: _buildSettingsHeading(context)),
-                    const SizedBox(width: 24),
-                    _buildThemeSelector(context),
-                  ],
-                )
-              else ...[
-                _buildSettingsHeading(context),
-                const SizedBox(height: 16),
-                _buildThemeSelector(context),
-              ],
-              const SizedBox(height: 32),
-              if (constraints.maxWidth >= 1380)
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(width: 380, child: _buildJiraSection(context)),
-                    Container(
-                      width: 460,
-                      margin: const EdgeInsets.only(left: 40),
-                      padding: const EdgeInsets.only(left: 40),
-                      decoration: BoxDecoration(
-                        border: Border(
-                          left: BorderSide(color: scheme.outlineVariant),
-                        ),
-                      ),
-                      child: _buildDaySection(context),
-                    ),
-                    const SizedBox(width: 40),
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.only(left: 40),
-                        decoration: BoxDecoration(
-                          border: Border(
-                            left: BorderSide(color: scheme.outlineVariant),
-                          ),
-                        ),
-                        child: _buildAgentApiSection(context),
-                      ),
-                    ),
-                  ],
-                )
-              else ...[
-                _buildJiraSection(context),
-                const SizedBox(height: 32),
-                Divider(color: scheme.outlineVariant),
+        builder: (context, constraints) {
+          final showSidebar = constraints.maxWidth >= 1300;
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(32, 24, 32, 28),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (constraints.maxWidth >= 760)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: _buildSettingsHeading(context)),
+                      const SizedBox(width: 24),
+                      _buildThemeSelector(context),
+                    ],
+                  )
+                else ...[
+                  _buildSettingsHeading(context),
+                  const SizedBox(height: 16),
+                  _buildThemeSelector(context),
+                ],
                 const SizedBox(height: 24),
-                _buildDaySection(context),
-                const SizedBox(height: 32),
-                Divider(color: scheme.outlineVariant),
-                const SizedBox(height: 24),
-                _buildAgentApiSection(context),
+                Expanded(
+                  child: showSidebar
+                      ? Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            SizedBox(
+                              width: 190,
+                              child: _buildSectionNavigation(context),
+                            ),
+                            const VerticalDivider(width: 33),
+                            Expanded(child: _buildSelectedSection(context)),
+                          ],
+                        )
+                      : Column(
+                          children: [
+                            _buildSectionSelector(context),
+                            const SizedBox(height: 20),
+                            Expanded(child: _buildSelectedSection(context)),
+                          ],
+                        ),
+                ),
               ],
-            ],
-          ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildSectionNavigation(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: SettingsSection.values
+          .map(
+            (section) => _SettingsSectionButton(
+              key: ValueKey('settings-section-${_sectionKey(section)}'),
+              icon: _sectionIcon(section),
+              label: _sectionLabel(section),
+              selected: section == _selectedSection,
+              onTap: () => setState(() => _selectedSection = section),
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  Widget _buildSectionSelector(BuildContext context) {
+    return DropdownButtonFormField<SettingsSection>(
+      key: const ValueKey('settings-section-selector'),
+      initialValue: _selectedSection,
+      isExpanded: true,
+      decoration: const InputDecoration(isDense: true),
+      items: SettingsSection.values
+          .map(
+            (section) => DropdownMenuItem(
+              value: section,
+              child: Row(
+                children: [
+                  Icon(_sectionIcon(section), size: 17),
+                  const SizedBox(width: 9),
+                  Text(_sectionLabel(section)),
+                ],
+              ),
+            ),
+          )
+          .toList(),
+      onChanged: (section) {
+        if (section != null) setState(() => _selectedSection = section);
+      },
+    );
+  }
+
+  Widget _buildSelectedSection(BuildContext context) {
+    final section = switch (_selectedSection) {
+      SettingsSection.jira => _buildJiraSection(context),
+      SettingsSection.day => _buildDaySection(context),
+      SettingsSection.quickIssues => _buildQuickIssuesSection(context),
+      SettingsSection.agentApi => _buildAgentApiSection(context),
+    };
+    return SingleChildScrollView(
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1040),
+          child: section,
         ),
       ),
     );
   }
+
+  Widget _buildQuickIssuesSection(BuildContext context) {
+    final connection = widget.appState.currentConnection;
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Column(
+      key: const ValueKey('quick-issues-section'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Быстрые задачи',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Сохранённые задачи для быстрого добавления времени.',
+                    style: TextStyle(
+                      color: scheme.onSurfaceVariant,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (connection != null)
+              FilledButton.icon(
+                key: const ValueKey('quick-issue-add'),
+                onPressed: widget.appState.isReadOnly
+                    ? null
+                    : () => QuickIssueDialog.showAdd(
+                        context,
+                        appState: widget.appState,
+                      ),
+                style: _actionButtonStyle,
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Добавить задачу'),
+              ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        if (connection == null)
+          _QuickIssuesEmptyState(
+            icon: Icons.link_off_outlined,
+            title: 'Сначала подключите Jira',
+            message:
+                'Быстрые задачи хранятся отдельно для каждого сайта и аккаунта.',
+            actionLabel: 'Перейти к подключению',
+            onAction: () =>
+                setState(() => _selectedSection = SettingsSection.jira),
+          )
+        else ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.hover(isDark),
+              borderRadius: BorderRadius.circular(7),
+              border: Border.all(color: AppColors.line(isDark)),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.check_circle_outline,
+                  size: 17,
+                  color: AppColors.green(isDark),
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _connectionHost(connection.baseUrl),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${connection.displayName} · ${connection.email}',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: scheme.onSurfaceVariant,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (widget.appState.isReadOnly) ...[
+            const SizedBox(height: 12),
+            Text(
+              'В режиме только чтения список можно просматривать, но нельзя изменять.',
+              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+            ),
+          ],
+          const SizedBox(height: 16),
+          if (widget.appState.quickIssues.isEmpty)
+            _QuickIssuesEmptyState(
+              icon: Icons.bolt_outlined,
+              title: 'Быстрых задач пока нет',
+              message:
+                  'Добавьте часто используемую Jira-задачу — она появится здесь и на экране «Работа».',
+              actionLabel: 'Добавить задачу',
+              onAction: widget.appState.isReadOnly
+                  ? null
+                  : () => QuickIssueDialog.showAdd(
+                      context,
+                      appState: widget.appState,
+                    ),
+            )
+          else
+            ...widget.appState.quickIssues.map((quickIssue) {
+              final issue = _issueForQuickIssue(quickIssue);
+              if (issue == null) return const SizedBox.shrink();
+              return _QuickIssueSettingsRow(
+                quickIssue: quickIssue,
+                issue: issue,
+                readOnly: widget.appState.isReadOnly,
+                onEdit: () => QuickIssueDialog.showEdit(
+                  context,
+                  appState: widget.appState,
+                  quickIssue: quickIssue,
+                  issue: issue,
+                ),
+                onDelete: () =>
+                    widget.appState.deleteQuickIssue(quickIssue.issueId),
+              );
+            }),
+        ],
+      ],
+    );
+  }
+
+  Issue? _issueForQuickIssue(QuickIssue quickIssue) {
+    for (final issue in widget.appState.issues) {
+      if (issue.issueId == quickIssue.issueId) return issue;
+    }
+    return null;
+  }
+
+  String _connectionHost(String baseUrl) {
+    final uri = Uri.tryParse(baseUrl);
+    return uri?.host.isNotEmpty == true ? uri!.host : baseUrl;
+  }
+
+  String _sectionKey(SettingsSection section) => switch (section) {
+    SettingsSection.jira => 'jira',
+    SettingsSection.day => 'day',
+    SettingsSection.quickIssues => 'quick-issues',
+    SettingsSection.agentApi => 'agent-api',
+  };
+
+  String _sectionLabel(SettingsSection section) => switch (section) {
+    SettingsSection.jira => 'Подключение к Jira',
+    SettingsSection.day => 'Сборка дня',
+    SettingsSection.quickIssues => 'Быстрые задачи',
+    SettingsSection.agentApi => 'Локальный API',
+  };
+
+  IconData _sectionIcon(SettingsSection section) => switch (section) {
+    SettingsSection.jira => Icons.link,
+    SettingsSection.day => Icons.calendar_today_outlined,
+    SettingsSection.quickIssues => Icons.bolt_outlined,
+    SettingsSection.agentApi => Icons.terminal,
+  };
 
   Widget _buildSettingsHeading(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -437,8 +673,8 @@ class _SettingsPageState extends State<SettingsPage> {
         Text('Настройки', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 4),
         Text(
-          'Подключение к Jira, правила сборки дня и локальный API для AI-агентов.',
-          style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 14),
+          'Подключение к Jira, сборка дня, быстрые задачи и локальный API.',
+          style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
         ),
       ],
     );
@@ -724,15 +960,23 @@ class _SettingsPageState extends State<SettingsPage> {
           'Адрес Jira',
           _urlController,
           hint: 'https://company.atlassian.net',
+          onChanged: _invalidateConnectionVerification,
         ),
         const SizedBox(height: 16),
-        _field(context, 'Email', _emailController, hint: 'user@company.com'),
+        _field(
+          context,
+          'Email',
+          _emailController,
+          hint: 'user@company.com',
+          onChanged: _invalidateConnectionVerification,
+        ),
         const SizedBox(height: 20),
         _field(
           context,
           'API-токен',
           _tokenController,
           obscureText: _obscureToken,
+          onChanged: _invalidateConnectionVerification,
           suffix: IconButton(
             tooltip: _obscureToken ? 'Показать токен' : 'Скрыть токен',
             icon: Icon(
@@ -892,6 +1136,7 @@ class _SettingsPageState extends State<SettingsPage> {
     bool obscureText = false,
     bool readOnly = false,
     Widget? suffix,
+    ValueChanged<String>? onChanged,
   }) {
     final scheme = Theme.of(context).colorScheme;
     return Column(
@@ -906,6 +1151,7 @@ class _SettingsPageState extends State<SettingsPage> {
           controller: controller,
           obscureText: obscureText,
           readOnly: readOnly,
+          onChanged: onChanged,
           style: TextStyle(fontSize: 14, color: scheme.onSurface),
           decoration: InputDecoration(hintText: hint, suffixIcon: suffix),
         ),
@@ -942,6 +1188,213 @@ class _SettingsPageState extends State<SettingsPage> {
               message,
               style: TextStyle(color: color, fontSize: 12, height: 1.45),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsSectionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _SettingsSectionButton({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final color = selected
+        ? AppColors.primary(isDark)
+        : theme.colorScheme.onSurfaceVariant;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Material(
+        color: selected ? AppColors.selected(isDark) : Colors.transparent,
+        borderRadius: BorderRadius.circular(7),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(7),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
+            child: Row(
+              children: [
+                Icon(icon, size: 17, color: color),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 13,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickIssuesEmptyState extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String message;
+  final String actionLabel;
+  final VoidCallback? onAction;
+
+  const _QuickIssuesEmptyState({
+    required this.icon,
+    required this.title,
+    required this.message,
+    required this.actionLabel,
+    required this.onAction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      key: const ValueKey('quick-issues-empty'),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      decoration: BoxDecoration(
+        border: Border.all(color: scheme.outlineVariant),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 28, color: scheme.onSurfaceVariant),
+          const SizedBox(height: 10),
+          Text(
+            title,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+          ),
+          const SizedBox(height: 16),
+          OutlinedButton(onPressed: onAction, child: Text(actionLabel)),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuickIssueSettingsRow extends StatelessWidget {
+  final QuickIssue quickIssue;
+  final Issue issue;
+  final bool readOnly;
+  final VoidCallback onEdit;
+  final Future<void> Function() onDelete;
+
+  const _QuickIssueSettingsRow({
+    required this.quickIssue,
+    required this.issue,
+    required this.readOnly,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      key: ValueKey('quick-issue-${issue.issueId}'),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.line(isDark))),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppColors.selected(isDark),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              issue.key,
+              style: TextStyle(
+                color: AppColors.primary(isDark),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(issue.summary, style: const TextStyle(fontSize: 13)),
+                if (quickIssue.note?.isNotEmpty == true) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    quickIssue.note!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          IconButton(
+            key: ValueKey('quick-issue-edit-${issue.issueId}'),
+            tooltip: 'Изменить подсказку',
+            visualDensity: VisualDensity.compact,
+            onPressed: readOnly ? null : onEdit,
+            icon: const Icon(Icons.edit_outlined, size: 17),
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Действия',
+            enabled: !readOnly,
+            onSelected: (_) async {
+              try {
+                await onDelete();
+              } catch (error) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Не удалось удалить быструю задачу: $error',
+                      ),
+                    ),
+                  );
+                }
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_outline, size: 17),
+                    SizedBox(width: 8),
+                    Expanded(child: Text('Удалить из быстрых')),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),

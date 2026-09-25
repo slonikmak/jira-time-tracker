@@ -11,7 +11,6 @@ import 'jira_client.dart';
 import 'local_store.dart';
 import 'log_clock.dart';
 import 'models.dart';
-import 'service_tickets.dart';
 import 'worklog_sender.dart';
 
 /// Период фильтрации задач по времени последнего использования.
@@ -34,6 +33,14 @@ enum IssueFilterPeriod {
 
 enum UiThemeMode { system, light, dark }
 
+class AgentDayRevisionConflict implements Exception {
+  final String message;
+  const AgentDayRevisionConflict(this.message);
+
+  @override
+  String toString() => message;
+}
+
 /// Состояние приложения, координация данных, задач, таймеров и подключений.
 class AppState extends ChangeNotifier {
   final LocalStore store;
@@ -49,6 +56,7 @@ class AppState extends ChangeNotifier {
   JiraConnection? _currentConnection;
 
   List<Issue> _issues = [];
+  List<QuickIssue> _quickIssues = [];
   String _issueSearchQuery = '';
   IssueFilterPeriod _filterPeriod = IssueFilterPeriod.all;
   final Set<String> _selectedIssueIds = {};
@@ -128,6 +136,7 @@ class AppState extends ChangeNotifier {
     final now = nowProvider();
     _selectedDate = DateTime(now.year, now.month, now.day);
     _issues = store.getIssues(scope: activeScope);
+    _quickIssues = store.getQuickIssues(scope: activeScope);
     _logs = store.getLocalLogs(scope: activeScope);
     _activeDraftDatesBySourceLogId = store.getActiveDraftDatesBySourceLogId(
       scope: activeScope,
@@ -227,6 +236,7 @@ class AppState extends ChangeNotifier {
   String get activeScope => _currentConnection?.scope ?? 'default';
 
   List<Issue> get issues => List.unmodifiable(_issues);
+  List<QuickIssue> get quickIssues => List.unmodifiable(_quickIssues);
   String get issueSearchQuery => _issueSearchQuery;
   IssueFilterPeriod get filterPeriod => _filterPeriod;
   Set<String> get selectedIssueIds => Set.unmodifiable(_selectedIssueIds);
@@ -384,6 +394,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> loadIssues() async {
     _issues = store.getIssues(scope: activeScope);
+    _quickIssues = store.getQuickIssues(scope: activeScope);
     notifyListeners();
   }
 
@@ -432,45 +443,57 @@ class AppState extends ChangeNotifier {
     return issueToSave;
   }
 
-  /// Добавить или обновить служебный тикет (EG Project) в списке задач.
-  Future<Issue> addServiceTicket(ServiceTicket ticket) async {
-    final scope = currentConnection?.scope ?? 'default';
-    final existingByKey = store.getIssueByKey(scope, ticket.key);
-    if (existingByKey != null) {
-      final updated = existingByKey.copyWith(lastUsedAtUtc: nowProvider());
-      store.upsertIssue(updated);
-      await loadIssues();
-      return updated;
+  /// Проверяет Jira-задачу для предпросмотра, не сохраняя её локально.
+  Future<Issue> previewQuickIssue(String rawInput) async {
+    final identifier = IssueParser.parse(rawInput);
+    if (identifier == null) {
+      throw const FormatException(
+        'Некорректный ввод: укажите ключ (PROJ-123), числовой ID или ссылку /browse/...',
+      );
     }
-
-    if (_currentConnection != null) {
-      try {
-        final token = await connectionStore.getSavedToken();
-        if (token != null && token.isNotEmpty) {
-          final jiraIssue = await jiraClient.getIssue(
-            ticket.key,
-            connection: _currentConnection!,
-            token: token,
-          );
-          store.upsertIssue(jiraIssue);
-          await loadIssues();
-          return jiraIssue;
-        }
-      } catch (_) {
-        // Оффлайн или ошибка сети — используем локальное описание тикета
-      }
+    final connection = _currentConnection;
+    if (connection == null) {
+      throw StateError('Сначала подключите Jira в Настройках.');
     }
-
-    final fallback = Issue(
-      scope: scope,
-      issueId: ticket.key,
-      key: ticket.key,
-      summary: ticket.category,
-      lastUsedAtUtc: nowProvider(),
+    final token = await connectionStore.getSavedToken();
+    if (token == null || token.isEmpty) {
+      throw StateError('API токен Jira не найден в защищённом хранилище.');
+    }
+    return jiraClient.getIssue(
+      identifier,
+      connection: connection,
+      token: token,
     );
-    store.upsertIssue(fallback);
-    await loadIssues();
-    return fallback;
+  }
+
+  Future<QuickIssue> addQuickIssue(String rawInput, {String note = ''}) async {
+    if (isReadOnly) throw StateError('Приложение открыто только для чтения.');
+    final issue = await addIssue(rawInput);
+    final quickIssue = store.addQuickIssue(
+      QuickIssue(
+        scope: issue.scope,
+        issueId: issue.issueId,
+        note: note.trim().isEmpty ? null : note.trim(),
+        createdAtUtc: nowProvider(),
+      ),
+    );
+    _quickIssues = store.getQuickIssues(scope: activeScope);
+    notifyListeners();
+    return quickIssue;
+  }
+
+  Future<void> updateQuickIssueNote(String issueId, String note) async {
+    if (isReadOnly) throw StateError('Приложение открыто только для чтения.');
+    store.updateQuickIssueNote(activeScope, issueId, note);
+    _quickIssues = store.getQuickIssues(scope: activeScope);
+    notifyListeners();
+  }
+
+  Future<void> deleteQuickIssue(String issueId) async {
+    if (isReadOnly) throw StateError('Приложение открыто только для чтения.');
+    store.deleteQuickIssue(activeScope, issueId);
+    _quickIssues = store.getQuickIssues(scope: activeScope);
+    notifyListeners();
   }
 
   void setIssueSearchQuery(String query) {
@@ -497,7 +520,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Поиск задачи в локальном кэше, среди служебных тикетов или загрузка из Jira.
+  /// Поиск задачи в локальном кэше, Jira или создание локального fallback.
   Future<Issue> resolveOrCreateIssue(String keyOrId) async {
     final clean = keyOrId.trim();
     if (clean.isEmpty) {
@@ -511,12 +534,6 @@ class AppState extends ChangeNotifier {
         )
         .firstOrNull;
     if (cached != null) return cached;
-
-    // Проверяем предопределенные служебные тикеты
-    final service = findServiceTicket(clean);
-    if (service != null) {
-      return await addServiceTicket(service);
-    }
 
     // Если есть подключение к Jira — запрашиваем в Jira
     final conn = _currentConnection;
@@ -549,6 +566,55 @@ class AppState extends ChangeNotifier {
     store.upsertIssue(fallback);
     await loadIssues();
     return fallback;
+  }
+
+  /// Resolves an Agent API issue reference without creating an offline fallback.
+  Future<Issue> resolveIssueStrict(String keyOrId) async {
+    final clean = keyOrId.trim();
+    if (clean.isEmpty) {
+      throw ArgumentError('Ключ или ID задачи не может быть пустым');
+    }
+
+    final cached = store
+        .getIssues(scope: activeScope)
+        .where(
+          (issue) =>
+              issue.key.toUpperCase() == clean.toUpperCase() ||
+              issue.issueId == clean,
+        )
+        .firstOrNull;
+    if (cached != null) return cached;
+
+    final connection = _currentConnection;
+    final token = await connectionStore.getSavedToken();
+    if (connection == null || token == null || token.isEmpty) {
+      throw StateError(
+        'Задача "$clean" отсутствует в локальном каталоге, подключение к Jira недоступно.',
+      );
+    }
+
+    final issue = await jiraClient.getIssue(
+      clean,
+      connection: connection,
+      token: token,
+    );
+    store.upsertIssue(issue);
+    await loadIssues();
+    return issue;
+  }
+
+  List<Issue> searchIssuesLocally(String query) {
+    final normalized = query.trim().toLowerCase();
+    final issues = store.getIssues(scope: activeScope);
+    if (normalized.isEmpty) return issues;
+    return issues
+        .where(
+          (issue) =>
+              issue.key.toLowerCase().contains(normalized) ||
+              issue.summary.toLowerCase().contains(normalized) ||
+              (issue.status?.toLowerCase().contains(normalized) ?? false),
+        )
+        .toList();
   }
 
   // --- Таймеры и логирование (Сценарии A01, A02, A03, A04) ---
@@ -1020,18 +1086,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final additionalIds = <String>[
-        ..._issues.map((i) => i.issueId),
-        ..._logs.map((l) => l.issueId),
-      ];
-
-      final logs = await jiraClient.fetchDayWorklogs(
-        date: _selectedDate,
-        timeZoneOffset: DateTime.now().timeZoneOffset,
-        connection: conn,
-        token: token,
-        additionalIssueIds: additionalIds,
-      );
+      final logs = await fetchJiraWorklogsForDateScoped(_selectedDate);
 
       _importedWorklogs = logs;
 
@@ -1051,6 +1106,35 @@ class AppState extends ChangeNotifier {
       _isFetchingJiraWorklogs = false;
       notifyListeners();
     }
+  }
+
+  /// Reads a Jira day without changing the date or draft currently shown in UI.
+  Future<List<ImportedWorklog>> fetchJiraWorklogsForDateScoped(
+    DateTime date,
+  ) async {
+    final connection = _currentConnection;
+    final token = await connectionStore.getSavedToken();
+    if (connection == null || token == null || token.isEmpty) {
+      throw StateError(
+        'Нет активного подключения к Jira для загрузки worklogs.',
+      );
+    }
+
+    return jiraClient.fetchDayWorklogs(
+      date: DateTime(date.year, date.month, date.day),
+      timeZoneOffset: DateTime(
+        date.year,
+        date.month,
+        date.day,
+        12,
+      ).timeZoneOffset,
+      connection: connection,
+      token: token,
+      additionalIssueIds: [
+        ...store.getIssues(scope: activeScope).map((issue) => issue.issueId),
+        ...store.getLocalLogs(scope: activeScope).map((log) => log.issueId),
+      ],
+    );
   }
 
   void previousDay() {
@@ -1378,13 +1462,9 @@ class AppState extends ChangeNotifier {
   Future<DayDraft> applyAgentDayPlan({
     required DateTime targetDate,
     required List<AgentSegmentInput> inputSegments,
+    required List<ImportedWorklog> existingWorklogs,
+    String? baseRevision,
   }) async {
-    if (isDraftLockedFromRebuild) {
-      throw StateError(
-        'Нельзя изменить частично или полностью отправленный день.',
-      );
-    }
-
     if (inputSegments.isEmpty) {
       throw ArgumentError('Список сегментов не может быть пустым.');
     }
@@ -1396,50 +1476,107 @@ class AppState extends ChangeNotifier {
     );
     final dateStr =
         '${localDate.year.toString().padLeft(4, '0')}-${localDate.month.toString().padLeft(2, '0')}-${localDate.day.toString().padLeft(2, '0')}';
+    final targetDraft = store.getDayDraft(scope: activeScope, date: dateStr);
+    final targetSegments = targetDraft == null
+        ? const <Segment>[]
+        : store.getSegments(draftId: targetDraft.id);
+    if (targetDraft != null) {
+      if (targetDraft.status != DraftStatus.draft ||
+          targetSegments.any((s) => s.sendState != SendState.pending)) {
+        throw const AgentDayRevisionConflict(
+          'Нельзя заменить черновик после начала отправки дня.',
+        );
+      }
+      if (baseRevision == null ||
+          baseRevision != dayDraftRevision(targetDraft)) {
+        throw const AgentDayRevisionConflict(
+          'Черновик дня изменился после чтения. Получите актуальный snapshot и повторите запись.',
+        );
+      }
+    }
 
-    final draftId = _currentDraft?.id ?? const Uuid().v4();
+    final draftId = targetDraft?.id ?? const Uuid().v4();
+    final activeDraftDates = store.getActiveDraftDatesBySourceLogId(
+      scope: activeScope,
+    );
     final builtSegments = <Segment>[];
-    final draftLogs = <DraftLog>[];
-    final addedLogs = <LocalLog>[];
+    final draftLogsBySourceId = <String, DraftLog>{};
+    final availableIssues = {
+      for (final issue in store.getIssues(scope: activeScope))
+        issue.issueId: issue,
+    };
 
     for (var i = 0; i < inputSegments.length; i++) {
       final input = inputSegments[i];
-      final issue = await resolveOrCreateIssue(input.issueKey);
-
-      LocalLog? sourceLog;
-      if (input.sourceLogId != null && input.sourceLogId!.isNotEmpty) {
-        sourceLog = _logs.where((l) => l.id == input.sourceLogId).firstOrNull;
+      final sourceLog = store.getLocalLog(input.sourceLogId);
+      if (sourceLog == null || sourceLog.scope != activeScope) {
+        throw ArgumentError('Источник "${input.sourceLogId}" не найден.');
       }
-
-      if (sourceLog == null) {
-        // Создаем локальный лог под этот сегмент
-        final logId = const Uuid().v4();
-        final startLocal = input.startUtc.toLocal();
-        final localTimeStr =
-            '${startLocal.hour.toString().padLeft(2, '0')}:${startLocal.minute.toString().padLeft(2, '0')}';
-        sourceLog = LocalLog(
-          id: logId,
-          scope: activeScope,
-          issueId: issue.issueId,
-          titleSnapshot: issue.summary,
-          description: input.description,
-          accumulatedSeconds: input.durationSeconds,
-          createdAtUtc: input.startUtc,
-          isManual: true,
-          fixedStartTime:
-              input.fixedStartTime ?? (input.isFixed ? localTimeStr : null),
+      if (sourceLog.isRunning) {
+        throw ArgumentError(
+          'Работающий источник "${sourceLog.id}" нельзя включить в день.',
         );
-        addedLogs.add(sourceLog);
+      }
+      if (sourceLog.isConsumed) {
+        throw ArgumentError(
+          'Отправленный источник "${sourceLog.id}" нельзя включить повторно.',
+        );
+      }
+      if (sourceLog.accumulatedSeconds <= 0) {
+        throw ArgumentError(
+          'Источник "${sourceLog.id}" не содержит записанного времени.',
+        );
+      }
+      final reservedDate = activeDraftDates[sourceLog.id];
+      if (reservedDate != null && reservedDate != dateStr) {
+        throw ArgumentError(
+          'Источник "${sourceLog.id}" уже включён в черновик на дату $reservedDate.',
+        );
+      }
+      final issue = availableIssues[sourceLog.issueId];
+      if (issue == null) {
+        throw StateError(
+          'В локальном каталоге не найдена задача источника ${sourceLog.id}.',
+        );
+      }
+      if (input.issueKey != null &&
+          input.issueKey!.toUpperCase() != issue.key.toUpperCase() &&
+          input.issueKey != issue.issueId) {
+        throw ArgumentError(
+          'Задача "${input.issueKey}" не соответствует источнику ${sourceLog.id} (${issue.key}).',
+        );
+      }
+      if (input.durationSeconds <= 0) {
+        throw ArgumentError('Длительность сегмента должна быть больше нуля.');
+      }
+      final localStart = input.startUtc.toLocal();
+      if (localStart.year != localDate.year ||
+          localStart.month != localDate.month ||
+          localStart.day != localDate.day) {
+        throw ArgumentError(
+          'Начало сегмента должно попадать в целевую дату $dateStr.',
+        );
+      }
+      final nextLocalMidnight = DateTime(
+        localDate.year,
+        localDate.month,
+        localDate.day + 1,
+      ).toUtc();
+      if (input.startUtc
+          .add(Duration(seconds: input.durationSeconds))
+          .isAfter(nextLocalMidnight)) {
+        throw ArgumentError(
+          'Сегмент должен полностью помещаться в целевую дату $dateStr.',
+        );
       }
 
-      draftLogs.add(
-        DraftLog(
+      draftLogsBySourceId.putIfAbsent(
+        sourceLog.id,
+        () => DraftLog(
           draftId: draftId,
           sourceLogId: sourceLog.id,
-          sourceDurationSeconds: input.durationSeconds,
-          descriptionSnapshot: input.description.isNotEmpty
-              ? input.description
-              : sourceLog.description,
+          sourceDurationSeconds: sourceLog.accumulatedSeconds,
+          descriptionSnapshot: sourceLog.description,
           durationLocked: true,
         ),
       );
@@ -1449,7 +1586,7 @@ class AppState extends ChangeNotifier {
           id: const Uuid().v4(),
           draftId: draftId,
           sourceLogId: sourceLog.id,
-          issueId: issue.issueId,
+          issueId: sourceLog.issueId,
           startUtc: input.startUtc,
           durationSeconds: input.durationSeconds,
           description: input.description.isNotEmpty
@@ -1464,17 +1601,23 @@ class AppState extends ChangeNotifier {
     // Сортируем сегменты по времени начала
     builtSegments.sort((a, b) => a.startUtc.compareTo(b.startUtc));
 
-    final dayStartUtc = builtSegments.first.startUtc;
-    final dayEndUtc = builtSegments
-        .map((s) => s.endUtc)
-        .reduce((a, b) => a.isAfter(b) ? a : b);
+    final occupiedStarts = <DateTime>[
+      ...builtSegments.map((segment) => segment.startUtc),
+      ...existingWorklogs.map((worklog) => worklog.startUtc),
+    ];
+    final occupiedEnds = <DateTime>[
+      ...builtSegments.map((segment) => segment.endUtc),
+      ...existingWorklogs.map((worklog) => worklog.endUtc),
+    ];
+    final dayStartUtc = occupiedStarts.reduce((a, b) => a.isBefore(b) ? a : b);
+    final dayEndUtc = occupiedEnds.reduce((a, b) => a.isAfter(b) ? a : b);
 
     // Вычисляем зазоры (паузы)
     final breaks = DayBuilder.computeTimelineGaps(
       dayStartUtc: dayStartUtc,
       dayEndUtc: dayEndUtc,
       segments: builtSegments,
-      existingWorklogs: _importedWorklogs,
+      existingWorklogs: existingWorklogs,
       draftId: draftId,
     );
 
@@ -1486,7 +1629,7 @@ class AppState extends ChangeNotifier {
       0,
       (sum, b) => sum + b.durationSeconds,
     );
-    final totalExisting = _importedWorklogs.fold<int>(
+    final totalExisting = existingWorklogs.fold<int>(
       0,
       (sum, e) => sum + e.durationSeconds,
     );
@@ -1506,17 +1649,12 @@ class AppState extends ChangeNotifier {
     // Валидация расписания
     final validationErrors = DayBuilder.validate(
       plan: plan,
-      existingWorklogs: _importedWorklogs,
+      existingWorklogs: existingWorklogs,
       requirePauses: false,
     );
 
     if (validationErrors.isNotEmpty) {
       throw DayBuilderException(validationErrors.join('; '));
-    }
-
-    // Сохраняем вновь созданные логи
-    for (final l in addedLogs) {
-      store.upsertLocalLog(l);
     }
 
     final newDraft = DayDraft(
@@ -1528,24 +1666,74 @@ class AppState extends ChangeNotifier {
       seed: 0,
       settingsSnapshot: _daySettings.toJson(),
       importedWorklogsSnapshot: jsonEncode(
-        _importedWorklogs.map((e) => e.toMap()).toList(),
+        existingWorklogs.map((e) => e.toMap()).toList(),
       ),
       status: DraftStatus.draft,
     );
 
+    // Повторная проверка непосредственно перед транзакционной заменой snapshot.
+    final currentTarget = store.getDayDraft(scope: activeScope, date: dateStr);
+    if (targetDraft == null && currentTarget != null ||
+        targetDraft != null &&
+            (currentTarget == null ||
+                currentTarget.id != targetDraft.id ||
+                baseRevision != dayDraftRevision(currentTarget) ||
+                currentTarget.status != DraftStatus.draft ||
+                store
+                    .getSegments(draftId: currentTarget.id)
+                    .any((s) => s.sendState != SendState.pending))) {
+      throw const AgentDayRevisionConflict(
+        'Черновик дня изменился во время подготовки snapshot. Получите актуальный snapshot и повторите запись.',
+      );
+    }
+
     store.saveDayDraft(
       draft: newDraft,
-      draftLogs: draftLogs,
+      draftLogs: draftLogsBySourceId.values.toList(),
       segments: builtSegments,
       breaks: breaks,
     );
 
     _selectedDate = localDate;
+    _importedWorklogs = List.from(existingWorklogs);
     await loadLogs();
     loadDraftForSelectedDate();
     notifyListeners();
 
     return newDraft;
+  }
+
+  String dayDraftRevision(DayDraft draft) {
+    final payload = jsonEncode({
+      'draft': draft.toMap(),
+      'draft_logs':
+          store
+              .getDraftLogs(draftId: draft.id)
+              .map((log) => log.toMap())
+              .toList()
+            ..sort(
+              (a, b) => (a['source_log_id'] as String).compareTo(
+                b['source_log_id'] as String,
+              ),
+            ),
+      'segments':
+          store
+              .getSegments(draftId: draft.id)
+              .map((segment) => segment.toMap())
+              .toList()
+            ..sort((a, b) => (a['id'] as String).compareTo(b['id'] as String)),
+      'breaks':
+          store
+              .getBreaks(draftId: draft.id)
+              .map((item) => item.toMap())
+              .toList()
+            ..sort((a, b) => (a['id'] as String).compareTo(b['id'] as String)),
+    });
+    var hash = 0x811c9dc5;
+    for (final byte in utf8.encode(payload)) {
+      hash = ((hash ^ byte) * 0x01000193) & 0xffffffff;
+    }
+    return hash.toRadixString(16).padLeft(8, '0');
   }
 
   void updateSegment({
@@ -1746,7 +1934,6 @@ class AppState extends ChangeNotifier {
   void mergeSegments({
     required String segmentId1,
     required String segmentId2,
-    String? targetIssueId,
     String? description,
   }) {
     if (_currentDraft == null) return;
@@ -1756,11 +1943,19 @@ class AppState extends ChangeNotifier {
 
     final seg1 = _currentSegments[idx1];
     final seg2 = _currentSegments[idx2];
+    if (seg1.sourceLogId != seg2.sourceLogId) {
+      throw ArgumentError(
+        'Можно объединить только сегменты одного исходного лога.',
+      );
+    }
+    final sourceLog = store.getLocalLog(seg1.sourceLogId);
+    if (sourceLog == null || sourceLog.scope != activeScope) {
+      throw StateError('Исходный лог сегментов не найден.');
+    }
 
     final firstSeg = seg1.startUtc.isBefore(seg2.startUtc) ? seg1 : seg2;
     final secondSeg = identical(firstSeg, seg1) ? seg2 : seg1;
 
-    final effectiveIssueId = targetIssueId ?? firstSeg.issueId;
     final totalDuration = firstSeg.durationSeconds + secondSeg.durationSeconds;
     final combinedDesc =
         description?.trim() ??
@@ -1770,7 +1965,7 @@ class AppState extends ChangeNotifier {
         ].where((d) => d.isNotEmpty).toSet().join('\n');
 
     final mergedSeg = firstSeg.copyWith(
-      issueId: effectiveIssueId,
+      issueId: sourceLog.issueId,
       durationSeconds: totalDuration,
       description: combinedDesc,
     );

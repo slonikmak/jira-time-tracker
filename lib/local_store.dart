@@ -183,6 +183,29 @@ class LocalStore {
         rethrow;
       }
     }
+
+    if (currentVersion < 4) {
+      _db.execute('BEGIN TRANSACTION;');
+      try {
+        _db.execute('''
+          CREATE TABLE IF NOT EXISTS quick_issues (
+            scope TEXT NOT NULL,
+            issue_id TEXT NOT NULL,
+            note TEXT,
+            created_at_utc TEXT NOT NULL,
+            PRIMARY KEY (scope, issue_id),
+            FOREIGN KEY (scope, issue_id) REFERENCES issues (scope, issue_id) ON DELETE CASCADE
+          );
+          CREATE INDEX IF NOT EXISTS idx_quick_issues_scope_created
+            ON quick_issues (scope, created_at_utc);
+          PRAGMA user_version = 4;
+        ''');
+        _db.execute('COMMIT;');
+      } catch (e) {
+        _db.execute('ROLLBACK;');
+        rethrow;
+      }
+    }
   }
 
   void _checkWritable() {
@@ -295,6 +318,71 @@ class LocalStore {
     } finally {
       stmt.close();
     }
+  }
+
+  QuickIssue addQuickIssue(QuickIssue quickIssue) {
+    _checkWritable();
+    _db.execute(
+      '''
+      INSERT OR IGNORE INTO quick_issues (scope, issue_id, note, created_at_utc)
+      VALUES (?, ?, ?, ?);
+      ''',
+      [
+        quickIssue.scope,
+        quickIssue.issueId,
+        quickIssue.note,
+        quickIssue.createdAtUtc.toIso8601String(),
+      ],
+    );
+    return getQuickIssue(quickIssue.scope, quickIssue.issueId)!;
+  }
+
+  List<QuickIssue> getQuickIssues({required String scope}) {
+    final stmt = _db.prepare('''
+      SELECT scope, issue_id, note, created_at_utc
+      FROM quick_issues
+      WHERE scope = ?
+      ORDER BY created_at_utc ASC, rowid ASC;
+    ''');
+    try {
+      return stmt
+          .select([scope])
+          .map((row) => QuickIssue.fromMap(row))
+          .toList();
+    } finally {
+      stmt.close();
+    }
+  }
+
+  QuickIssue? getQuickIssue(String scope, String issueId) {
+    final stmt = _db.prepare('''
+      SELECT scope, issue_id, note, created_at_utc
+      FROM quick_issues
+      WHERE scope = ? AND issue_id = ?;
+    ''');
+    try {
+      final rows = stmt.select([scope, issueId]);
+      return rows.isEmpty ? null : QuickIssue.fromMap(rows.first);
+    } finally {
+      stmt.close();
+    }
+  }
+
+  void updateQuickIssueNote(String scope, String issueId, String note) {
+    _checkWritable();
+    final normalizedNote = note.trim();
+    _db.execute(
+      'UPDATE quick_issues SET note = ? WHERE scope = ? AND issue_id = ?;',
+      [normalizedNote.isEmpty ? null : normalizedNote, scope, issueId],
+    );
+  }
+
+  void deleteQuickIssue(String scope, String issueId) {
+    _checkWritable();
+    _db.execute('DELETE FROM quick_issues WHERE scope = ? AND issue_id = ?;', [
+      scope,
+      issueId,
+    ]);
   }
 
   // --- Операции с локальными логами (LocalLog) ---

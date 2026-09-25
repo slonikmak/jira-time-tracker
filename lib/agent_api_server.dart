@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'app_state.dart';
 import 'day_builder.dart';
+import 'jira_client.dart';
 import 'models.dart';
-import 'service_tickets.dart';
 
 /// Встроенный HTTP REST API сервер для взаимодействия с AI-агентами.
 class AgentApiServer {
@@ -13,10 +13,7 @@ class AgentApiServer {
   HttpServer? _server;
   int _actualPort = 0;
 
-  AgentApiServer({
-    this.appState,
-    this.initialPort = 8765,
-  });
+  AgentApiServer({this.appState, this.initialPort = 8765});
 
   bool get isRunning => _server != null;
   int get port => _actualPort;
@@ -69,129 +66,40 @@ class AgentApiServer {
   static String generateSkillPrompt(String baseUrl) {
     return '''# Навык: Взаимодействие с локальным Jira Time Tracker
 
-Ты можешь взаимодействовать с локальным трекером времени пользователя через HTTP API на `$baseUrl`.
+Локальный REST API доступен по адресу `$baseUrl`.
 
-## Основные правила
-1. Финальная отправка ворклогов в Jira всегда выполняется пользователем в интерфейсе приложения (кнопка «Отправить в Jira»). Твоя задача — залогировать время и/или составить расписание дня.
-2. Время начала сегментов можно передавать в локальном формате "HH:MM" (например, "09:00", "13:30") или в ISO-8601 UTC.
-3. В расписании дня паузы между сегментами образуются автоматически. Сегменты не должны пересекаться.
+## Правила
+- Финальные worklogs в Jira отправляет только пользователь из UI.
+- `LocalLog` — источник работы; `Segment` — отдельный планируемый Jira worklog.
+- Каждый segment должен содержать `source_log_id` существующего queue log. Несколько сегментов могут ссылаться на один источник в пределах одного дня.
+- Источник должен быть остановлен, не отправлен и не занят черновиком другой даты. Для разных дат раздели исходный лог в очереди через `POST /api/logs/{id}/split`.
+- Сегменты одного дня не должны пересекаться и должны полностью попадать в указанную дату. Паузы формируются автоматически.
 
-## Служебные тикеты (созвоны, код-ревью, почта и общие активности)
-Если пользователь просит залогировать типовую активность без указания конкретного номера задачи в Jira, используй подходящий служебный тикет (EG-*):
-- `EG-294`: Созвоны, синки, таунхоллы, митинги (Non-utilized Meeting/Events)
-- `EG-304`: Собеседования, HR-активности (Recruiting)
-- `EG-297`: Разбор и написание писем (Work with e-mails)
-- `EG-295`: Общая активность, мелкие задачи без тикета (Other)
-- `EG-301`: Обучение, самообразование, курсы (Personal Training)
-- `EG-302`: Планирование продукта, роадмап (Product Planning)
-- `EG-303`: Настройка софта / железа (Equipment setup)
-- `EG-296`: Помощь клиентам, разбор инцидентов (Customer support)
-- `EG-299`: Помощь сисадминам / инфраструктура (SysAdmin Assistance)
-- `EG-300`: Помощь саппорту (Support Assistance)
-- `EG-6`: Внутренние инструменты и скрипты (Methods/Tools Development)
-- `EG-12`: Передача знаний / KT (Knowledge Transfer Meetings)
-Полный список всех 18 служебных тикетов доступен через `GET /api/service-tickets`.
+## Поиск и очередь
+- `GET /api/issues?q=...` ищет локально по key, summary и status.
+- `GET /api/logs?q=...&issue_key=...&availability=...` возвращает логи с `availability` (`free`, `running`, `in_draft`) и `draft_date`.
+- `GET /api/quick-issues` возвращает быстрые задачи активного подключения; каталог служит подсказкой и не ограничивает выбор других Jira-задач.
+- `POST /api/logs` и `POST /api/logs/merge` принимают только известные локальные задачи или refs, которые удалось подтвердить через Jira; неизвестный ref не создаётся как offline fallback.
+- Агент может создавать, редактировать, удалять, делить и объединять свободные queue logs.
 
-## Доступные эндпоинты
+## Сборка дня
+1. Вызови `GET /api/day?date=YYYY-MM-DD` для свежих worklogs Jira и текущего draft. Если Jira недоступна, остановись и сообщи об ошибке.
+2. Если draft существует, сохрани его top-level `revision`.
+3. Вызови `POST /api/day`, передав весь набор segments целиком. Каждый segment должен ссылаться на свой `source_log_id`; `issue_key` необязателен и, если передан, должен соответствовать задаче источника.
+4. При существующем draft передай `base_revision`. Ответ `409` означает конфликт правок: перечитай дату, объедини изменения и отправь snapshot заново.
 
-### 1. Получить список неотправленных логов
-GET /api/logs
-Ответ:
-[
-  {
-    "id": "uuid-1",
-    "issue_key": "PROJ-123",
-    "issue_summary": "Описание задачи",
-    "duration_minutes": 60,
-    "description": "Сделал фичу"
-  }
-]
-
-### 2. Залогировать затраченное время
-POST /api/logs
-Content-Type: application/json
+```json
 {
-  "issue_key": "PROJ-123",
-  "duration_minutes": 90,
-  "description": "Опциональный комментарий",
-  "fixed_start_time": "11:00"
-}
-(Также поддерживается "duration_seconds" вместо "duration_minutes". "fixed_start_time" — опциональное фиксированное время в формате "HH:MM").
-
-### 3. Разбить лог на две части
-POST /api/logs/{id}/split
-Content-Type: application/json
-{
-  "part1_minutes": 45,
-  "part1_description": "Первая часть работы",
-  "part2_description": "Вторая часть работы"
-}
-(Также поддерживается "part1_seconds" вместо "part1_minutes").
-Ответ: массив из двух созданных логов.
-
-### 4. Объединить несколько логов в один
-POST /api/logs/merge
-Content-Type: application/json
-{
-  "source_log_ids": ["uuid-1", "uuid-2"],
-  "target_issue_key": "PROJ-123",
-  "description": "Объединенный комментарий"
-}
-(target_issue_key и description опциональны).
-Ответ: созданный объединенный лог.
-
-### 5. Изменить или удалить лог
-PATCH /api/logs/{id}
-{
-  "duration_minutes": 45,
-  "description": "Обновленный комментарий",
-  "fixed_start_time": "11:00"
-}
-
-DELETE /api/logs/{id}
-
-### 6. Получить состояние дня
-GET /api/day?date=YYYY-MM-DD
-(Параметр date опционален, по умолчанию — сегодня).
-Возвращает существующие ворклоги Jira (jira_worklogs) и текущий черновик расписания (draft) с сегментами и паузами.
-
-### 7. Сохранить расписание дня
-POST /api/day
-Content-Type: application/json
-{
-  "date": "YYYY-MM-DD",
+  "date": "2026-09-17",
+  "base_revision": "revision-from-GET",
   "segments": [
-    {
-      "issue_key": "PROJ-123",
-      "start": "09:00",
-      "duration_minutes": 90,
-      "description": "Работа над модулем"
-    },
-    {
-      "issue_key": "EG-294",
-      "start": "11:00",
-      "duration_minutes": 30,
-      "description": "Daily sync",
-      "is_fixed": true,
-      "fixed_start_time": "11:00"
-    }
+    {"source_log_id": "uuid-1", "start": "09:00", "duration_minutes": 30, "description": "Разбор"},
+    {"source_log_id": "uuid-1", "start": "09:45", "duration_minutes": 30, "description": "Реализация"}
   ]
 }
+```
 
-### 8. Получить список служебных тикетов
-GET /api/service-tickets
-Ответ:
-[
-  {
-    "key": "EG-294",
-    "category": "Non-utilized Meeting/Events",
-    "description": "Созвоны, синги, таунхоллы (не привязанные к конкретной задаче)"
-  }
-]
-
-### 9. Справка и документация
-- GET /api/help (справка по эндпоинтам)
-- GET /api/openapi.json (OpenAPI 3.0 спецификация)
+Для полного контракта вызови `GET /api/help` или `GET /api/openapi.json`.
 ''';
   }
 
@@ -228,6 +136,11 @@ GET /api/service-tickets
         return;
       }
 
+      if (path == '/api/issues' && request.method == 'GET') {
+        _handleGetIssues(request, response);
+        return;
+      }
+
       // Маршруты Ticket 02 и Split/Merge
       if (path == '/api/logs') {
         if (request.method == 'GET') {
@@ -244,8 +157,13 @@ GET /api/service-tickets
         return;
       }
 
-      if (path.startsWith('/api/logs/') && path.endsWith('/split') && request.method == 'POST') {
-        final id = path.substring('/api/logs/'.length, path.length - '/split'.length);
+      if (path.startsWith('/api/logs/') &&
+          path.endsWith('/split') &&
+          request.method == 'POST') {
+        final id = path.substring(
+          '/api/logs/'.length,
+          path.length - '/split'.length,
+        );
         await _handleSplitLog(request, response, id);
         return;
       }
@@ -271,37 +189,60 @@ GET /api/service-tickets
         }
       }
 
-      if (path == '/api/service-tickets' && request.method == 'GET') {
-        _handleGetServiceTickets(request, response);
+      if (path == '/api/quick-issues' && request.method == 'GET') {
+        _handleGetQuickIssues(response);
         return;
       }
 
       // 404 Not Found
-      _sendJson(
-        response,
-        HttpStatus.notFound,
-        {'error': 'Not Found', 'path': path, 'method': request.method},
-      );
+      _sendJson(response, HttpStatus.notFound, {
+        'error': 'Not Found',
+        'path': path,
+        'method': request.method,
+      });
     } catch (e, st) {
-      _sendJson(
-        response,
-        HttpStatus.internalServerError,
-        {'error': e.toString(), 'stackTrace': st.toString()},
-      );
+      _sendJson(response, HttpStatus.internalServerError, {
+        'error': e.toString(),
+        'stackTrace': st.toString(),
+      });
     }
   }
 
-  void _handleGetServiceTickets(HttpRequest request, HttpResponse response) {
-    final list = kServiceTickets.map((t) => {
-      'key': t.key,
-      'category': t.category,
-      'description': t.description,
+  void _handleGetQuickIssues(HttpResponse response) {
+    final state = appState;
+    final connection = state?.currentConnection;
+    if (state == null || connection == null) {
+      _sendJson(response, HttpStatus.conflict, {
+        'error':
+            'Подключите Jira, чтобы получить быстрые задачи активного каталога.',
+      });
+      return;
+    }
+
+    final issuesById = {
+      for (final issue in state.store.getIssues(scope: connection.scope))
+        issue.issueId: issue,
+    };
+    final list = state.store.getQuickIssues(scope: connection.scope).map((
+      quickIssue,
+    ) {
+      final issue = issuesById[quickIssue.issueId]!;
+      return {
+        'issue_id': quickIssue.issueId,
+        'key': issue.key,
+        'summary': issue.summary,
+        'note': quickIssue.note,
+      };
     }).toList();
     _sendJson(response, HttpStatus.ok, list);
   }
 
   void _sendHelp(HttpResponse response) {
-    response.headers.contentType = ContentType('text', 'markdown', charset: 'utf-8');
+    response.headers.contentType = ContentType(
+      'text',
+      'markdown',
+      charset: 'utf-8',
+    );
     response.write(_buildHelpMarkdown());
     response.close();
   }
@@ -317,7 +258,10 @@ GET /api/service-tickets
     response.close();
   }
 
-  Future<Map<String, dynamic>?> _parseJsonBody(HttpRequest request, HttpResponse response) async {
+  Future<Map<String, dynamic>?> _parseJsonBody(
+    HttpRequest request,
+    HttpResponse response,
+  ) async {
     try {
       final content = await utf8.decoder.bind(request).join();
       if (content.trim().isEmpty) return {};
@@ -325,7 +269,9 @@ GET /api/service-tickets
       if (decoded is Map<String, dynamic>) {
         return decoded;
       }
-      _sendJson(response, HttpStatus.badRequest, {'error': 'JSON body must be an object'});
+      _sendJson(response, HttpStatus.badRequest, {
+        'error': 'JSON body must be an object',
+      });
       return null;
     } catch (e) {
       _sendJson(response, HttpStatus.badRequest, {'error': 'Invalid JSON: $e'});
@@ -334,8 +280,11 @@ GET /api/service-tickets
   }
 
   Map<String, dynamic> _formatLog(LocalLog log, AppState state) {
-    final issue = state.issues.where((i) => i.issueId == log.issueId).firstOrNull;
+    final issue = state.issues
+        .where((i) => i.issueId == log.issueId)
+        .firstOrNull;
     final key = issue?.key ?? log.issueId;
+    final draftDate = state.getDraftDateForLog(log.id);
     return {
       'id': log.id,
       'issue_id': log.issueId,
@@ -348,25 +297,100 @@ GET /api/service-tickets
       'is_running': log.isRunning,
       'is_manual': log.isManual,
       'fixed_start_time': log.fixedStartTime,
+      'availability': log.isRunning
+          ? 'running'
+          : draftDate != null
+          ? 'in_draft'
+          : 'free',
+      'draft_date': draftDate,
     };
   }
 
-  Future<void> _handleGetLogs(HttpRequest request, HttpResponse response) async {
+  DateTime _parseDateOnly(String value) {
+    final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(value);
+    if (match == null) throw FormatException('Expected YYYY-MM-DD');
+    final year = int.parse(match[1]!);
+    final month = int.parse(match[2]!);
+    final day = int.parse(match[3]!);
+    final parsed = DateTime(year, month, day);
+    if (parsed.year != year || parsed.month != month || parsed.day != day) {
+      throw FormatException('Invalid calendar date');
+    }
+    return parsed;
+  }
+
+  void _handleGetIssues(HttpRequest request, HttpResponse response) {
+    final state = appState;
+    if (state == null) {
+      _sendJson(response, HttpStatus.serviceUnavailable, {
+        'error': 'AppState not available',
+      });
+      return;
+    }
+    final query = request.uri.queryParameters['q'] ?? '';
+    final result = state
+        .searchIssuesLocally(query)
+        .map(
+          (issue) => {
+            'issue_id': issue.issueId,
+            'issue_key': issue.key,
+            'summary': issue.summary,
+            'status': issue.status,
+          },
+        )
+        .toList();
+    _sendJson(response, HttpStatus.ok, result);
+  }
+
+  Future<void> _handleGetLogs(
+    HttpRequest request,
+    HttpResponse response,
+  ) async {
     final state = appState;
     if (state == null) {
       _sendJson(response, HttpStatus.ok, []);
       return;
     }
 
-    final unconsumed = state.unconsumedLogs;
-    final result = unconsumed.map((log) => _formatLog(log, state)).toList();
+    final query = (request.uri.queryParameters['q'] ?? '').trim().toLowerCase();
+    final issueKey = request.uri.queryParameters['issue_key']
+        ?.trim()
+        .toLowerCase();
+    final availability = request.uri.queryParameters['availability']
+        ?.trim()
+        .toLowerCase();
+    final result = state.unconsumedLogs
+        .where((log) {
+          final item = _formatLog(log, state);
+          if (query.isNotEmpty &&
+              !'${item['issue_key']} ${item['issue_title']} ${item['description']}'
+                  .toLowerCase()
+                  .contains(query)) {
+            return false;
+          }
+          if (issueKey != null &&
+              issueKey.isNotEmpty &&
+              (item['issue_key'] as String).toLowerCase() != issueKey) {
+            return false;
+          }
+          return availability == null ||
+              availability.isEmpty ||
+              item['availability'] == availability;
+        })
+        .map((log) => _formatLog(log, state))
+        .toList();
     _sendJson(response, HttpStatus.ok, result);
   }
 
-  Future<void> _handlePostLogs(HttpRequest request, HttpResponse response) async {
+  Future<void> _handlePostLogs(
+    HttpRequest request,
+    HttpResponse response,
+  ) async {
     final state = appState;
     if (state == null) {
-      _sendJson(response, HttpStatus.serviceUnavailable, {'error': 'AppState not available'});
+      _sendJson(response, HttpStatus.serviceUnavailable, {
+        'error': 'AppState not available',
+      });
       return;
     }
 
@@ -375,7 +399,9 @@ GET /api/service-tickets
 
     final issueKey = body['issue_key'] as String?;
     if (issueKey == null || issueKey.trim().isEmpty) {
-      _sendJson(response, HttpStatus.badRequest, {'error': 'Field "issue_key" is required'});
+      _sendJson(response, HttpStatus.badRequest, {
+        'error': 'Field "issue_key" is required',
+      });
       return;
     }
 
@@ -385,7 +411,8 @@ GET /api/service-tickets
 
     if (totalSeconds <= 0) {
       _sendJson(response, HttpStatus.badRequest, {
-        'error': 'Duration must be greater than 0 (specify "duration_minutes" or "duration_seconds")'
+        'error':
+            'Duration must be greater than 0 (specify "duration_minutes" or "duration_seconds")',
       });
       return;
     }
@@ -397,7 +424,8 @@ GET /api/service-tickets
       final parts = fixedStartTime.trim().split(':');
       if (parts.length != 2) {
         _sendJson(response, HttpStatus.badRequest, {
-          'error': 'Invalid "fixed_start_time" format "$fixedStartTime". Expected HH:MM'
+          'error':
+              'Invalid "fixed_start_time" format "$fixedStartTime". Expected HH:MM',
         });
         return;
       }
@@ -405,14 +433,15 @@ GET /api/service-tickets
       final m = int.tryParse(parts[1]);
       if (h == null || m == null || h < 0 || h > 23 || m < 0 || m > 59) {
         _sendJson(response, HttpStatus.badRequest, {
-          'error': 'Invalid "fixed_start_time" value. Hours must be 0-23, minutes 0-59'
+          'error':
+              'Invalid "fixed_start_time" value. Hours must be 0-23, minutes 0-59',
         });
         return;
       }
     }
 
     try {
-      final issue = await state.resolveOrCreateIssue(issueKey);
+      final issue = await state.resolveIssueStrict(issueKey);
       final log = await state.addManualLog(
         issueId: issue.issueId,
         durationSeconds: totalSeconds,
@@ -421,21 +450,34 @@ GET /api/service-tickets
       );
 
       _sendJson(response, HttpStatus.created, _formatLog(log, state));
+    } on JiraApiException catch (e) {
+      final status = e.statusCode == HttpStatus.notFound
+          ? HttpStatus.notFound
+          : HttpStatus.badGateway;
+      _sendJson(response, status, {'error': e.toString()});
     } catch (e) {
       _sendJson(response, HttpStatus.badRequest, {'error': e.toString()});
     }
   }
 
-  Future<void> _handlePatchLog(HttpRequest request, HttpResponse response, String id) async {
+  Future<void> _handlePatchLog(
+    HttpRequest request,
+    HttpResponse response,
+    String id,
+  ) async {
     final state = appState;
     if (state == null) {
-      _sendJson(response, HttpStatus.serviceUnavailable, {'error': 'AppState not available'});
+      _sendJson(response, HttpStatus.serviceUnavailable, {
+        'error': 'AppState not available',
+      });
       return;
     }
 
     final log = state.logs.where((l) => l.id == id).firstOrNull;
     if (log == null) {
-      _sendJson(response, HttpStatus.notFound, {'error': 'Log with id "$id" not found'});
+      _sendJson(response, HttpStatus.notFound, {
+        'error': 'Log with id "$id" not found',
+      });
       return;
     }
 
@@ -444,21 +486,27 @@ GET /api/service-tickets
 
     final durationMinutes = body['duration_minutes'] as int?;
     final durationSeconds = body['duration_seconds'] as int?;
-    final totalSeconds = durationSeconds ??
-        (durationMinutes != null ? durationMinutes * 60 : log.accumulatedSeconds);
+    final totalSeconds =
+        durationSeconds ??
+        (durationMinutes != null
+            ? durationMinutes * 60
+            : log.accumulatedSeconds);
 
     final description = (body['description'] as String?) ?? log.description;
 
     final hasFixedStartTime = body.containsKey('fixed_start_time');
     final fixedStartTime = body['fixed_start_time'] as String?;
-    final clearFixedStartTime = (body['clear_fixed_start_time'] as bool?) ??
-        (hasFixedStartTime && (fixedStartTime == null || fixedStartTime.trim().isEmpty));
+    final clearFixedStartTime =
+        (body['clear_fixed_start_time'] as bool?) ??
+        (hasFixedStartTime &&
+            (fixedStartTime == null || fixedStartTime.trim().isEmpty));
 
     if (fixedStartTime != null && fixedStartTime.trim().isNotEmpty) {
       final parts = fixedStartTime.trim().split(':');
       if (parts.length != 2) {
         _sendJson(response, HttpStatus.badRequest, {
-          'error': 'Invalid "fixed_start_time" format "$fixedStartTime". Expected HH:MM'
+          'error':
+              'Invalid "fixed_start_time" format "$fixedStartTime". Expected HH:MM',
         });
         return;
       }
@@ -466,7 +514,8 @@ GET /api/service-tickets
       final m = int.tryParse(parts[1]);
       if (h == null || m == null || h < 0 || h > 23 || m < 0 || m > 59) {
         _sendJson(response, HttpStatus.badRequest, {
-          'error': 'Invalid "fixed_start_time" value. Hours must be 0-23, minutes 0-59'
+          'error':
+              'Invalid "fixed_start_time" value. Hours must be 0-23, minutes 0-59',
         });
         return;
       }
@@ -488,27 +537,36 @@ GET /api/service-tickets
     }
   }
 
-  Future<void> _handleSplitLog(HttpRequest request, HttpResponse response, String id) async {
+  Future<void> _handleSplitLog(
+    HttpRequest request,
+    HttpResponse response,
+    String id,
+  ) async {
     final state = appState;
     if (state == null) {
-      _sendJson(response, HttpStatus.serviceUnavailable, {'error': 'AppState not available'});
+      _sendJson(response, HttpStatus.serviceUnavailable, {
+        'error': 'AppState not available',
+      });
       return;
     }
 
     final log = state.logs.where((l) => l.id == id).firstOrNull;
     if (log == null) {
-      _sendJson(response, HttpStatus.notFound, {'error': 'Log with id "$id" not found'});
+      _sendJson(response, HttpStatus.notFound, {
+        'error': 'Log with id "$id" not found',
+      });
       return;
     }
     if (log.isRunning) {
       _sendJson(response, HttpStatus.badRequest, {
-        'error': 'Cannot split a running log. Pause it first.'
+        'error': 'Cannot split a running log. Pause it first.',
       });
       return;
     }
     if (log.isConsumed || state.isLogInDraft(id)) {
       _sendJson(response, HttpStatus.badRequest, {
-        'error': 'Cannot split a log that has already been included in a day draft.'
+        'error':
+            'Cannot split a log that has already been included in a day draft.',
       });
       return;
     }
@@ -523,7 +581,7 @@ GET /api/service-tickets
     if (splitOffset <= 0 || splitOffset >= log.accumulatedSeconds) {
       _sendJson(response, HttpStatus.badRequest, {
         'error':
-            'Split offset must be > 0 and < log duration (${log.accumulatedSeconds}s). Got $splitOffset'
+            'Split offset must be > 0 and < log duration (${log.accumulatedSeconds}s). Got $splitOffset',
       });
       return;
     }
@@ -548,10 +606,15 @@ GET /api/service-tickets
     }
   }
 
-  Future<void> _handleMergeLogs(HttpRequest request, HttpResponse response) async {
+  Future<void> _handleMergeLogs(
+    HttpRequest request,
+    HttpResponse response,
+  ) async {
     final state = appState;
     if (state == null) {
-      _sendJson(response, HttpStatus.serviceUnavailable, {'error': 'AppState not available'});
+      _sendJson(response, HttpStatus.serviceUnavailable, {
+        'error': 'AppState not available',
+      });
       return;
     }
 
@@ -561,7 +624,8 @@ GET /api/service-tickets
     final sourceLogIdsRaw = body['source_log_ids'];
     if (sourceLogIdsRaw is! List || sourceLogIdsRaw.length < 2) {
       _sendJson(response, HttpStatus.badRequest, {
-        'error': 'Field "source_log_ids" must be an array with at least 2 log IDs'
+        'error':
+            'Field "source_log_ids" must be an array with at least 2 log IDs',
       });
       return;
     }
@@ -571,11 +635,19 @@ GET /api/service-tickets
     String? targetIssueId;
     if (targetIssueKey != null && targetIssueKey.trim().isNotEmpty) {
       try {
-        final issue = await state.resolveOrCreateIssue(targetIssueKey.trim());
+        final issue = await state.resolveIssueStrict(targetIssueKey.trim());
         targetIssueId = issue.issueId;
+      } on JiraApiException catch (e) {
+        final status = e.statusCode == HttpStatus.notFound
+            ? HttpStatus.notFound
+            : HttpStatus.badGateway;
+        _sendJson(response, status, {
+          'error': 'Target issue "$targetIssueKey" could not be resolved: $e',
+        });
+        return;
       } catch (e) {
         _sendJson(response, HttpStatus.badRequest, {
-          'error': 'Target issue "$targetIssueKey" could not be resolved: $e'
+          'error': 'Target issue "$targetIssueKey" could not be resolved: $e',
         });
         return;
       }
@@ -596,16 +668,24 @@ GET /api/service-tickets
     }
   }
 
-  Future<void> _handleDeleteLog(HttpRequest request, HttpResponse response, String id) async {
+  Future<void> _handleDeleteLog(
+    HttpRequest request,
+    HttpResponse response,
+    String id,
+  ) async {
     final state = appState;
     if (state == null) {
-      _sendJson(response, HttpStatus.serviceUnavailable, {'error': 'AppState not available'});
+      _sendJson(response, HttpStatus.serviceUnavailable, {
+        'error': 'AppState not available',
+      });
       return;
     }
 
     final log = state.logs.where((l) => l.id == id).firstOrNull;
     if (log == null) {
-      _sendJson(response, HttpStatus.notFound, {'error': 'Log with id "$id" not found'});
+      _sendJson(response, HttpStatus.notFound, {
+        'error': 'Log with id "$id" not found',
+      });
       return;
     }
 
@@ -620,75 +700,105 @@ GET /api/service-tickets
   Future<void> _handleGetDay(HttpRequest request, HttpResponse response) async {
     final state = appState;
     if (state == null) {
-      _sendJson(response, HttpStatus.serviceUnavailable, {'error': 'AppState not available'});
+      _sendJson(response, HttpStatus.serviceUnavailable, {
+        'error': 'AppState not available',
+      });
       return;
     }
 
     final dateParam = request.uri.queryParameters['date'];
-    DateTime targetDate;
-    if (dateParam != null && dateParam.trim().isNotEmpty) {
-      try {
-        targetDate = DateTime.parse(dateParam.trim());
-      } catch (e) {
-        _sendJson(response, HttpStatus.badRequest, {
-          'error': 'Invalid date format. Expected YYYY-MM-DD'
-        });
-        return;
-      }
-    } else {
-      targetDate = state.selectedDate;
+    late final DateTime targetDate;
+    try {
+      targetDate = dateParam == null || dateParam.trim().isEmpty
+          ? state.selectedDate
+          : _parseDateOnly(dateParam.trim());
+    } on FormatException {
+      _sendJson(response, HttpStatus.badRequest, {
+        'error': 'Invalid date format. Expected YYYY-MM-DD',
+      });
+      return;
     }
 
     final dateStr =
         '${targetDate.year.toString().padLeft(4, '0')}-${targetDate.month.toString().padLeft(2, '0')}-${targetDate.day.toString().padLeft(2, '0')}';
 
-    final draft = state.store.getDayDraft(scope: state.activeScope, date: dateStr);
-    List<Segment> segments = [];
-    List<Break> breaks = [];
-    if (draft != null) {
-      segments = state.store.getSegments(draftId: draft.id);
-      breaks = state.store.getBreaks(draftId: draft.id);
+    late final List<ImportedWorklog> existingWorklogs;
+    try {
+      existingWorklogs = await state.fetchJiraWorklogsForDateScoped(targetDate);
+    } catch (e) {
+      _sendJson(response, HttpStatus.badGateway, {
+        'error': 'Не удалось загрузить worklogs Jira для $dateStr: $e',
+      });
+      return;
     }
 
+    // Read the local snapshot after the Jira await so segments and revision match.
+    final draft = state.store.getDayDraft(
+      scope: state.activeScope,
+      date: dateStr,
+    );
+    final segments = draft == null
+        ? const <Segment>[]
+        : state.store.getSegments(draftId: draft.id);
+    final breaks = draft == null
+        ? const <Break>[]
+        : state.store.getBreaks(draftId: draft.id);
+    final revision = draft == null ? null : state.dayDraftRevision(draft);
     final issuesMap = {for (final i in state.issues) i.issueId: i};
 
-    final existingList = state.importedWorklogs.map((e) => {
-      'id': e.id,
-      'issue_id': e.issueId,
-      'issue_key': e.issueKey ?? issuesMap[e.issueId]?.key ?? e.issueId,
-      'start_utc': e.startUtc.toIso8601String(),
-      'start_local': e.startUtc.toLocal().toIso8601String(),
-      'duration_seconds': e.durationSeconds,
-      'duration_minutes': (e.durationSeconds / 60).round(),
-      'comment': e.comment,
-    }).toList();
+    final existingList = existingWorklogs
+        .map(
+          (e) => {
+            'id': e.id,
+            'issue_id': e.issueId,
+            'issue_key': e.issueKey ?? issuesMap[e.issueId]?.key ?? e.issueId,
+            'start_utc': e.startUtc.toIso8601String(),
+            'start_local': e.startUtc.toLocal().toIso8601String(),
+            'duration_seconds': e.durationSeconds,
+            'duration_minutes': (e.durationSeconds / 60).round(),
+            'comment': e.comment,
+          },
+        )
+        .toList();
 
     Map<String, dynamic>? draftMap;
     if (draft != null) {
       draftMap = {
         'id': draft.id,
         'date': draft.date,
+        'revision': revision,
         'start_utc': draft.startUtc.toIso8601String(),
         'end_utc': draft.endUtc.toIso8601String(),
         'status': draft.status.name,
-        'segments': segments.map((s) => {
-          'id': s.id,
-          'issue_key': issuesMap[s.issueId]?.key ?? s.issueId,
-          'start_utc': s.startUtc.toIso8601String(),
-          'start_local': '${s.startUtc.toLocal().hour.toString().padLeft(2, '0')}:${s.startUtc.toLocal().minute.toString().padLeft(2, '0')}',
-          'duration_seconds': s.durationSeconds,
-          'duration_minutes': (s.durationSeconds / 60).round(),
-          'description': s.description,
-          'send_state': s.sendState.name,
-          'is_fixed': s.isFixed,
-        }).toList(),
-        'breaks': breaks.map((b) => {
-          'id': b.id,
-          'start_utc': b.startUtc.toIso8601String(),
-          'start_local': '${b.startUtc.toLocal().hour.toString().padLeft(2, '0')}:${b.startUtc.toLocal().minute.toString().padLeft(2, '0')}',
-          'duration_seconds': b.durationSeconds,
-          'duration_minutes': (b.durationSeconds / 60).round(),
-        }).toList(),
+        'segments': segments
+            .map(
+              (s) => {
+                'id': s.id,
+                'source_log_id': s.sourceLogId,
+                'issue_key': issuesMap[s.issueId]?.key ?? s.issueId,
+                'start_utc': s.startUtc.toIso8601String(),
+                'start_local':
+                    '${s.startUtc.toLocal().hour.toString().padLeft(2, '0')}:${s.startUtc.toLocal().minute.toString().padLeft(2, '0')}',
+                'duration_seconds': s.durationSeconds,
+                'duration_minutes': (s.durationSeconds / 60).round(),
+                'description': s.description,
+                'send_state': s.sendState.name,
+                'is_fixed': s.isFixed,
+              },
+            )
+            .toList(),
+        'breaks': breaks
+            .map(
+              (b) => {
+                'id': b.id,
+                'start_utc': b.startUtc.toIso8601String(),
+                'start_local':
+                    '${b.startUtc.toLocal().hour.toString().padLeft(2, '0')}:${b.startUtc.toLocal().minute.toString().padLeft(2, '0')}',
+                'duration_seconds': b.durationSeconds,
+                'duration_minutes': (b.durationSeconds / 60).round(),
+              },
+            )
+            .toList(),
       };
     }
 
@@ -696,13 +806,19 @@ GET /api/service-tickets
       'date': dateStr,
       'existing_worklogs': existingList,
       'draft': draftMap,
+      'revision': revision,
     });
   }
 
-  Future<void> _handlePostDay(HttpRequest request, HttpResponse response) async {
+  Future<void> _handlePostDay(
+    HttpRequest request,
+    HttpResponse response,
+  ) async {
     final state = appState;
     if (state == null) {
-      _sendJson(response, HttpStatus.serviceUnavailable, {'error': 'AppState not available'});
+      _sendJson(response, HttpStatus.serviceUnavailable, {
+        'error': 'AppState not available',
+      });
       return;
     }
 
@@ -710,12 +826,12 @@ GET /api/service-tickets
     if (body == null) return;
 
     final dateStr = body['date'] as String? ?? state.selectedDateString;
-    DateTime targetDate;
+    late final DateTime targetDate;
     try {
-      targetDate = DateTime.parse(dateStr);
-    } catch (e) {
+      targetDate = _parseDateOnly(dateStr);
+    } on FormatException {
       _sendJson(response, HttpStatus.badRequest, {
-        'error': 'Invalid date format "$dateStr". Expected YYYY-MM-DD'
+        'error': 'Invalid date format "$dateStr". Expected YYYY-MM-DD',
       });
       return;
     }
@@ -723,7 +839,7 @@ GET /api/service-tickets
     final rawSegments = body['segments'];
     if (rawSegments is! List || rawSegments.isEmpty) {
       _sendJson(response, HttpStatus.badRequest, {
-        'error': 'Field "segments" must be a non-empty array'
+        'error': 'Field "segments" must be a non-empty array',
       });
       return;
     }
@@ -734,15 +850,23 @@ GET /api/service-tickets
       final item = rawSegments[i];
       if (item is! Map<String, dynamic>) {
         _sendJson(response, HttpStatus.badRequest, {
-          'error': 'Each segment must be an object at index $i'
+          'error': 'Each segment must be an object at index $i',
         });
         return;
       }
 
       final issueKey = item['issue_key'] as String?;
-      if (issueKey == null || issueKey.trim().isEmpty) {
+      if (issueKey != null && issueKey.trim().isEmpty) {
         _sendJson(response, HttpStatus.badRequest, {
-          'error': 'Segment at index $i missing "issue_key"'
+          'error': 'Segment "issue_key" cannot be empty at index $i',
+        });
+        return;
+      }
+
+      final sourceLogId = item['source_log_id'] as String?;
+      if (sourceLogId == null || sourceLogId.trim().isEmpty) {
+        _sendJson(response, HttpStatus.badRequest, {
+          'error': 'Segment at index $i missing "source_log_id"',
         });
         return;
       }
@@ -750,7 +874,7 @@ GET /api/service-tickets
       final startRaw = item['start'] as String?;
       if (startRaw == null || startRaw.trim().isEmpty) {
         _sendJson(response, HttpStatus.badRequest, {
-          'error': 'Segment at index $i missing "start"'
+          'error': 'Segment at index $i missing "start"',
         });
         return;
       }
@@ -762,13 +886,25 @@ GET /api/service-tickets
         final parts = trimmedStart.split(':');
         final hour = int.tryParse(parts[0]);
         final minute = int.tryParse(parts[1]);
-        if (hour == null || minute == null || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+        if (hour == null ||
+            minute == null ||
+            hour < 0 ||
+            hour > 23 ||
+            minute < 0 ||
+            minute > 59) {
           _sendJson(response, HttpStatus.badRequest, {
-            'error': 'Invalid time format "$startRaw" at index $i. Expected HH:MM'
+            'error':
+                'Invalid time format "$startRaw" at index $i. Expected HH:MM',
           });
           return;
         }
-        final localDt = DateTime(targetDate.year, targetDate.month, targetDate.day, hour, minute);
+        final localDt = DateTime(
+          targetDate.year,
+          targetDate.month,
+          targetDate.day,
+          hour,
+          minute,
+        );
         startUtc = localDt.toUtc();
       } else {
         // Формат ISO 8601
@@ -776,7 +912,7 @@ GET /api/service-tickets
           startUtc = DateTime.parse(trimmedStart).toUtc();
         } catch (e) {
           _sendJson(response, HttpStatus.badRequest, {
-            'error': 'Invalid ISO timestamp "$startRaw" at index $i'
+            'error': 'Invalid ISO timestamp "$startRaw" at index $i',
           });
           return;
         }
@@ -788,47 +924,66 @@ GET /api/service-tickets
 
       if (totalSec <= 0) {
         _sendJson(response, HttpStatus.badRequest, {
-          'error': 'Segment at index $i duration must be > 0 (specify "duration_minutes" or "duration_seconds")'
+          'error':
+              'Segment at index $i duration must be > 0 (specify "duration_minutes" or "duration_seconds")',
         });
         return;
       }
 
       final desc = (item['description'] as String?) ?? '';
-      final sourceLogId = item['source_log_id'] as String?;
-      final isFixed = (item['is_fixed'] as bool?) ?? (item['fixed_start_time'] != null);
+      final isFixed =
+          (item['is_fixed'] as bool?) ?? (item['fixed_start_time'] != null);
       final fixedStartTime = item['fixed_start_time'] as String?;
 
       inputSegments.add(
         AgentSegmentInput(
-          issueKey: issueKey.trim(),
+          issueKey: issueKey?.trim(),
+          sourceLogId: sourceLogId.trim(),
           startUtc: startUtc,
           durationSeconds: totalSec,
           description: desc,
-          sourceLogId: sourceLogId,
           isFixed: isFixed,
           fixedStartTime: fixedStartTime?.trim(),
         ),
       );
     }
 
+    late final List<ImportedWorklog> existingWorklogs;
+    try {
+      existingWorklogs = await state.fetchJiraWorklogsForDateScoped(targetDate);
+    } catch (e) {
+      _sendJson(response, HttpStatus.badGateway, {
+        'error': 'Не удалось загрузить worklogs Jira для $dateStr: $e',
+      });
+      return;
+    }
+
     try {
       final draft = await state.applyAgentDayPlan(
         targetDate: targetDate,
         inputSegments: inputSegments,
+        existingWorklogs: existingWorklogs,
+        baseRevision: body['base_revision'] as String?,
       );
 
-      final totalWorkSec = inputSegments.fold<int>(0, (sum, s) => sum + s.durationSeconds);
+      final totalWorkSec = inputSegments.fold<int>(
+        0,
+        (sum, s) => sum + s.durationSeconds,
+      );
 
       _sendJson(response, HttpStatus.ok, {
         'status': 'ok',
         'draft_id': draft.id,
         'date': draft.date,
+        'revision': state.dayDraftRevision(draft),
         'segments_count': inputSegments.length,
         'total_work_seconds': totalWorkSec,
         'total_work_minutes': (totalWorkSec / 60).round(),
       });
     } on DayBuilderException catch (e) {
       _sendJson(response, HttpStatus.badRequest, {'error': e.message});
+    } on AgentDayRevisionConflict catch (e) {
+      _sendJson(response, HttpStatus.conflict, {'error': e.message});
     } catch (e) {
       _sendJson(response, HttpStatus.badRequest, {'error': e.toString()});
     }
@@ -841,69 +996,38 @@ GET /api/service-tickets
 
 Базовый URL: `$url`
 
-## Эндпоинты
+## Модель и правила
+- `LocalLog` — источник работы; `Segment` — отдельный worklog, который пользователь сможет отправить в Jira.
+- Каждый segment в `POST /api/day` обязан содержать `source_log_id`. Несколько segments могут ссылаться на один источник в пределах одного дня.
+- Источник должен быть остановлен, не отправлен и не занят активным черновиком другой даты. Чтобы разнести работу на разные даты, сначала раздели source через `POST /api/logs/{id}/split`.
+- Агент заменяет черновик целиком. Перед записью вызови `GET /api/day?date=YYYY-MM-DD`; если `draft` существует, передай его top-level `revision` как `base_revision`. Ответ `409` требует перечитать день и собрать snapshot заново.
+- Jira worklogs в GET/POST `/api/day` загружаются для указанной даты; при ошибке Jira возвращается `502`.
+- Финальную отправку worklogs в Jira всегда выполняет пользователь в приложении.
 
-### 1. Справка и метаданные
-- `GET /api/help` — эта документация в формате Markdown.
-- `GET /api/openapi.json` — машиночитаемая схема OpenAPI 3.0.0.
+## Поиск и очередь
+- `GET /api/issues?q=текст` — поиск по локальному каталогу: key, summary и status. Удалённый fuzzy search не выполняется.
+- `GET /api/logs?q=текст&issue_key=PROJ-123&availability=free` — очередь и фильтры. `availability`: `free`, `running` или `in_draft`; запись также содержит `draft_date`.
+- `POST /api/logs` создаёт source для известной локальной/Jira-задачи; при неизвестной задаче и ошибке Jira запрос отклоняется, fallback-задача не создаётся.
+- `POST /api/logs/{id}/split` и `POST /api/logs/merge` меняют исходные логи очереди. `PATCH /api/logs/{id}` и `DELETE /api/logs/{id}` управляют свободными логами.
+- `GET /api/quick-issues` возвращает быстрые задачи текущего Jira-подключения в порядке добавления. Поля: `issue_id`, `key`, `summary`, `note`; без активного подключения ответ `409`.
 
-### 2. Управление очередью логов
-- `GET /api/logs` — список свободных (неотправленных) логов времени.
-- `POST /api/logs` — добавить новое списание времени:
-  ```bash
-  curl -X POST $url/api/logs \\
-    -H "Content-Type: application/json" \\
-    -d '{"issue_key": "PROJ-123", "duration_minutes": 45, "description": "Работа над багом", "fixed_start_time": "11:00"}'
-  ```
-- `POST /api/logs/{id}/split` — разделить лог на две части:
-  ```bash
-  curl -X POST $url/api/logs/LOG_ID/split \\
-    -H "Content-Type: application/json" \\
-    -d '{"part1_minutes": 30, "part1_description": "Часть 1", "part2_description": "Часть 2"}'
-  ```
-- `POST /api/logs/merge` — объединить несколько логов в один:
-  ```bash
-  curl -X POST $url/api/logs/merge \\
-    -H "Content-Type: application/json" \\
-    -d '{"source_log_ids": ["ID_1", "ID_2"], "target_issue_key": "PROJ-123", "description": "Слияние задач"}'
-  ```
-- `PATCH /api/logs/{id}` — скорректировать длительность, описание или фиксированное время свободного лога.
-- `DELETE /api/logs/{id}` — удалить ошибочный лог.
+## Snapshot дня
+1. Получи доступные источники через `GET /api/logs` и данные дня через `GET /api/day?date=...`.
+2. Для каждого segment передай `source_log_id`, `start` (`HH:MM` или ISO-8601), длительность и описание. `issue_key` необязателен; если передан, он должен совпадать с задачей источника.
+3. Передай массив `segments` целиком. Если GET вернул draft, включи его revision в `base_revision`.
 
-### 3. Расписание дня
-- `GET /api/day?date=YYYY-MM-DD` — получить существующие в Jira записи (`existing_worklogs`) и текущий черновик дня.
-- `POST /api/day` — передать готовое расписание дня, собранное агентом:
-  ```bash
-  curl -X POST $url/api/day \\
-    -H "Content-Type: application/json" \\
-    -d '{
-      "date": "2026-09-17",
-      "segments": [
-        {
-          "issue_key": "PROJ-123",
-          "start": "09:00",
-          "duration_minutes": 60,
-          "description": "Анализ кода"
-        },
-        {
-          "issue_key": "EG-294",
-          "start": "11:00",
-          "duration_minutes": 30,
-          "description": "Daily standup",
-          "is_fixed": true,
-          "fixed_start_time": "11:00"
-        }
-      ]
-    }'
-  ```
+```json
+{
+  "date": "2026-09-17",
+  "base_revision": "revision-from-GET",
+  "segments": [
+    {"source_log_id": "uuid-1", "start": "09:00", "duration_minutes": 30, "description": "Разбор"},
+    {"source_log_id": "uuid-1", "start": "09:45", "duration_minutes": 30, "description": "Реализация"}
+  ]
+}
+```
 
-### 4. Служебные тикеты (Service Tickets)
-- `GET /api/service-tickets` — получить список всех 18 служебных тикетов компании (EG-*) с описанием (созвоны, код-ревью, письма, саппорт и т.д.):
-  ```bash
-  curl $url/api/service-tickets
-  ```
-
-*Примечание: Финальная отправка дня в Jira выполняется пользователем в приложении нажатием кнопки «Отправить в Jira».*
+`GET /api/help` содержит эту справку; `GET /api/openapi.json` возвращает OpenAPI 3.0.0.
 ''';
   }
 
@@ -913,34 +1037,80 @@ GET /api/service-tickets
       'info': {
         'title': 'Jira Time Tracker Agent API',
         'version': '1.0.0',
-        'description': 'Local REST API for AI agents to log time and submit day schedules.',
+        'description':
+            'Local REST API for AI agents to log time and submit day schedules.',
       },
       'servers': [
-        {'url': url, 'description': 'Local Tracker Instance'}
+        {'url': url, 'description': 'Local Tracker Instance'},
       ],
       'paths': {
         '/api/help': {
           'get': {
             'summary': 'Get human-readable Markdown help',
             'responses': {
-              '200': {'description': 'Markdown text'}
-            }
-          }
+              '200': {'description': 'Markdown text'},
+            },
+          },
         },
         '/api/openapi.json': {
           'get': {
             'summary': 'Get OpenAPI 3.0 specification',
             'responses': {
-              '200': {'description': 'OpenAPI JSON schema'}
-            }
-          }
+              '200': {'description': 'OpenAPI JSON schema'},
+            },
+          },
+        },
+        '/api/issues': {
+          'get': {
+            'summary': 'Search the local issue catalog',
+            'parameters': [
+              {
+                'name': 'q',
+                'in': 'query',
+                'required': false,
+                'schema': {'type': 'string'},
+              },
+            ],
+            'responses': {
+              '200': {
+                'description':
+                    'Issues matching key, summary, or status; no remote fuzzy search',
+              },
+              '503': {'description': 'AppState unavailable'},
+            },
+          },
         },
         '/api/logs': {
           'get': {
-            'summary': 'List unsubmitted time logs',
+            'summary': 'List unconsumed logs with availability',
+            'parameters': [
+              {
+                'name': 'q',
+                'in': 'query',
+                'required': false,
+                'schema': {'type': 'string'},
+              },
+              {
+                'name': 'issue_key',
+                'in': 'query',
+                'required': false,
+                'schema': {'type': 'string'},
+              },
+              {
+                'name': 'availability',
+                'in': 'query',
+                'required': false,
+                'schema': {
+                  'type': 'string',
+                  'enum': ['free', 'running', 'in_draft'],
+                },
+              },
+            ],
             'responses': {
-              '200': {'description': 'Array of time logs'}
-            }
+              '200': {
+                'description': 'Logs include availability and draft_date',
+              },
+            },
           },
           'post': {
             'summary': 'Create a new time log for an issue',
@@ -955,23 +1125,27 @@ GET /api/service-tickets
                       'issue_key': {'type': 'string', 'example': 'PROJ-123'},
                       'duration_minutes': {'type': 'integer', 'example': 45},
                       'duration_seconds': {'type': 'integer', 'example': 2700},
-                      'description': {'type': 'string', 'example': 'Debugging issue'},
+                      'description': {
+                        'type': 'string',
+                        'example': 'Debugging issue',
+                      },
                       'fixed_start_time': {
                         'type': 'string',
                         'example': '11:00',
-                        'description': 'Optional fixed start time (HH:MM)'
-                      }
-                    }
-                  }
-                }
-              }
+                        'description': 'Optional fixed start time (HH:MM)',
+                      },
+                    },
+                  },
+                },
+              },
             },
             'responses': {
               '201': {'description': 'Log created'},
               '400': {'description': 'Invalid parameters'},
-              '404': {'description': 'Issue not found in Jira'}
-            }
-          }
+              '404': {'description': 'Issue not found in Jira'},
+              '502': {'description': 'Jira could not resolve the issue'},
+            },
+          },
         },
         '/api/logs/merge': {
           'post': {
@@ -987,33 +1161,39 @@ GET /api/service-tickets
                       'source_log_ids': {
                         'type': 'array',
                         'items': {'type': 'string'},
-                        'example': ['uuid-1', 'uuid-2']
+                        'example': ['uuid-1', 'uuid-2'],
                       },
                       'target_issue_key': {
                         'type': 'string',
                         'example': 'PROJ-123',
-                        'description': 'Optional target issue key (defaults to first log issue)'
+                        'description':
+                            'Optional target issue key (defaults to first log issue)',
                       },
                       'description': {
                         'type': 'string',
-                        'example': 'Combined description'
-                      }
-                    }
-                  }
-                }
-              }
+                        'example': 'Combined description',
+                      },
+                    },
+                  },
+                },
+              },
             },
             'responses': {
               '200': {'description': 'Merged log'},
-              '400': {'description': 'Invalid parameters or logs not found'}
-            }
-          }
+              '400': {'description': 'Invalid parameters or logs not found'},
+            },
+          },
         },
         '/api/logs/{id}': {
           'patch': {
             'summary': 'Update an unsubmitted time log',
             'parameters': [
-              {'name': 'id', 'in': 'path', 'required': true, 'schema': {'type': 'string'}}
+              {
+                'name': 'id',
+                'in': 'path',
+                'required': true,
+                'schema': {'type': 'string'},
+              },
             ],
             'requestBody': {
               'required': false,
@@ -1024,35 +1204,54 @@ GET /api/service-tickets
                     'properties': {
                       'duration_minutes': {'type': 'integer', 'example': 45},
                       'duration_seconds': {'type': 'integer', 'example': 2700},
-                      'description': {'type': 'string', 'example': 'Updated description'},
-                      'fixed_start_time': {'type': 'string', 'example': '11:00'},
-                      'clear_fixed_start_time': {'type': 'boolean', 'example': false}
-                    }
-                  }
-                }
-              }
+                      'description': {
+                        'type': 'string',
+                        'example': 'Updated description',
+                      },
+                      'fixed_start_time': {
+                        'type': 'string',
+                        'example': '11:00',
+                      },
+                      'clear_fixed_start_time': {
+                        'type': 'boolean',
+                        'example': false,
+                      },
+                    },
+                  },
+                },
+              },
             },
             'responses': {
               '200': {'description': 'Log updated'},
-              '404': {'description': 'Log not found or already consumed'}
-            }
+              '404': {'description': 'Log not found or already consumed'},
+            },
           },
           'delete': {
             'summary': 'Delete an unsubmitted time log',
             'parameters': [
-              {'name': 'id', 'in': 'path', 'required': true, 'schema': {'type': 'string'}}
+              {
+                'name': 'id',
+                'in': 'path',
+                'required': true,
+                'schema': {'type': 'string'},
+              },
             ],
             'responses': {
               '200': {'description': 'Log deleted'},
-              '404': {'description': 'Log not found'}
-            }
-          }
+              '404': {'description': 'Log not found'},
+            },
+          },
         },
         '/api/logs/{id}/split': {
           'post': {
             'summary': 'Split an unsubmitted time log into two parts',
             'parameters': [
-              {'name': 'id', 'in': 'path', 'required': true, 'schema': {'type': 'string'}}
+              {
+                'name': 'id',
+                'in': 'path',
+                'required': true,
+                'schema': {'type': 'string'},
+              },
             ],
             'requestBody': {
               'required': true,
@@ -1063,38 +1262,50 @@ GET /api/service-tickets
                     'properties': {
                       'part1_minutes': {'type': 'integer', 'example': 30},
                       'part1_seconds': {'type': 'integer', 'example': 1800},
-                      'part1_description': {'type': 'string', 'example': 'First half'},
-                      'part2_description': {'type': 'string', 'example': 'Second half'}
-                    }
-                  }
-                }
-              }
+                      'part1_description': {
+                        'type': 'string',
+                        'example': 'First half',
+                      },
+                      'part2_description': {
+                        'type': 'string',
+                        'example': 'Second half',
+                      },
+                    },
+                  },
+                },
+              },
             },
             'responses': {
               '200': {'description': 'Array of two created logs'},
               '400': {'description': 'Invalid split offset or log in draft'},
-              '404': {'description': 'Log not found'}
-            }
-          }
+              '404': {'description': 'Log not found'},
+            },
+          },
         },
         '/api/day': {
           'get': {
-            'summary': 'Get day schedule and existing Jira worklogs',
+            'summary': 'Get target-date Jira worklogs and day snapshot',
             'parameters': [
               {
                 'name': 'date',
                 'in': 'query',
                 'required': false,
-                'description': 'Target date (YYYY-MM-DD), defaults to today',
-                'schema': {'type': 'string', 'example': '2026-09-17'}
-              }
+                'description':
+                    'Target date (YYYY-MM-DD), defaults to the date currently selected in the UI',
+                'schema': {'type': 'string', 'example': '2026-09-17'},
+              },
             ],
             'responses': {
-              '200': {'description': 'Day data with existing worklogs and draft'}
-            }
+              '200': {
+                'description':
+                    'Day data with fresh date-scoped worklogs and revision',
+              },
+              '400': {'description': 'Invalid date'},
+              '502': {'description': 'Jira worklogs could not be loaded'},
+            },
           },
           'post': {
-            'summary': 'Submit an agent-composed day schedule into the app draft',
+            'summary': 'Atomically replace the complete day draft',
             'requestBody': {
               'required': true,
               'content': {
@@ -1104,40 +1315,75 @@ GET /api/service-tickets
                     'required': ['segments'],
                     'properties': {
                       'date': {'type': 'string', 'example': '2026-09-17'},
+                      'base_revision': {
+                        'type': 'string',
+                        'description':
+                            'Required when replacing an existing draft; use revision from GET /api/day',
+                      },
                       'segments': {
                         'type': 'array',
                         'items': {
                           'type': 'object',
-                          'required': ['issue_key', 'start'],
+                          'required': ['source_log_id', 'start'],
                           'properties': {
-                            'issue_key': {'type': 'string', 'example': 'PROJ-123'},
+                            'source_log_id': {
+                              'type': 'string',
+                              'description':
+                                  'Existing stopped, unconsumed queue source',
+                            },
+                            'issue_key': {
+                              'type': 'string',
+                              'example': 'PROJ-123',
+                              'description':
+                                  'Optional; validated against source',
+                            },
                             'start': {'type': 'string', 'example': '09:00'},
-                            'duration_minutes': {'type': 'integer', 'example': 60},
-                            'duration_seconds': {'type': 'integer', 'example': 3600},
-                            'description': {'type': 'string', 'example': 'Code review'},
-                            'source_log_id': {'type': 'string'},
+                            'duration_minutes': {
+                              'type': 'integer',
+                              'example': 60,
+                            },
+                            'duration_seconds': {
+                              'type': 'integer',
+                              'example': 3600,
+                            },
+                            'description': {
+                              'type': 'string',
+                              'example': 'Code review',
+                            },
                             'is_fixed': {'type': 'boolean', 'example': true},
-                            'fixed_start_time': {'type': 'string', 'example': '11:00'}
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
+                            'fixed_start_time': {
+                              'type': 'string',
+                              'example': '11:00',
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
             },
             'responses': {
-              '200': {'description': 'Day draft created and loaded into app'},
-              '400': {'description': 'Validation error (overlaps, out-of-bounds)'}
-            }
-          }
+              '200': {
+                'description':
+                    'Complete snapshot stored; response includes new revision',
+              },
+              '400': {'description': 'Invalid source or schedule'},
+              '409': {
+                'description':
+                    'Draft revision is stale or day submission has begun',
+              },
+              '502': {'description': 'Jira worklogs could not be loaded'},
+            },
+          },
         },
-        '/api/service-tickets': {
+        '/api/quick-issues': {
           'get': {
-            'summary': 'List standard company service tickets (EG-*)',
+            'summary': 'List quick issues for the active Jira connection',
             'responses': {
               '200': {
-                'description': 'Array of service tickets',
+                'description':
+                    'Quick issues in insertion order for the active Jira scope',
                 'content': {
                   'application/json': {
                     'schema': {
@@ -1145,19 +1391,28 @@ GET /api/service-tickets
                       'items': {
                         'type': 'object',
                         'properties': {
-                          'key': {'type': 'string', 'example': 'EG-294'},
-                          'category': {'type': 'string', 'example': 'Non-utilized Meeting/Events'},
-                          'description': {'type': 'string', 'example': 'Созвоны, синги, таунхоллы'}
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
+                          'issue_id': {'type': 'string', 'example': '10042'},
+                          'key': {'type': 'string', 'example': 'PROJ-123'},
+                          'summary': {
+                            'type': 'string',
+                            'example': 'Implement feature',
+                          },
+                          'note': {
+                            'type': 'string',
+                            'nullable': true,
+                            'example': 'Review first',
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+              '409': {'description': 'No active verified Jira connection'},
+            },
+          },
+        },
+      },
     };
   }
 }

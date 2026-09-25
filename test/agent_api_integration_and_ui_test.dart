@@ -76,100 +76,122 @@ void main() {
       readOnlyAppState.dispose();
     });
 
-    test('AgentApiServer.generateSkillPrompt формирует валидный промпт со ссылкой на URL', () {
-      final prompt = AgentApiServer.generateSkillPrompt('http://127.0.0.1:8765');
-      expect(prompt, contains('http://127.0.0.1:8765'));
-      expect(prompt, contains('/api/logs'));
-      expect(prompt, contains('/api/day'));
-      expect(prompt, contains('/api/help'));
-      expect(prompt, contains('/api/openapi.json'));
-      expect(prompt, contains('/api/service-tickets'));
-      expect(prompt, contains('EG-294'));
-      expect(prompt, contains('Служебные тикеты'));
-      expect(prompt, contains('Отправить в Jira'));
-    });
+    test(
+      'AgentApiServer.generateSkillPrompt формирует валидный промпт со ссылкой на URL',
+      () {
+        final prompt = AgentApiServer.generateSkillPrompt(
+          'http://127.0.0.1:8765',
+        );
+        expect(prompt, contains('http://127.0.0.1:8765'));
+        expect(prompt, contains('/api/logs'));
+        expect(prompt, contains('/api/day'));
+        expect(prompt, contains('/api/help'));
+        expect(prompt, contains('/api/openapi.json'));
+        expect(prompt, contains('/api/quick-issues'));
+        expect(prompt, isNot(contains('/api/service-tickets')));
+        expect(prompt, contains('/api/issues'));
+        expect(prompt, contains('source_log_id'));
+        expect(prompt, contains('base_revision'));
+        expect(prompt, contains('только пользователь'));
+      },
+    );
 
-    testWidgets('SettingsDialog отображает хост/порт и секцию скилла для агента', (
-      WidgetTester tester,
-    ) async {
-      tester.view.physicalSize = const Size(1200, 1000);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
+    testWidgets(
+      'SettingsDialog отображает хост/порт и секцию скилла для агента',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(1200, 1000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
 
-      final appState = createTestAppState();
+        final appState = createTestAppState();
 
-      String? copiedString;
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(SystemChannels.platform, (MethodCall methodCall) async {
-        if (methodCall.method == 'Clipboard.setData') {
-          copiedString = (methodCall.arguments as Map)['text'] as String?;
-        }
-        return null;
-      });
+        String? copiedString;
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, (
+              MethodCall methodCall,
+            ) async {
+              if (methodCall.method == 'Clipboard.setData') {
+                copiedString = (methodCall.arguments as Map)['text'] as String?;
+              }
+              return null;
+            });
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (ctx) => ElevatedButton(
-                onPressed: () => SettingsDialog.show(ctx, appState),
-                child: const Text('Open Settings'),
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (ctx) => ElevatedButton(
+                  onPressed: () => SettingsDialog.show(ctx, appState),
+                  child: const Text('Open Settings'),
+                ),
               ),
             ),
           ),
-        ),
-      );
-      await tester.pumpAndSettle();
+        );
+        await tester.pumpAndSettle();
 
-      // Открываем диалог
-      await tester.tap(find.text('Open Settings'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-      await tester.pumpAndSettle();
+        // Открываем диалог
+        await tester.tap(find.text('Open Settings'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pumpAndSettle();
 
-      // Проверяем наличие секции Local Agent API
-      expect(find.text('Локальный API для AI-агентов'), findsOneWidget);
-      expect(
-        find.textContaining('Встроенный HTTP-сервер позволяет AI-агентам'),
-        findsOneWidget,
-      );
+        // Открываем секцию API в новой навигации настроек.
+        final sectionSelector = find.byKey(
+          const ValueKey('settings-section-selector'),
+        );
+        await tester.tap(sectionSelector);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Локальный API').last);
+        await tester.pumpAndSettle();
 
-      // Проверяем наличие URL сервера в поле
-      expect(find.text('http://127.0.0.1:8765'), findsOneWidget);
+        // Проверяем наличие секции Local Agent API
+        expect(find.text('Локальный API для AI-агентов'), findsOneWidget);
+        expect(
+          find.textContaining('Встроенный HTTP-сервер позволяет AI-агентам'),
+          findsOneWidget,
+        );
 
-      // Проверяем наличие кнопки копирования инструкции для агента
-      final copyBtn = find.widgetWithText(
-        FilledButton,
-        'Скопировать инструкцию',
-      );
-      expect(copyBtn, findsOneWidget);
+        // Проверяем наличие URL сервера в поле
+        expect(find.text('http://127.0.0.1:8765'), findsOneWidget);
 
-      await tester.ensureVisible(copyBtn);
-      await tester.pump();
+        // Проверяем наличие кнопки копирования инструкции для агента
+        final copyBtn = find.widgetWithText(
+          FilledButton,
+          'Скопировать инструкцию',
+        );
+        expect(copyBtn, findsOneWidget);
 
-      // Вызываем нажатие кнопки копирования инструкции
-      final btn = tester.widget<FilledButton>(copyBtn);
-      expect(btn.onPressed, isNotNull);
-      btn.onPressed!();
-      await tester.pump();
+        await tester.ensureVisible(copyBtn);
+        await tester.pump();
 
-      // Проверяем, что в буфер скопирован промпт
-      expect(copiedString, isNotNull);
-      expect(copiedString, contains('http://127.0.0.1:8765'));
-      expect(copiedString, contains('Навык: Взаимодействие с локальным Jira Time Tracker'));
+        // Вызываем нажатие кнопки копирования инструкции
+        final btn = tester.widget<FilledButton>(copyBtn);
+        expect(btn.onPressed, isNotNull);
+        btn.onPressed!();
+        await tester.pump();
 
-      // Проматываем таймер SnackBar
-      await tester.pump(const Duration(seconds: 5));
-      await tester.pumpAndSettle();
+        // Проверяем, что в буфер скопирован промпт
+        expect(copiedString, isNotNull);
+        expect(copiedString, contains('http://127.0.0.1:8765'));
+        expect(
+          copiedString,
+          contains('Навык: Взаимодействие с локальным Jira Time Tracker'),
+        );
 
-      // Очищаем mock handler платформы
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(SystemChannels.platform, null);
+        // Проматываем таймер SnackBar
+        await tester.pump(const Duration(seconds: 5));
+        await tester.pumpAndSettle();
 
-      appState.dispose();
-    });
+        // Очищаем mock handler платформы
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null);
+
+        appState.dispose();
+      },
+    );
   });
 }

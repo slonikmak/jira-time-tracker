@@ -355,13 +355,9 @@ void main() {
 
     test('mergeSegments объединяет два сегмента дня в один', () async {
       final appState = createAppState();
-      final log1 = await appState.addManualLog(
+      final log = await appState.addManualLog(
         issueId: '10001',
-        durationSeconds: 1800,
-      );
-      final log2 = await appState.addManualLog(
-        issueId: '10001',
-        durationSeconds: 1800,
+        durationSeconds: 3600,
       );
 
       final draft = DayDraft(
@@ -377,7 +373,7 @@ void main() {
       final seg1 = Segment(
         id: 'seg-1',
         draftId: 'draft-1',
-        sourceLogId: log1.id,
+        sourceLogId: log.id,
         issueId: '10001',
         startUtc: currentTime,
         durationSeconds: 1800,
@@ -386,7 +382,7 @@ void main() {
       final seg2 = Segment(
         id: 'seg-2',
         draftId: 'draft-1',
-        sourceLogId: log2.id,
+        sourceLogId: log.id,
         issueId: '10001',
         startUtc: currentTime.add(const Duration(seconds: 1800)),
         durationSeconds: 1800,
@@ -410,6 +406,64 @@ void main() {
       expect(merged.description, contains('Сегмент 1'));
       expect(merged.description, contains('Сегмент 2'));
     });
+
+    test(
+      'mergeSegments rejects different source logs without changing the draft',
+      () async {
+        final appState = createAppState();
+        final log1 = await appState.addManualLog(
+          issueId: '10001',
+          durationSeconds: 1800,
+        );
+        final log2 = await appState.addManualLog(
+          issueId: '10001',
+          durationSeconds: 1800,
+        );
+        final draft = DayDraft(
+          id: 'draft-merge-sources',
+          scope: 'default',
+          date: appState.selectedDateString,
+          startUtc: currentTime,
+          endUtc: currentTime.add(const Duration(hours: 1)),
+          seed: 1,
+          settingsSnapshot: '{}',
+        );
+        store.saveDayDraft(
+          draft: draft,
+          draftLogs: [],
+          segments: [
+            Segment(
+              id: 'source-seg-1',
+              draftId: draft.id,
+              sourceLogId: log1.id,
+              issueId: '10001',
+              startUtc: currentTime,
+              durationSeconds: 1800,
+            ),
+            Segment(
+              id: 'source-seg-2',
+              draftId: draft.id,
+              sourceLogId: log2.id,
+              issueId: '10001',
+              startUtc: currentTime.add(const Duration(minutes: 30)),
+              durationSeconds: 1800,
+            ),
+          ],
+          breaks: [],
+        );
+        appState.loadDraftForSelectedDate();
+
+        expect(
+          () => appState.mergeSegments(
+            segmentId1: 'source-seg-1',
+            segmentId2: 'source-seg-2',
+          ),
+          throwsArgumentError,
+        );
+        expect(appState.currentSegments, hasLength(2));
+        expect(store.getSegments(draftId: draft.id), hasLength(2));
+      },
+    );
 
     test(
       'reorderSegments, moveSegmentUp и moveSegmentDown меняют порядок сегментов',

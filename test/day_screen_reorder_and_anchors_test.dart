@@ -79,15 +79,17 @@ void main() {
     );
   }
 
-  Future<void> seedDraftWithSegments(AppState appState) async {
+  Future<void> seedDraftWithSegments(
+    AppState appState, {
+    bool sameSource = false,
+  }) async {
     final log1 = await appState.addManualLog(
       issueId: '10001',
-      durationSeconds: 3600,
+      durationSeconds: sameSource ? 7200 : 3600,
     );
-    final log2 = await appState.addManualLog(
-      issueId: '10002',
-      durationSeconds: 3600,
-    );
+    final log2 = sameSource
+        ? log1
+        : await appState.addManualLog(issueId: '10002', durationSeconds: 3600);
 
     final draft = DayDraft(
       id: 'draft-1',
@@ -113,28 +115,33 @@ void main() {
       id: 'seg-2',
       draftId: 'draft-1',
       sourceLogId: log2.id,
-      issueId: '10002',
+      issueId: sameSource ? '10001' : '10002',
       startUtc: currentTime.add(const Duration(hours: 1)),
       durationSeconds: 3600,
-      description: 'Работа по PROJ-2',
+      description: sameSource
+          ? 'Работа по PROJ-1 (часть 2)'
+          : 'Работа по PROJ-2',
     );
 
-    store.saveDayDraft(
-      draft: draft,
-      draftLogs: [
-        DraftLog(
-          draftId: 'draft-1',
-          sourceLogId: log1.id,
-          sourceDurationSeconds: 3600,
-          descriptionSnapshot: log1.description,
-        ),
+    final draftLogs = [
+      DraftLog(
+        draftId: 'draft-1',
+        sourceLogId: log1.id,
+        sourceDurationSeconds: log1.accumulatedSeconds,
+        descriptionSnapshot: log1.description,
+      ),
+      if (!sameSource)
         DraftLog(
           draftId: 'draft-1',
           sourceLogId: log2.id,
-          sourceDurationSeconds: 3600,
+          sourceDurationSeconds: log2.accumulatedSeconds,
           descriptionSnapshot: log2.description,
         ),
-      ],
+    ];
+
+    store.saveDayDraft(
+      draft: draft,
+      draftLogs: draftLogs,
       segments: [seg1, seg2],
       breaks: [],
     );
@@ -257,7 +264,7 @@ void main() {
     addTearDown(() => tester.view.resetPhysicalSize());
 
     final appState = createAppState();
-    await seedDraftWithSegments(appState);
+    await seedDraftWithSegments(appState, sameSource: true);
 
     await tester.pumpWidget(MaterialApp(home: DayScreen(appState: appState)));
     await tester.pumpAndSettle();
@@ -270,10 +277,10 @@ void main() {
     expect(find.byType(MergeSegmentsDialog), findsOneWidget);
     expect(find.text('Объединить интервалы'), findsOneWidget);
 
-    // Выбираем второй сегмент (PROJ-2)
+    // Выбираем вторую часть того же исходного лога.
     final candidateTile = find.descendant(
       of: find.byType(MergeSegmentsDialog),
-      matching: find.text('Работа по PROJ-2'),
+      matching: find.text('Работа по PROJ-1 (часть 2)'),
     );
     await tester.tap(candidateTile);
     await tester.pumpAndSettle();

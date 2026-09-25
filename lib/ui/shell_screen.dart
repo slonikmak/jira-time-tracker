@@ -17,6 +17,14 @@ class ShellScreen extends StatefulWidget {
 
 class _ShellScreenState extends State<ShellScreen> {
   bool _settingsOpen = false;
+  SettingsSection _settingsSection = SettingsSection.jira;
+
+  void _openSettings([SettingsSection section = SettingsSection.jira]) {
+    setState(() {
+      _settingsSection = section;
+      _settingsOpen = true;
+    });
+  }
 
   void _selectTab(int index) {
     setState(() => _settingsOpen = false);
@@ -107,7 +115,7 @@ class _ShellScreenState extends State<ShellScreen> {
                     ],
 
                     OutlinedButton.icon(
-                      onPressed: () => setState(() => _settingsOpen = true),
+                      onPressed: _openSettings,
                       style: OutlinedButton.styleFrom(
                         backgroundColor: _settingsOpen
                             ? AppColors.selected(isDark)
@@ -209,11 +217,16 @@ class _ShellScreenState extends State<ShellScreen> {
                 child: IndexedStack(
                   index: _settingsOpen ? 2 : appState.selectedTabIndex,
                   children: [
-                    WorkScreen(appState: appState),
+                    WorkScreen(
+                      appState: appState,
+                      onOpenQuickIssueSettings: () =>
+                          _openSettings(SettingsSection.quickIssues),
+                    ),
                     DayScreen(appState: appState),
                     if (_settingsOpen)
                       SettingsPage(
                         appState: appState,
+                        initialSection: _settingsSection,
                         onSaved: () => setState(() => _settingsOpen = false),
                         onCancel: () => setState(() => _settingsOpen = false),
                       )

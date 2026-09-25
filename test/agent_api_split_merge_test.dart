@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:jira_time_tracker/agent_api_server.dart';
 import 'package:jira_time_tracker/app_state.dart';
 import 'package:jira_time_tracker/connection_store.dart';
@@ -44,7 +46,42 @@ void main() {
       appState = AppState(
         store: store,
         connectionStore: connectionStore,
-        jiraClient: JiraClient(),
+        jiraClient: JiraClient(
+          client: MockClient((request) async {
+            if (request.url.path.endsWith('/rest/api/3/search/jql')) {
+              return http.Response(
+                jsonEncode({'issues': [], 'isLast': true}),
+                HttpStatus.ok,
+                headers: {'content-type': 'application/json'},
+              );
+            }
+            if (request.url.path.endsWith('/worklog')) {
+              return http.Response(
+                jsonEncode({
+                  'startAt': 0,
+                  'maxResults': 50,
+                  'total': 0,
+                  'worklogs': [],
+                }),
+                HttpStatus.ok,
+                headers: {'content-type': 'application/json'},
+              );
+            }
+            if (request.url.path.contains('/rest/api/3/issue/')) {
+              final key = request.url.path.split('/').last;
+              return http.Response(
+                jsonEncode({
+                  'id': key == 'PROJ-294' ? '200294' : '200101',
+                  'key': key,
+                  'fields': {'summary': 'Summary for $key'},
+                }),
+                HttpStatus.ok,
+                headers: {'content-type': 'application/json'},
+              );
+            }
+            return http.Response('{}', HttpStatus.notFound);
+          }),
+        ),
         isReadOnly: false,
         initialConnection: conn,
         nowProvider: () => DateTime.utc(2026, 9, 17, 12, 0),
@@ -61,32 +98,41 @@ void main() {
       db.close();
     });
 
-    test('POST /api/logs с fixed_start_time сохраняет фиксированное время начала', () async {
-      final req = await client.postUrl(Uri.parse('${server.url}/api/logs'));
-      req.headers.contentType = ContentType.json;
-      req.write(jsonEncode({
-        'issue_key': 'EG-294',
-        'duration_minutes': 30,
-        'description': 'Daily standup',
-        'fixed_start_time': '10:30',
-      }));
-      final res = await req.close();
+    test(
+      'POST /api/logs с fixed_start_time сохраняет фиксированное время начала',
+      () async {
+        final req = await client.postUrl(Uri.parse('${server.url}/api/logs'));
+        req.headers.contentType = ContentType.json;
+        req.write(
+          jsonEncode({
+            'issue_key': 'PROJ-294',
+            'duration_minutes': 30,
+            'description': 'Daily standup',
+            'fixed_start_time': '10:30',
+          }),
+        );
+        final res = await req.close();
 
-      expect(res.statusCode, equals(HttpStatus.created));
-      final body = jsonDecode(await res.transform(utf8.decoder).join()) as Map<String, dynamic>;
+        expect(res.statusCode, equals(HttpStatus.created));
+        final body =
+            jsonDecode(await res.transform(utf8.decoder).join())
+                as Map<String, dynamic>;
 
-      expect(body['issue_key'], equals('EG-294'));
-      expect(body['fixed_start_time'], equals('10:30'));
-      expect(body['duration_seconds'], equals(1800));
+        expect(body['issue_key'], equals('PROJ-294'));
+        expect(body['fixed_start_time'], equals('10:30'));
+        expect(body['duration_seconds'], equals(1800));
 
-      // Проверяем, что поле возвращается и через GET /api/logs
-      final getReq = await client.getUrl(Uri.parse('${server.url}/api/logs'));
-      final getRes = await getReq.close();
-      final getBody = jsonDecode(await getRes.transform(utf8.decoder).join()) as List<dynamic>;
+        // Проверяем, что поле возвращается и через GET /api/logs
+        final getReq = await client.getUrl(Uri.parse('${server.url}/api/logs'));
+        final getRes = await getReq.close();
+        final getBody =
+            jsonDecode(await getRes.transform(utf8.decoder).join())
+                as List<dynamic>;
 
-      expect(getBody.length, equals(1));
-      expect(getBody.first['fixed_start_time'], equals('10:30'));
-    });
+        expect(getBody.length, equals(1));
+        expect(getBody.first['fixed_start_time'], equals('10:30'));
+      },
+    );
 
     test('POST /api/logs/{id}/split делит лог на 2 части', () async {
       // 1. Создаем лог на 60 минут
@@ -98,17 +144,22 @@ void main() {
       );
 
       // 2. Вызываем эндпоинт разделения на 20 и 40 минут
-      final req = await client.postUrl(Uri.parse('${server.url}/api/logs/${originalLog.id}/split'));
+      final req = await client.postUrl(
+        Uri.parse('${server.url}/api/logs/${originalLog.id}/split'),
+      );
       req.headers.contentType = ContentType.json;
-      req.write(jsonEncode({
-        'part1_minutes': 20,
-        'part1_description': 'Часть 1: рефакторинг',
-        'part2_description': 'Часть 2: тесты',
-      }));
+      req.write(
+        jsonEncode({
+          'part1_minutes': 20,
+          'part1_description': 'Часть 1: рефакторинг',
+          'part2_description': 'Часть 2: тесты',
+        }),
+      );
       final res = await req.close();
 
       expect(res.statusCode, equals(HttpStatus.ok));
-      final body = jsonDecode(await res.transform(utf8.decoder).join()) as List<dynamic>;
+      final body =
+          jsonDecode(await res.transform(utf8.decoder).join()) as List<dynamic>;
 
       expect(body.length, equals(2));
       final part1 = body[0] as Map<String, dynamic>;
@@ -128,22 +179,25 @@ void main() {
       expect(appState.logs.length, equals(2));
     });
 
-    test('POST /api/logs/{id}/split возвращает 400 при некорректном смещении', () async {
-      final issue = await appState.resolveOrCreateIssue('PROJ-101');
-      final originalLog = await appState.addManualLog(
-        issueId: issue.issueId,
-        durationSeconds: 1800,
-      );
+    test(
+      'POST /api/logs/{id}/split возвращает 400 при некорректном смещении',
+      () async {
+        final issue = await appState.resolveOrCreateIssue('PROJ-101');
+        final originalLog = await appState.addManualLog(
+          issueId: issue.issueId,
+          durationSeconds: 1800,
+        );
 
-      // Смещение больше или равно длительности
-      final req = await client.postUrl(Uri.parse('${server.url}/api/logs/${originalLog.id}/split'));
-      req.headers.contentType = ContentType.json;
-      req.write(jsonEncode({
-        'part1_seconds': 1800,
-      }));
-      final res = await req.close();
-      expect(res.statusCode, equals(HttpStatus.badRequest));
-    });
+        // Смещение больше или равно длительности
+        final req = await client.postUrl(
+          Uri.parse('${server.url}/api/logs/${originalLog.id}/split'),
+        );
+        req.headers.contentType = ContentType.json;
+        req.write(jsonEncode({'part1_seconds': 1800}));
+        final res = await req.close();
+        expect(res.statusCode, equals(HttpStatus.badRequest));
+      },
+    );
 
     test('POST /api/logs/merge объединяет несколько логов в один', () async {
       // 1. Создаем два лога
@@ -162,17 +216,23 @@ void main() {
       );
 
       // 2. Объединяем их в PROJ-102
-      final req = await client.postUrl(Uri.parse('${server.url}/api/logs/merge'));
+      final req = await client.postUrl(
+        Uri.parse('${server.url}/api/logs/merge'),
+      );
       req.headers.contentType = ContentType.json;
-      req.write(jsonEncode({
-        'source_log_ids': [log1.id, log2.id],
-        'target_issue_key': 'PROJ-102',
-        'description': 'Объединенная работа по PROJ-102',
-      }));
+      req.write(
+        jsonEncode({
+          'source_log_ids': [log1.id, log2.id],
+          'target_issue_key': 'PROJ-102',
+          'description': 'Объединенная работа по PROJ-102',
+        }),
+      );
       final res = await req.close();
 
       expect(res.statusCode, equals(HttpStatus.ok));
-      final body = jsonDecode(await res.transform(utf8.decoder).join()) as Map<String, dynamic>;
+      final body =
+          jsonDecode(await res.transform(utf8.decoder).join())
+              as Map<String, dynamic>;
 
       expect(body['issue_key'], equals('PROJ-102'));
       expect(body['duration_seconds'], equals(5400)); // 1800 + 3600
@@ -184,59 +244,89 @@ void main() {
       expect(appState.logs.first.accumulatedSeconds, equals(5400));
     });
 
-    test('POST /api/logs/merge возвращает 400 если передано меньше 2 логов', () async {
-      final req = await client.postUrl(Uri.parse('${server.url}/api/logs/merge'));
-      req.headers.contentType = ContentType.json;
-      req.write(jsonEncode({
-        'source_log_ids': ['single-log-id'],
-      }));
-      final res = await req.close();
-      expect(res.statusCode, equals(HttpStatus.badRequest));
-    });
+    test(
+      'POST /api/logs/merge возвращает 400 если передано меньше 2 логов',
+      () async {
+        final req = await client.postUrl(
+          Uri.parse('${server.url}/api/logs/merge'),
+        );
+        req.headers.contentType = ContentType.json;
+        req.write(
+          jsonEncode({
+            'source_log_ids': ['single-log-id'],
+          }),
+        );
+        final res = await req.close();
+        expect(res.statusCode, equals(HttpStatus.badRequest));
+      },
+    );
 
-    test('POST /api/day сохраняет is_fixed и fixed_start_time в сегментах', () async {
-      final req = await client.postUrl(Uri.parse('${server.url}/api/day'));
-      req.headers.contentType = ContentType.json;
-      req.write(jsonEncode({
-        'date': '2026-09-17',
-        'segments': [
-          {
-            'issue_key': 'PROJ-101',
-            'start': '09:00',
-            'duration_minutes': 90,
-            'description': 'Плавающая разработка',
-            'is_fixed': false,
-          },
-          {
-            'issue_key': 'EG-294',
-            'start': '11:00',
-            'duration_minutes': 30,
-            'description': 'Daily meeting',
-            'is_fixed': true,
-            'fixed_start_time': '11:00',
-          },
-        ],
-      }));
-      final res = await req.close();
-      expect(res.statusCode, equals(HttpStatus.ok));
+    test(
+      'POST /api/day сохраняет is_fixed и fixed_start_time в сегментах',
+      () async {
+        final issue1 = await appState.resolveOrCreateIssue('PROJ-101');
+        final issue2 = await appState.resolveOrCreateIssue('PROJ-294');
+        final source1 = await appState.addManualLog(
+          issueId: issue1.issueId,
+          durationSeconds: 5400,
+          description: 'Плавающая работа',
+        );
+        final source2 = await appState.addManualLog(
+          issueId: issue2.issueId,
+          durationSeconds: 1800,
+          description: 'Встреча',
+        );
+        final req = await client.postUrl(Uri.parse('${server.url}/api/day'));
+        req.headers.contentType = ContentType.json;
+        req.write(
+          jsonEncode({
+            'date': '2026-09-17',
+            'segments': [
+              {
+                'source_log_id': source1.id,
+                'issue_key': 'PROJ-101',
+                'start': '09:00',
+                'duration_minutes': 90,
+                'description': 'Плавающая разработка',
+                'is_fixed': false,
+              },
+              {
+                'source_log_id': source2.id,
+                'issue_key': 'PROJ-294',
+                'start': '11:00',
+                'duration_minutes': 30,
+                'description': 'Daily meeting',
+                'is_fixed': true,
+                'fixed_start_time': '11:00',
+              },
+            ],
+          }),
+        );
+        final res = await req.close();
+        expect(res.statusCode, equals(HttpStatus.ok));
 
-      // Проверяем через GET /api/day
-      final getReq = await client.getUrl(Uri.parse('${server.url}/api/day?date=2026-09-17'));
-      final getRes = await getReq.close();
-      final getBody = jsonDecode(await getRes.transform(utf8.decoder).join()) as Map<String, dynamic>;
+        // Проверяем через GET /api/day
+        final getReq = await client.getUrl(
+          Uri.parse('${server.url}/api/day?date=2026-09-17'),
+        );
+        final getRes = await getReq.close();
+        final getBody =
+            jsonDecode(await getRes.transform(utf8.decoder).join())
+                as Map<String, dynamic>;
 
-      final draft = getBody['draft'] as Map<String, dynamic>;
-      final segments = draft['segments'] as List<dynamic>;
-      expect(segments.length, equals(2));
+        final draft = getBody['draft'] as Map<String, dynamic>;
+        final segments = draft['segments'] as List<dynamic>;
+        expect(segments.length, equals(2));
 
-      final seg1 = segments[0] as Map<String, dynamic>;
-      final seg2 = segments[1] as Map<String, dynamic>;
+        final seg1 = segments[0] as Map<String, dynamic>;
+        final seg2 = segments[1] as Map<String, dynamic>;
 
-      expect(seg1['issue_key'], equals('PROJ-101'));
-      expect(seg1['is_fixed'], isFalse);
+        expect(seg1['issue_key'], equals('PROJ-101'));
+        expect(seg1['is_fixed'], isFalse);
 
-      expect(seg2['issue_key'], equals('EG-294'));
-      expect(seg2['is_fixed'], isTrue);
-    });
+        expect(seg2['issue_key'], equals('PROJ-294'));
+        expect(seg2['is_fixed'], isTrue);
+      },
+    );
   });
 }

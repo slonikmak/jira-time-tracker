@@ -427,10 +427,16 @@ class DayScreen extends StatelessWidget {
   }
 
   Widget _buildDayGrid(BuildContext context) {
+    final now = appState.nowProvider().toLocal();
+    final today = DateTime(now.year, now.month, now.day);
+    final showSources =
+        appState.currentDraft != null || !appState.selectedDate.isBefore(today);
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(40, 5, 40, 18),
       child: LayoutBuilder(
         builder: (context, constraints) {
+          if (!showSources) return _buildSchedulePanel(context);
           if (constraints.maxWidth < 930) {
             return SingleChildScrollView(
               child: Column(

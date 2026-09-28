@@ -6,7 +6,9 @@ import 'package:jira_time_tracker/connection_store.dart';
 import 'package:jira_time_tracker/jira_client.dart';
 import 'package:jira_time_tracker/local_store.dart';
 import 'package:jira_time_tracker/main.dart';
+import 'package:jira_time_tracker/models.dart';
 import 'package:jira_time_tracker/secure_storage.dart';
+import 'package:jira_time_tracker/ui/day_screen.dart';
 import 'package:jira_time_tracker/ui/settings_dialog.dart';
 
 void main() {
@@ -84,6 +86,39 @@ void main() {
 
     // В обычном режиме баннер read-only отсутствует
     expect(find.byIcon(Icons.lock_outline), findsNothing);
+  });
+
+  testWidgets('Past Jira-only day shows records without log selection', (
+    WidgetTester tester,
+  ) async {
+    final appState = AppState(
+      store: store,
+      connectionStore: connectionStore,
+      jiraClient: jiraClient,
+      nowProvider: () => DateTime(2026, 9, 14, 12),
+      isReadOnly: false,
+    );
+    addTearDown(appState.dispose);
+    final worklog = ImportedWorklog(
+      id: 'jira-1',
+      issueId: '1000',
+      issueKey: 'TEST-1',
+      startUtc: DateTime.utc(2026, 9, 13, 9),
+      durationSeconds: 3600,
+      authorAccountId: 'account-1',
+    );
+
+    appState.setSelectedDate(DateTime(2026, 9, 13));
+    appState.setImportedWorklogs([worklog]);
+    await tester.pumpWidget(MaterialApp(home: DayScreen(appState: appState)));
+    await tester.pumpAndSettle();
+    expect(find.text('Уже в Jira (только чтение)'), findsOneWidget);
+    expect(find.text('Логи для включения'), findsNothing);
+
+    appState.setSelectedDate(DateTime(2026, 9, 14));
+    appState.setImportedWorklogs([worklog]);
+    await tester.pumpAndSettle();
+    expect(find.text('Логи для включения'), findsOneWidget);
   });
 
   testWidgets('Shows read-only warning banner when isReadOnly is true (A19)', (

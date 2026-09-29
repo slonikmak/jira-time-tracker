@@ -73,12 +73,15 @@ class AgentApiServer {
 - `LocalLog` — источник работы; `Segment` — отдельный планируемый Jira worklog.
 - Каждый segment должен содержать `source_log_id` существующего queue log. Несколько сегментов могут ссылаться на один источник в пределах одного дня.
 - Источник должен быть остановлен, не отправлен и не занят черновиком другой даты. Для разных дат раздели исходный лог в очереди через `POST /api/logs/{id}/split`.
-- Сегменты одного дня не должны пересекаться и должны полностью попадать в указанную дату. Паузы формируются автоматически.
+- Сегменты одного дня должны полностью попадать в указанную дату. Пересечения рабочих сегментов разрешены; паузы формируются автоматически вне работы.
 
 ## Поиск и очередь
 - `GET /api/issues?q=...` ищет локально по key, summary и status.
+- `GET /api/issues/{key}` читает актуальные текстовые поля, все доступные комментарии и список вложений Jira.
+- `GET /api/issues/{key}/attachments/{id}` отдельно скачивает вложение по ID из списка.
+- `GET /api/issues/{key}/worklogs` читает все доступные записи Jira по тикету, включая записи других авторов; `is_mine` отмечает ваши.
 - `GET /api/logs?q=...&issue_key=...&availability=...` возвращает логи с `availability` (`free`, `running`, `in_draft`) и `draft_date`.
-- `GET /api/quick-issues` возвращает быстрые задачи активного подключения; каталог служит подсказкой и не ограничивает выбор других Jira-задач.
+- `GET /api/quick-issues` возвращает быстрые задачи активного подключения с локальными описаниями `note`; `POST /api/quick-issues`, `PATCH` и `DELETE /api/quick-issues/{issueId}` меняют этот список.
 - `POST /api/logs` и `POST /api/logs/merge` принимают только известные локальные задачи или refs, которые удалось подтвердить через Jira; неизвестный ref не создаётся как offline fallback.
 - Агент может создавать, редактировать, удалять, делить и объединять свободные queue logs.
 
@@ -105,9 +108,20 @@ class AgentApiServer {
 
   void _handleRequest(HttpRequest request) async {
     final response = request.response;
-
-    // CORS заголовки для всех ответов
-    response.headers.set('Access-Control-Allow-Origin', '*');
+    final host = request.headers.value(HttpHeaders.hostHeader);
+    final allowedHosts = {'127.0.0.1:$_actualPort', 'localhost:$_actualPort'};
+    final origin = request.headers.value('Origin');
+    if (!allowedHosts.contains(host?.toLowerCase()) ||
+        (origin != null &&
+            origin != url &&
+            origin != 'http://localhost:$_actualPort')) {
+      _sendJson(response, HttpStatus.forbidden, {'error': 'Forbidden origin'});
+      return;
+    }
+    if (origin != null) {
+      response.headers.set('Access-Control-Allow-Origin', origin);
+      response.headers.set('Vary', 'Origin');
+    }
     response.headers.set(
       'Access-Control-Allow-Methods',
       'GET, POST, PATCH, DELETE, OPTIONS',
@@ -138,6 +152,35 @@ class AgentApiServer {
 
       if (path == '/api/issues' && request.method == 'GET') {
         _handleGetIssues(request, response);
+        return;
+      }
+
+      final pathSegments = request.uri.pathSegments;
+      if (request.method == 'GET' &&
+          pathSegments.length == 3 &&
+          pathSegments[0] == 'api' &&
+          pathSegments[1] == 'issues') {
+        await _handleGetIssueDetails(response, pathSegments[2]);
+        return;
+      }
+      if (request.method == 'GET' &&
+          pathSegments.length == 5 &&
+          pathSegments[0] == 'api' &&
+          pathSegments[1] == 'issues' &&
+          pathSegments[3] == 'attachments') {
+        await _handleDownloadAttachment(
+          response,
+          pathSegments[2],
+          pathSegments[4],
+        );
+        return;
+      }
+      if (request.method == 'GET' &&
+          pathSegments.length == 4 &&
+          pathSegments[0] == 'api' &&
+          pathSegments[1] == 'issues' &&
+          pathSegments[3] == 'worklogs') {
+        await _handleGetIssueWorklogs(response, pathSegments[2]);
         return;
       }
 
@@ -189,9 +232,27 @@ class AgentApiServer {
         }
       }
 
-      if (path == '/api/quick-issues' && request.method == 'GET') {
-        _handleGetQuickIssues(response);
-        return;
+      if (path == '/api/quick-issues') {
+        if (request.method == 'GET') {
+          _handleGetQuickIssues(response);
+          return;
+        }
+        if (request.method == 'POST') {
+          await _handlePostQuickIssue(request, response);
+          return;
+        }
+      }
+      if (pathSegments.length == 3 &&
+          pathSegments[0] == 'api' &&
+          pathSegments[1] == 'quick-issues') {
+        if (request.method == 'PATCH') {
+          await _handlePatchQuickIssue(request, response, pathSegments[2]);
+          return;
+        }
+        if (request.method == 'DELETE') {
+          await _handleDeleteQuickIssue(response, pathSegments[2]);
+          return;
+        }
       }
 
       // 404 Not Found
@@ -219,22 +280,152 @@ class AgentApiServer {
       return;
     }
 
-    final issuesById = {
-      for (final issue in state.store.getIssues(scope: connection.scope))
-        issue.issueId: issue,
-    };
-    final list = state.store.getQuickIssues(scope: connection.scope).map((
-      quickIssue,
-    ) {
-      final issue = issuesById[quickIssue.issueId]!;
-      return {
-        'issue_id': quickIssue.issueId,
-        'key': issue.key,
-        'summary': issue.summary,
-        'note': quickIssue.note,
-      };
-    }).toList();
+    final list = state.quickIssues
+        .map((quickIssue) => _formatQuickIssue(state, quickIssue))
+        .toList();
     _sendJson(response, HttpStatus.ok, list);
+  }
+
+  Map<String, dynamic> _formatQuickIssue(
+    AppState state,
+    QuickIssue quickIssue,
+  ) {
+    final issue = state.issues.firstWhere(
+      (i) => i.issueId == quickIssue.issueId,
+    );
+    return {
+      'issue_id': quickIssue.issueId,
+      'key': issue.key,
+      'summary': issue.summary,
+      'note': quickIssue.note,
+    };
+  }
+
+  Future<void> _handlePostQuickIssue(
+    HttpRequest request,
+    HttpResponse response,
+  ) async {
+    final state = appState;
+    if (state == null || state.currentConnection == null) {
+      _sendJson(response, HttpStatus.conflict, {'error': 'Подключите Jira.'});
+      return;
+    }
+    final body = await _parseJsonBody(request, response);
+    if (body == null) return;
+    final issueRef = body['issue_key'];
+    final note = body['note'];
+    if (issueRef is! String ||
+        issueRef.trim().isEmpty ||
+        (note != null && note is! String)) {
+      _sendJson(response, HttpStatus.badRequest, {
+        'error': 'Укажите issue_key и необязательный текст note.',
+      });
+      return;
+    }
+    try {
+      final existingIds = state.quickIssues.map((item) => item.issueId).toSet();
+      final quickIssue = await state.addQuickIssue(
+        issueRef,
+        note: note is String ? note : '',
+      );
+      final existed = existingIds.contains(quickIssue.issueId);
+      if (existed && body.containsKey('note')) {
+        await state.updateQuickIssueNote(
+          quickIssue.issueId,
+          note as String? ?? '',
+        );
+      }
+      final result = state.quickIssues.firstWhere(
+        (item) => item.issueId == quickIssue.issueId,
+      );
+      _sendJson(
+        response,
+        existed ? HttpStatus.ok : HttpStatus.created,
+        _formatQuickIssue(state, result),
+      );
+    } catch (e) {
+      _sendQuickIssueError(response, e);
+    }
+  }
+
+  Future<void> _handlePatchQuickIssue(
+    HttpRequest request,
+    HttpResponse response,
+    String issueId,
+  ) async {
+    final state = appState;
+    if (state == null || state.currentConnection == null) {
+      _sendJson(response, HttpStatus.conflict, {'error': 'Подключите Jira.'});
+      return;
+    }
+    if (!state.quickIssues.any((item) => item.issueId == issueId)) {
+      _sendJson(response, HttpStatus.notFound, {
+        'error': 'Быстрая задача не найдена.',
+      });
+      return;
+    }
+    final body = await _parseJsonBody(request, response);
+    if (body == null) return;
+    if (!body.containsKey('note') ||
+        (body['note'] != null && body['note'] is! String)) {
+      _sendJson(response, HttpStatus.badRequest, {
+        'error': 'Укажите текст note или null, чтобы очистить его.',
+      });
+      return;
+    }
+    try {
+      await state.updateQuickIssueNote(issueId, body['note'] as String? ?? '');
+      final quickIssue = state.quickIssues.firstWhere(
+        (item) => item.issueId == issueId,
+      );
+      _sendJson(response, HttpStatus.ok, _formatQuickIssue(state, quickIssue));
+    } catch (e) {
+      _sendQuickIssueError(response, e);
+    }
+  }
+
+  Future<void> _handleDeleteQuickIssue(
+    HttpResponse response,
+    String issueId,
+  ) async {
+    final state = appState;
+    if (state == null || state.currentConnection == null) {
+      _sendJson(response, HttpStatus.conflict, {'error': 'Подключите Jira.'});
+      return;
+    }
+    if (!state.quickIssues.any((item) => item.issueId == issueId)) {
+      _sendJson(response, HttpStatus.notFound, {
+        'error': 'Быстрая задача не найдена.',
+      });
+      return;
+    }
+    try {
+      await state.deleteQuickIssue(issueId);
+      response.statusCode = HttpStatus.noContent;
+      await response.close();
+    } catch (e) {
+      _sendQuickIssueError(response, e);
+    }
+  }
+
+  void _sendQuickIssueError(HttpResponse response, Object error) {
+    if (error is FormatException || error is ArgumentError) {
+      _sendJson(response, HttpStatus.badRequest, {'error': error.toString()});
+    } else if (error is StateError) {
+      _sendJson(response, HttpStatus.conflict, {'error': error.toString()});
+    } else if (error is JiraApiException) {
+      _sendJson(
+        response,
+        error.statusCode == HttpStatus.notFound
+            ? HttpStatus.notFound
+            : HttpStatus.badGateway,
+        {'error': error.toString()},
+      );
+    } else {
+      _sendJson(response, HttpStatus.internalServerError, {
+        'error': error.toString(),
+      });
+    }
   }
 
   void _sendHelp(HttpResponse response) {
@@ -340,6 +531,133 @@ class AgentApiServer {
         )
         .toList();
     _sendJson(response, HttpStatus.ok, result);
+  }
+
+  Future<void> _handleGetIssueWorklogs(
+    HttpResponse response,
+    String issueRef,
+  ) async {
+    final state = appState;
+    if (state == null) {
+      _sendJson(response, HttpStatus.serviceUnavailable, {
+        'error': 'AppState not available',
+      });
+      return;
+    }
+    try {
+      final (issue, worklogs, accountId) = await state
+          .fetchJiraWorklogsForIssue(issueRef);
+      _sendJson(response, HttpStatus.ok, {
+        'issue_id': issue.issueId,
+        'issue_key': issue.key,
+        'worklogs': [
+          for (final log in worklogs)
+            {
+              'id': log.id,
+              'start_utc': log.startUtc.toIso8601String(),
+              'start_local': log.startUtc.toLocal().toIso8601String(),
+              'duration_seconds': log.durationSeconds,
+              'comment': log.comment,
+              'author_account_id': log.authorAccountId,
+              'is_mine': log.authorAccountId == accountId,
+            },
+        ],
+      });
+    } on ArgumentError catch (e) {
+      _sendJson(response, HttpStatus.badRequest, {'error': e.toString()});
+    } on StateError catch (e) {
+      _sendJson(response, HttpStatus.conflict, {'error': e.toString()});
+    } on JiraApiException catch (e) {
+      _sendJson(
+        response,
+        e.statusCode == HttpStatus.notFound
+            ? HttpStatus.notFound
+            : HttpStatus.badGateway,
+        {'error': e.toString()},
+      );
+    } catch (e) {
+      _sendJson(response, HttpStatus.badGateway, {'error': e.toString()});
+    }
+  }
+
+  Future<void> _handleGetIssueDetails(
+    HttpResponse response,
+    String issueRef,
+  ) async {
+    final state = appState;
+    if (state == null) {
+      _sendJson(response, HttpStatus.serviceUnavailable, {
+        'error': 'AppState not available',
+      });
+      return;
+    }
+    try {
+      _sendJson(
+        response,
+        HttpStatus.ok,
+        await state.fetchJiraIssueDetails(issueRef),
+      );
+    } catch (e) {
+      _sendIssueReadError(response, e);
+    }
+  }
+
+  Future<void> _handleDownloadAttachment(
+    HttpResponse response,
+    String issueRef,
+    String attachmentId,
+  ) async {
+    final state = appState;
+    if (state == null) {
+      _sendJson(response, HttpStatus.serviceUnavailable, {
+        'error': 'AppState not available',
+      });
+      return;
+    }
+    var streaming = false;
+    try {
+      final (attachment, jiraResponse) = await state.downloadJiraAttachment(
+        issueRef,
+        attachmentId,
+      );
+      final filename = attachment['filename']?.toString() ?? attachmentId;
+      response.headers.set(
+        HttpHeaders.contentTypeHeader,
+        'application/octet-stream',
+      );
+      response.headers.set(
+        'Content-Disposition',
+        "attachment; filename*=UTF-8''${Uri.encodeComponent(filename)}",
+      );
+      response.headers.set('X-Content-Type-Options', 'nosniff');
+      streaming = true;
+      await response.addStream(jiraResponse.stream);
+      await response.close();
+    } catch (e) {
+      if (!streaming) {
+        _sendIssueReadError(response, e);
+      } else {
+        await response.close();
+      }
+    }
+  }
+
+  void _sendIssueReadError(HttpResponse response, Object error) {
+    if (error is ArgumentError) {
+      _sendJson(response, HttpStatus.badRequest, {'error': error.toString()});
+    } else if (error is StateError) {
+      _sendJson(response, HttpStatus.conflict, {'error': error.toString()});
+    } else if (error is JiraApiException) {
+      _sendJson(
+        response,
+        error.statusCode == HttpStatus.notFound
+            ? HttpStatus.notFound
+            : HttpStatus.badGateway,
+        {'error': error.toString()},
+      );
+    } else {
+      _sendJson(response, HttpStatus.badGateway, {'error': error.toString()});
+    }
   }
 
   Future<void> _handleGetLogs(
@@ -999,6 +1317,7 @@ class AgentApiServer {
 ## Модель и правила
 - `LocalLog` — источник работы; `Segment` — отдельный worklog, который пользователь сможет отправить в Jira.
 - Каждый segment в `POST /api/day` обязан содержать `source_log_id`. Несколько segments могут ссылаться на один источник в пределах одного дня.
+- Рабочие segments и существующие Jira worklogs могут пересекаться по времени; каждый segment останется отдельным worklog после подтверждения в UI. Паузы не пересекаются с работой.
 - Источник должен быть остановлен, не отправлен и не занят активным черновиком другой даты. Чтобы разнести работу на разные даты, сначала раздели source через `POST /api/logs/{id}/split`.
 - Агент заменяет черновик целиком. Перед записью вызови `GET /api/day?date=YYYY-MM-DD`; если `draft` существует, передай его top-level `revision` как `base_revision`. Ответ `409` требует перечитать день и собрать snapshot заново.
 - Jira worklogs в GET/POST `/api/day` загружаются для указанной даты; при ошибке Jira возвращается `502`.
@@ -1006,10 +1325,15 @@ class AgentApiServer {
 
 ## Поиск и очередь
 - `GET /api/issues?q=текст` — поиск по локальному каталогу: key, summary и status. Удалённый fuzzy search не выполняется.
+- `GET /api/issues/PROJ-123` — актуальная карточка Jira: текст описания, все доступные комментарии и метаданные вложений с `download_path`.
+- `GET /api/issues/PROJ-123/attachments/10001` — бинарное содержимое вложения; ID берётся из карточки. Файл не сохраняется приложением на диск.
+- `GET /api/issues/PROJ-123/worklogs` — все доступные worklogs Jira по задаче, включая других авторов; `is_mine` отмечает записи текущего аккаунта.
 - `GET /api/logs?q=текст&issue_key=PROJ-123&availability=free` — очередь и фильтры. `availability`: `free`, `running` или `in_draft`; запись также содержит `draft_date`.
 - `POST /api/logs` создаёт source для известной локальной/Jira-задачи; при неизвестной задаче и ошибке Jira запрос отклоняется, fallback-задача не создаётся.
 - `POST /api/logs/{id}/split` и `POST /api/logs/merge` меняют исходные логи очереди. `PATCH /api/logs/{id}` и `DELETE /api/logs/{id}` управляют свободными логами.
-- `GET /api/quick-issues` возвращает быстрые задачи текущего Jira-подключения в порядке добавления. Поля: `issue_id`, `key`, `summary`, `note`; без активного подключения ответ `409`.
+- `GET /api/quick-issues` возвращает быстрые задачи текущего Jira-подключения в порядке добавления. Поля: `issue_id`, `key`, `summary`, `note` (локальное описание); без активного подключения ответ `409`.
+- `POST /api/quick-issues` принимает `{"issue_key":"PROJ-123","note":"Подсказка"}` и добавляет проверенную через Jira задачу. Повторный POST сохраняет позицию и обновляет `note`, если оно передано.
+- `PATCH /api/quick-issues/{issueId}` принимает `{"note":"Новое описание"}`; `null` очищает описание. `DELETE /api/quick-issues/{issueId}` убирает ссылку из быстрого списка, не удаляя задачу и логи.
 
 ## Snapshot дня
 1. Получи доступные источники через `GET /api/logs` и данные дня через `GET /api/day?date=...`.
@@ -1038,7 +1362,7 @@ class AgentApiServer {
         'title': 'Jira Time Tracker Agent API',
         'version': '1.0.0',
         'description':
-            'Local REST API for AI agents to log time and submit day schedules.',
+            'Local REST API for AI agents to record time and save day drafts. Jira submission is only available in the UI.',
       },
       'servers': [
         {'url': url, 'description': 'Local Tracker Instance'},
@@ -1077,6 +1401,184 @@ class AgentApiServer {
                     'Issues matching key, summary, or status; no remote fuzzy search',
               },
               '503': {'description': 'AppState unavailable'},
+            },
+          },
+        },
+        '/api/issues/{issueKey}': {
+          'get': {
+            'summary':
+                'Read current Jira issue text, all visible comments and attachment metadata',
+            'parameters': [
+              {
+                'name': 'issueKey',
+                'in': 'path',
+                'required': true,
+                'schema': {'type': 'string', 'example': 'PROJ-123'},
+              },
+            ],
+            'responses': {
+              '200': {
+                'description':
+                    'Fresh Jira issue details; comments are fully paginated',
+                'content': {
+                  'application/json': {
+                    'schema': {
+                      'type': 'object',
+                      'properties': {
+                        'issue_id': {'type': 'string'},
+                        'issue_key': {'type': 'string'},
+                        'summary': {'type': 'string'},
+                        'description': {'type': 'string', 'nullable': true},
+                        'status': {'type': 'string', 'nullable': true},
+                        'issue_type': {'type': 'string', 'nullable': true},
+                        'priority': {'type': 'string', 'nullable': true},
+                        'assignee': {'type': 'string', 'nullable': true},
+                        'labels': {
+                          'type': 'array',
+                          'items': {'type': 'string'},
+                        },
+                        'created': {'type': 'string', 'nullable': true},
+                        'updated': {'type': 'string', 'nullable': true},
+                        'comments': {
+                          'type': 'array',
+                          'items': {
+                            'type': 'object',
+                            'properties': {
+                              'id': {'type': 'string'},
+                              'author_account_id': {
+                                'type': 'string',
+                                'nullable': true,
+                              },
+                              'author_name': {
+                                'type': 'string',
+                                'nullable': true,
+                              },
+                              'created': {'type': 'string', 'nullable': true},
+                              'updated': {'type': 'string', 'nullable': true},
+                              'body': {'type': 'string', 'nullable': true},
+                            },
+                          },
+                        },
+                        'attachments': {
+                          'type': 'array',
+                          'items': {
+                            'type': 'object',
+                            'properties': {
+                              'id': {'type': 'string'},
+                              'filename': {'type': 'string'},
+                              'mime_type': {'type': 'string', 'nullable': true},
+                              'size_bytes': {
+                                'type': 'integer',
+                                'nullable': true,
+                              },
+                              'created': {'type': 'string', 'nullable': true},
+                              'author_account_id': {
+                                'type': 'string',
+                                'nullable': true,
+                              },
+                              'author_name': {
+                                'type': 'string',
+                                'nullable': true,
+                              },
+                              'download_path': {'type': 'string'},
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+              '400': {'description': 'Invalid issue key or ID'},
+              '404': {'description': 'Issue not found in Jira'},
+              '409': {'description': 'No active Jira connection'},
+              '502': {
+                'description': 'Jira issue or comments could not be loaded',
+              },
+            },
+          },
+        },
+        '/api/issues/{issueKey}/attachments/{attachmentId}': {
+          'get': {
+            'summary': 'Download one attachment belonging to the Jira issue',
+            'parameters': [
+              {
+                'name': 'issueKey',
+                'in': 'path',
+                'required': true,
+                'schema': {'type': 'string'},
+              },
+              {
+                'name': 'attachmentId',
+                'in': 'path',
+                'required': true,
+                'schema': {'type': 'string', 'pattern': r'^\d+$'},
+              },
+            ],
+            'responses': {
+              '200': {
+                'description':
+                    'Binary attachment with Content-Disposition filename',
+                'content': {
+                  'application/octet-stream': {
+                    'schema': {'type': 'string', 'format': 'binary'},
+                  },
+                },
+              },
+              '400': {'description': 'Invalid issue key or attachment ID'},
+              '404': {'description': 'Issue or attachment not found'},
+              '409': {'description': 'No active Jira connection'},
+              '502': {'description': 'Jira attachment could not be loaded'},
+            },
+          },
+        },
+        '/api/issues/{issueKey}/worklogs': {
+          'get': {
+            'summary': 'Read all visible Jira worklogs for one issue',
+            'parameters': [
+              {
+                'name': 'issueKey',
+                'in': 'path',
+                'required': true,
+                'description': 'Jira issue key or numeric ID',
+                'schema': {'type': 'string', 'example': 'PROJ-123'},
+              },
+            ],
+            'responses': {
+              '200': {
+                'description':
+                    'Issue and its visible Jira worklogs, including author_account_id and is_mine',
+                'content': {
+                  'application/json': {
+                    'schema': {
+                      'type': 'object',
+                      'properties': {
+                        'issue_id': {'type': 'string'},
+                        'issue_key': {'type': 'string'},
+                        'worklogs': {
+                          'type': 'array',
+                          'items': {
+                            'type': 'object',
+                            'properties': {
+                              'id': {'type': 'string'},
+                              'start_utc': {'type': 'string'},
+                              'start_local': {'type': 'string'},
+                              'duration_seconds': {'type': 'integer'},
+                              'comment': {'type': 'string', 'nullable': true},
+                              'author_account_id': {'type': 'string'},
+                              'is_mine': {'type': 'boolean'},
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+              '400': {'description': 'Invalid issue key or ID'},
+              '404': {'description': 'Issue not found in Jira'},
+              '409': {'description': 'No active Jira connection'},
+              '502': {'description': 'Jira worklogs could not be loaded'},
             },
           },
         },
@@ -1305,7 +1807,8 @@ class AgentApiServer {
             },
           },
           'post': {
-            'summary': 'Atomically replace the complete day draft',
+            'summary':
+                'Atomically replace the complete day draft; worklogs may overlap',
             'requestBody': {
               'required': true,
               'content': {
@@ -1409,6 +1912,85 @@ class AgentApiServer {
                 },
               },
               '409': {'description': 'No active verified Jira connection'},
+            },
+          },
+          'post': {
+            'summary': 'Add or update one quick issue in the active Jira scope',
+            'requestBody': {
+              'required': true,
+              'content': {
+                'application/json': {
+                  'schema': {
+                    'type': 'object',
+                    'required': ['issue_key'],
+                    'properties': {
+                      'issue_key': {'type': 'string', 'example': 'PROJ-123'},
+                      'note': {'type': 'string', 'nullable': true},
+                    },
+                  },
+                },
+              },
+            },
+            'responses': {
+              '201': {'description': 'Quick issue added'},
+              '200': {
+                'description':
+                    'Existing quick issue returned; note updated if supplied',
+              },
+              '400': {'description': 'Invalid input'},
+              '404': {'description': 'Issue not found in Jira'},
+              '409': {'description': 'No connection or read-only instance'},
+              '502': {'description': 'Jira issue lookup failed'},
+            },
+          },
+        },
+        '/api/quick-issues/{issueId}': {
+          'patch': {
+            'summary': 'Update the local note of a quick issue',
+            'parameters': [
+              {
+                'name': 'issueId',
+                'in': 'path',
+                'required': true,
+                'schema': {'type': 'string'},
+              },
+            ],
+            'requestBody': {
+              'required': true,
+              'content': {
+                'application/json': {
+                  'schema': {
+                    'type': 'object',
+                    'required': ['note'],
+                    'properties': {
+                      'note': {'type': 'string', 'nullable': true},
+                    },
+                  },
+                },
+              },
+            },
+            'responses': {
+              '200': {'description': 'Updated quick issue'},
+              '400': {'description': 'Invalid note'},
+              '404': {'description': 'Quick issue not found'},
+              '409': {'description': 'No connection or read-only instance'},
+            },
+          },
+          'delete': {
+            'summary':
+                'Remove a quick issue link without deleting issue or logs',
+            'parameters': [
+              {
+                'name': 'issueId',
+                'in': 'path',
+                'required': true,
+                'schema': {'type': 'string'},
+              },
+            ],
+            'responses': {
+              '204': {'description': 'Quick issue removed'},
+              '404': {'description': 'Quick issue not found'},
+              '409': {'description': 'No connection or read-only instance'},
             },
           },
         },

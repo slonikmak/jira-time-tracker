@@ -42,6 +42,32 @@ void main() {
       sendState: SendState.pending,
     );
 
+    testWidgets('Параллельные логи видны в разных дорожках', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 800,
+              child: TimelineTrackBar(
+                draft: draft,
+                segments: [
+                  seg1,
+                  seg2.copyWith(startUtc: DateTime.utc(2026, 9, 14, 9, 30)),
+                ],
+                breaks: const [],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final first = find.byKey(const Key('track_segment_seg-1'));
+      final second = find.byKey(const Key('track_segment_seg-2'));
+      expect(first, findsOneWidget);
+      expect(second, findsOneWidget);
+      expect(tester.getTopLeft(first).dy, isNot(tester.getTopLeft(second).dy));
+    });
+
     testWidgets('Правая ручка вызывает onResizeSegmentRight с обновленной длительностью', (tester) async {
       tester.view.physicalSize = const Size(1000, 400);
       tester.view.devicePixelRatio = 1.0;

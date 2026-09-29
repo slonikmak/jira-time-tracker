@@ -173,9 +173,13 @@ class DayScreen extends StatelessWidget {
 
     final draft = appState.currentDraft;
     final subtitle = draft == null
-        ? appState.importedWorklogs.isEmpty
-              ? 'Соберите расписание из выбранных логов'
-              : 'Записи Jira за выбранный день'
+        ? appState.isFetchingJiraWorklogs
+              ? 'Загружаем записи из Jira...'
+              : appState.importedWorklogs.isNotEmpty
+              ? 'Записи Jira за выбранный день'
+              : appState.hasLoadedJiraWorklogs
+              ? 'Записей Jira за выбранный день нет'
+              : 'Соберите расписание из выбранных логов'
         : draft.status == DraftStatus.completed
         ? 'Все записи отправлены'
         : appState.isDraftLockedFromRebuild
@@ -714,6 +718,19 @@ class DayScreen extends StatelessWidget {
 
   Widget _buildEmptyDay(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final jiraLoadFailed = appState.jiraWorklogsLoadFailed;
+    if (appState.isFetchingJiraWorklogs) {
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Загружаем записи из Jira...'),
+          ],
+        ),
+      );
+    }
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -724,13 +741,19 @@ class DayScreen extends StatelessWidget {
             color: AppColors.muted(isDark),
           ),
           const SizedBox(height: 14),
-          const Text(
-            'Соберите день из своих логов',
+          Text(
+            jiraLoadFailed
+                ? 'Не удалось загрузить записи Jira'
+                : appState.hasLoadedJiraWorklogs
+                ? 'Записей Jira за этот день нет'
+                : 'Соберите день из своих логов',
             style: TextStyle(fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 4),
           Text(
-            'На «Работе» выберите записи и нужную дату.',
+            jiraLoadFailed
+                ? 'Повторите загрузку через меню у даты.'
+                : 'На «Работе» выберите записи и нужную дату.',
             style: TextStyle(fontSize: 12, color: AppColors.muted(isDark)),
           ),
           const SizedBox(height: 16),
@@ -1695,7 +1718,7 @@ class DayScreen extends StatelessWidget {
               children: [
                 Text(
                   appState.validationErrors.isEmpty
-                      ? 'Пересечений нет'
+                      ? 'План готов к отправке'
                       : 'В расписании есть ошибки',
                   style: const TextStyle(
                     fontSize: 13,

@@ -43,6 +43,7 @@ void main() {
       expect(body, contains('/api/logs'));
       expect(body, contains('/api/day'));
       expect(body, contains('/api/issues?q=текст'));
+      expect(body, contains('/api/issues/PROJ-123/attachments/10001'));
       expect(body, contains('source_log_id'));
       expect(body, contains('base_revision'));
       expect(body, contains('/api/quick-issues'));
@@ -70,8 +71,16 @@ void main() {
         expect(json['info']['title'], equals('Jira Time Tracker Agent API'));
         expect(json['paths'], contains('/api/logs'));
         expect(json['paths'], contains('/api/issues'));
+        expect(json['paths'], contains('/api/issues/{issueKey}'));
+        expect(
+          json['paths'],
+          contains('/api/issues/{issueKey}/attachments/{attachmentId}'),
+        );
+        expect(json['paths'], contains('/api/issues/{issueKey}/worklogs'));
         expect(json['paths'], contains('/api/day'));
         expect(json['paths'], contains('/api/quick-issues'));
+        expect(json['paths']['/api/quick-issues'], contains('post'));
+        expect(json['paths'], contains('/api/quick-issues/{issueId}'));
         expect(json['paths'], isNot(contains('/api/service-tickets')));
         final quickIssues =
             json['paths']['/api/quick-issues']['get'] as Map<String, dynamic>;
@@ -110,10 +119,14 @@ void main() {
         'OPTIONS',
         Uri.parse('${server.url}/api/logs'),
       );
+      req.headers.set('Origin', server.url);
       final res = await req.close();
 
       expect(res.statusCode, equals(HttpStatus.noContent));
-      expect(res.headers.value('access-control-allow-origin'), equals('*'));
+      expect(
+        res.headers.value('access-control-allow-origin'),
+        equals(server.url),
+      );
       expect(
         res.headers.value('access-control-allow-methods'),
         contains('POST'),

@@ -318,6 +318,143 @@ void main() {
     );
 
     test(
+      'Agent API adds, edits and removes a quick issue with its note',
+      () async {
+        final server = AgentApiServer(appState: appState, initialPort: 0);
+        final client = HttpClient();
+        await server.start();
+        addTearDown(() async {
+          client.close(force: true);
+          await server.stop();
+        });
+
+        Future<(int, dynamic)> call(
+          String method,
+          String path, [
+          Map<String, dynamic>? body,
+        ]) async {
+          final request = await client.openUrl(
+            method,
+            Uri.parse('${server.url}$path'),
+          );
+          if (body != null) {
+            request.headers.contentType = ContentType.json;
+            request.write(jsonEncode(body));
+          }
+          final response = await request.close();
+          final text = await response.transform(utf8.decoder).join();
+          return (response.statusCode, text.isEmpty ? null : jsonDecode(text));
+        }
+
+        final (createdStatus, created) = await call(
+          'POST',
+          '/api/quick-issues',
+          {'issue_key': 'ONE-1', 'note': 'Первое описание'},
+        );
+        expect(createdStatus, HttpStatus.created);
+        expect(created['issue_id'], '1001');
+        expect(created['summary'], 'Summary for ONE-1');
+        expect(created['note'], 'Первое описание');
+
+        final issue = store.getIssue(connection.scope, '1001')!;
+        store.upsertLocalLog(
+          LocalLog(
+            id: 'preserved-log',
+            scope: connection.scope,
+            issueId: issue.issueId,
+            titleSnapshot: issue.summary,
+            accumulatedSeconds: 600,
+            createdAtUtc: clockNow,
+          ),
+        );
+
+        final (againStatus, again) = await call('POST', '/api/quick-issues', {
+          'issue_key': 'ONE-1',
+          'note': 'Обновлено через повторный POST',
+        });
+        expect(againStatus, HttpStatus.ok);
+        expect(again['note'], 'Обновлено через повторный POST');
+        expect(appState.quickIssues, hasLength(1));
+
+        final (patchedStatus, patched) = await call(
+          'PATCH',
+          '/api/quick-issues/1001',
+          {'note': '  Итоговое описание  '},
+        );
+        expect(patchedStatus, HttpStatus.ok);
+        expect(patched['note'], 'Итоговое описание');
+        final (listStatus, list) = await call('GET', '/api/quick-issues');
+        expect(listStatus, HttpStatus.ok);
+        expect(list, [patched]);
+
+        final (deletedStatus, deleted) = await call(
+          'DELETE',
+          '/api/quick-issues/1001',
+        );
+        expect(deletedStatus, HttpStatus.noContent);
+        expect(deleted, isNull);
+        expect(appState.quickIssues, isEmpty);
+        expect(store.getIssue(connection.scope, issue.issueId), isNotNull);
+        expect(store.getLocalLog('preserved-log'), isNotNull);
+      },
+    );
+
+    test(
+      'Agent API rejects invalid or unavailable quick issue changes',
+      () async {
+        final server = AgentApiServer(appState: appState, initialPort: 0);
+        final client = HttpClient();
+        await server.start();
+        addTearDown(() async {
+          client.close(force: true);
+          await server.stop();
+        });
+
+        Future<int> call(
+          String method,
+          String path, [
+          Map<String, dynamic>? body,
+        ]) async {
+          final request = await client.openUrl(
+            method,
+            Uri.parse('${server.url}$path'),
+          );
+          if (body != null) {
+            request.headers.contentType = ContentType.json;
+            request.write(jsonEncode(body));
+          }
+          final response = await request.close();
+          await response.drain<void>();
+          return response.statusCode;
+        }
+
+        expect(
+          await call('POST', '/api/quick-issues', {'note': 'No issue'}),
+          HttpStatus.badRequest,
+        );
+        expect(
+          await call('PATCH', '/api/quick-issues/9999', {'note': 'No issue'}),
+          HttpStatus.notFound,
+        );
+        expect(
+          await call('DELETE', '/api/quick-issues/9999'),
+          HttpStatus.notFound,
+        );
+        jiraUnavailable = true;
+        expect(
+          await call('POST', '/api/quick-issues', {'issue_key': 'UNKNOWN-1'}),
+          HttpStatus.notFound,
+        );
+        expect(appState.quickIssues, isEmpty);
+        await appState.removeConnection();
+        expect(
+          await call('POST', '/api/quick-issues', {'issue_key': 'ONE-1'}),
+          HttpStatus.conflict,
+        );
+      },
+    );
+
+    test(
       'GET /api/quick-issues reports 409 without an active connection',
       () async {
         await appState.removeConnection();

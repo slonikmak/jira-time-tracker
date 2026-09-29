@@ -25,6 +25,7 @@ void main() {
     late List<Map<String, dynamic>> jiraWorklogs;
     late List<String> jiraQueries;
     late int jiraSearchStatus;
+    late int jiraWorklogStatus;
     Completer<void>? jiraSearchGate;
     Completer<void>? jiraSearchStarted;
 
@@ -86,6 +87,7 @@ void main() {
       jiraWorklogs = [];
       jiraQueries = [];
       jiraSearchStatus = HttpStatus.ok;
+      jiraWorklogStatus = HttpStatus.ok;
       jiraSearchGate = null;
       jiraSearchStarted = null;
 
@@ -125,7 +127,7 @@ void main() {
                   'total': jiraWorklogs.length,
                   'worklogs': jiraWorklogs,
                 }),
-                HttpStatus.ok,
+                jiraWorklogStatus,
                 headers: {'content-type': 'application/json'},
               );
             }
@@ -888,10 +890,71 @@ void main() {
     );
 
     test(
-      'POST /api/day отклоняет пересекающиеся сегменты (400 Bad Request)',
+      'GET /api/issues/{key}/worklogs читает все видимые записи тикета',
+      () async {
+        await ensureIssue('TASK-1');
+        jiraWorklogs = [
+          {
+            'id': 'newer',
+            'author': {'accountId': 'other-account'},
+            'started': '2026-09-17T10:00:00.000+0000',
+            'timeSpentSeconds': 3600,
+            'comment': 'Работа коллеги',
+          },
+          {
+            'id': 'older',
+            'author': {'accountId': 'acc-agent-1'},
+            'started': '2025-04-02T09:00:00.000+0000',
+            'timeSpentSeconds': 10800,
+            'comment': 'Моя работа',
+          },
+        ];
+
+        final request = await client.getUrl(
+          Uri.parse('${server.url}/api/issues/TASK-1/worklogs'),
+        );
+        final response = await request.close();
+        expect(response.statusCode, HttpStatus.ok);
+        final body =
+            jsonDecode(await response.transform(utf8.decoder).join())
+                as Map<String, dynamic>;
+        expect(body['issue_key'], 'TASK-1');
+        final worklogs = body['worklogs'] as List<dynamic>;
+        expect(worklogs.map((w) => w['id']), ['older', 'newer']);
+        expect(worklogs.first['duration_seconds'], 10800);
+        expect(worklogs.first['comment'], 'Моя работа');
+        expect(worklogs.first['is_mine'], isTrue);
+        expect(worklogs.last['is_mine'], isFalse);
+
+        jiraWorklogStatus = HttpStatus.internalServerError;
+        final failedRequest = await client.getUrl(
+          Uri.parse('${server.url}/api/issues/TASK-1/worklogs'),
+        );
+        final failedResponse = await failedRequest.close();
+        expect(failedResponse.statusCode, HttpStatus.badGateway);
+      },
+    );
+
+    test(
+      'POST /api/day сохраняет параллельные сегменты рядом с Jira worklog',
       () async {
         final source1 = await addSource('TASK-1', 3600);
         final source2 = await addSource('TASK-2', 3600);
+        jiraIssues = [
+          {
+            'id': 'TASK-1',
+            'key': 'TASK-1',
+            'fields': {'summary': 'Existing Jira issue'},
+          },
+        ];
+        jiraWorklogs = [
+          {
+            'id': 'jira-overlap',
+            'author': {'accountId': 'acc-agent-1'},
+            'started': '2026-09-17T09:15:00.000+0000',
+            'timeSpentSeconds': 1800,
+          },
+        ];
         final req = await client.postUrl(Uri.parse('${server.url}/api/day'));
         req.headers.contentType = ContentType.json;
         req.write(
@@ -902,12 +965,12 @@ void main() {
                 'source_log_id': source1.id,
                 'issue_key': 'TASK-1',
                 'start': '09:00',
-                'duration_minutes': 60, // до 10:00
+                'duration_minutes': 60,
               },
               {
                 'source_log_id': source2.id,
                 'issue_key': 'TASK-2',
-                'start': '09:30', // ПЕРЕСЕЧЕНИЕ с первой!
+                'start': '09:30',
                 'duration_minutes': 60,
               },
             ],
@@ -915,11 +978,10 @@ void main() {
         );
         final res = await req.close();
 
-        expect(res.statusCode, equals(HttpStatus.badRequest));
-        final body =
-            jsonDecode(await res.transform(utf8.decoder).join())
-                as Map<String, dynamic>;
-        expect(body['error'], contains('пересечени'));
+        expect(res.statusCode, equals(HttpStatus.ok));
+        expect(appState.currentSegments, hasLength(2));
+        expect(appState.validationErrors, isEmpty);
+        expect(appState.importedWorklogs.single.id, 'jira-overlap');
       },
     );
   });

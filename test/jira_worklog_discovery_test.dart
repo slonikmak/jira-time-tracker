@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -36,6 +37,7 @@ void main() {
               request.method == 'POST') {
             final body = jsonDecode(request.body) as Map<String, dynamic>;
             final jql = body['jql'] as String;
+            expect(jql, contains('worklogAuthor = "$testAccountId"'));
             expect(jql, contains("worklogDate >= '2026-09-13'"));
             expect(jql, contains("worklogDate <= '2026-09-15'"));
 
@@ -220,6 +222,52 @@ void main() {
         );
       },
     );
+
+    test('A12: задачи дня читаются с ограниченной параллельностью', () async {
+      final release = Completer<void>();
+      var active = 0;
+      var peak = 0;
+      final pageSizes = <String?>[];
+      final mockClient = MockClient((request) async {
+        if (request.method == 'POST') {
+          return http.Response(
+            jsonEncode({
+              'issues': [
+                for (var i = 1; i <= 5; i++)
+                  {
+                    'id': '$i',
+                    'key': 'PROJ-$i',
+                    'fields': {'summary': 'Issue $i'},
+                  },
+              ],
+              'isLast': true,
+            }),
+            200,
+          );
+        }
+        pageSizes.add(request.url.queryParameters['maxResults']);
+        active++;
+        if (active > peak) peak = active;
+        await release.future;
+        active--;
+        return http.Response(jsonEncode({'total': 0, 'worklogs': []}), 200);
+      });
+      final jiraClient = JiraClient(client: mockClient);
+      final fetch = jiraClient.fetchDayWorklogs(
+        date: DateTime.utc(2026, 9, 14),
+        timeZoneOffset: Duration.zero,
+        connection: testConnection,
+        token: testToken,
+      );
+      await Future<void>.delayed(Duration.zero);
+      try {
+        expect(peak, 4);
+      } finally {
+        release.complete();
+        await fetch;
+      }
+      expect(pageSizes, everyElement('500'));
+    });
 
     test(
       'A07, Ticket 08: DayBuilder строит день вокруг существующих записей Jira без пересечений',

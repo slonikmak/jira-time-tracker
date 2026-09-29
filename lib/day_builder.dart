@@ -1248,6 +1248,7 @@ class DayBuilder {
     required DayPlanResult plan,
     List<ImportedWorklog> existingWorklogs = const [],
     bool requirePauses = true,
+    bool allowWorklogOverlaps = false,
   }) {
     final errors = <String>[];
 
@@ -1256,7 +1257,8 @@ class DayBuilder {
         'Общая продолжительность дня (${plan.totalDaySeconds} сек) превышает 24 часа.',
       );
     }
-    if (plan.totalNewWorkSeconds + plan.totalExistingSeconds > 24 * 3600) {
+    if (!allowWorklogOverlaps &&
+        plan.totalNewWorkSeconds + plan.totalExistingSeconds > 24 * 3600) {
       errors.add(
         'Суммарное рабочее время превышает 24 часа.',
       );
@@ -1334,14 +1336,21 @@ class DayBuilder {
 
     for (var i = 0; i < intervals.length - 1; i++) {
       final a = intervals[i];
-      final b = intervals[i + 1];
-
-      if (a.overlaps(b)) {
-        errors.add(
-          'Обнаружено пересечение: ${a.type} (${a.start} - ${a.end}) и ${b.type} (${b.start} - ${b.end}).',
-        );
+      for (var j = i + 1;
+          j < intervals.length && intervals[j].start.isBefore(a.end);
+          j++) {
+        final b = intervals[j];
+        if (a.overlaps(b) &&
+            (!allowWorklogOverlaps ||
+                a.type == 'Перерыв' ||
+                b.type == 'Перерыв')) {
+          errors.add(
+            'Обнаружено пересечение: ${a.type} (${a.start} - ${a.end}) и ${b.type} (${b.start} - ${b.end}).',
+          );
+        }
       }
 
+      final b = intervals[i + 1];
       if (a.type == 'Перерыв' &&
           b.type == 'Перерыв' &&
           a.end.isAtSameMomentAs(b.start)) {

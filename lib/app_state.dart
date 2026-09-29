@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 import 'agent_api_server.dart';
 import 'connection_store.dart';
@@ -160,6 +161,9 @@ class AppState extends ChangeNotifier {
   List<String> _validationErrors = [];
   bool _isBuildingDay = false;
   bool _isFetchingJiraWorklogs = false;
+  bool _hasLoadedJiraWorklogs = false;
+  bool _jiraWorklogsLoadFailed = false;
+  int _jiraWorklogsRequestId = 0;
   bool _isSubmittingDay = false;
 
   DateTime get selectedDate => _selectedDate;
@@ -181,6 +185,8 @@ class AppState extends ChangeNotifier {
   List<ImportedWorklog> get importedWorklogs =>
       List.unmodifiable(_importedWorklogs);
   bool get isFetchingJiraWorklogs => _isFetchingJiraWorklogs;
+  bool get hasLoadedJiraWorklogs => _hasLoadedJiraWorklogs;
+  bool get jiraWorklogsLoadFailed => _jiraWorklogsLoadFailed;
   bool get isSubmittingDay => _isSubmittingDay;
   DaySettings get daySettings => _daySettings;
   Set<String> get lockedSourceLogIds => Set.unmodifiable(_lockedSourceLogIds);
@@ -323,11 +329,17 @@ class AppState extends ChangeNotifier {
   Future<void> loadSavedConnection() async {
     final conn = await connectionStore.getSavedConnection();
     if (conn != null) {
+      _jiraWorklogsRequestId++;
+      _isFetchingJiraWorklogs = false;
+      _hasLoadedJiraWorklogs = false;
+      _jiraWorklogsLoadFailed = false;
+      _importedWorklogs = [];
       _currentConnection = conn;
       await loadIssues();
       await loadLogs();
       loadDraftForSelectedDate();
       notifyListeners();
+      if (_selectedTabIndex == 1) unawaited(fetchJiraWorklogsForDate());
       unawaited(refreshIssuesFromJira());
     }
   }
@@ -336,16 +348,23 @@ class AppState extends ChangeNotifier {
     if (_selectedTabIndex != index) {
       _selectedTabIndex = index;
       notifyListeners();
+      if (index == 1) unawaited(fetchJiraWorklogsForDate());
     }
   }
 
   Future<void> updateConnection(JiraConnection connection, String token) async {
     await connectionStore.saveConnection(connection, token);
+    _jiraWorklogsRequestId++;
+    _isFetchingJiraWorklogs = false;
+    _hasLoadedJiraWorklogs = false;
+    _jiraWorklogsLoadFailed = false;
+    _importedWorklogs = [];
     _currentConnection = connection;
     await loadIssues();
     await loadLogs();
     loadDraftForSelectedDate();
     notifyListeners();
+    if (_selectedTabIndex == 1) unawaited(fetchJiraWorklogsForDate());
     unawaited(refreshIssuesFromJira());
   }
 
@@ -383,7 +402,12 @@ class AppState extends ChangeNotifier {
 
   Future<void> removeConnection() async {
     await connectionStore.clearConnection();
+    _jiraWorklogsRequestId++;
     _currentConnection = null;
+    _isFetchingJiraWorklogs = false;
+    _hasLoadedJiraWorklogs = false;
+    _jiraWorklogsLoadFailed = false;
+    _importedWorklogs = [];
     await loadIssues();
     await loadLogs();
     loadDraftForSelectedDate();
@@ -1072,23 +1096,43 @@ class AppState extends ChangeNotifier {
 
   void setSelectedDate(DateTime date) {
     _selectedDate = DateTime(date.year, date.month, date.day);
+    _hasLoadedJiraWorklogs = false;
+    _jiraWorklogsLoadFailed = false;
+    _importedWorklogs = [];
     loadDraftForSelectedDate();
-    fetchJiraWorklogsForDate();
+    unawaited(fetchJiraWorklogsForDate());
   }
 
   Future<void> fetchJiraWorklogsForDate() async {
-    final conn = _currentConnection;
-    if (conn == null) return;
-    final token = await connectionStore.getSavedToken();
-    if (token == null || token.isEmpty) return;
+    final requestId = ++_jiraWorklogsRequestId;
+    final requestedDate = _selectedDate;
+    final requestedScope = activeScope;
+    if (_currentConnection == null) {
+      _isFetchingJiraWorklogs = false;
+      notifyListeners();
+      return;
+    }
 
     _isFetchingJiraWorklogs = true;
+    _jiraWorklogsLoadFailed = false;
+    if (_statusMessage?.startsWith('Ошибка загрузки записей Jira:') == true) {
+      _statusMessage = null;
+    }
     notifyListeners();
 
     try {
-      final logs = await fetchJiraWorklogsForDateScoped(_selectedDate);
+      final logs = await fetchJiraWorklogsForDateScoped(requestedDate);
+      if (requestId != _jiraWorklogsRequestId ||
+          requestedDate != _selectedDate ||
+          requestedScope != activeScope) {
+        return;
+      }
 
       _importedWorklogs = logs;
+      _hasLoadedJiraWorklogs = true;
+      if (_statusMessage?.startsWith('Ошибка загрузки записей Jira:') == true) {
+        _statusMessage = null;
+      }
 
       if (_currentDraft != null) {
         _currentDraft = _currentDraft!.copyWith(
@@ -1101,10 +1145,15 @@ class AppState extends ChangeNotifier {
 
       _revalidateCurrentPlan();
     } catch (e) {
-      _statusMessage = 'Ошибка загрузки записей Jira: $e';
+      if (requestId == _jiraWorklogsRequestId) {
+        _jiraWorklogsLoadFailed = true;
+        _statusMessage = 'Ошибка загрузки записей Jira: $e';
+      }
     } finally {
-      _isFetchingJiraWorklogs = false;
-      notifyListeners();
+      if (requestId == _jiraWorklogsRequestId) {
+        _isFetchingJiraWorklogs = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -1134,6 +1183,72 @@ class AppState extends ChangeNotifier {
         ...store.getIssues(scope: activeScope).map((issue) => issue.issueId),
         ...store.getLocalLogs(scope: activeScope).map((log) => log.issueId),
       ],
+    );
+  }
+
+  /// Reads all Jira worklogs visible on one issue without changing the UI day.
+  Future<(Issue, List<ImportedWorklog>, String)> fetchJiraWorklogsForIssue(
+    String issueRef,
+  ) async {
+    final parsed = IssueParser.parse(issueRef);
+    if (parsed == null) {
+      throw ArgumentError('Ожидается ключ или числовой ID задачи Jira.');
+    }
+    final connection = _currentConnection;
+    final token = await connectionStore.getSavedToken();
+    if (connection == null || token == null || token.isEmpty) {
+      throw StateError(
+        'Нет активного подключения к Jira для загрузки worklogs.',
+      );
+    }
+    final issue = await resolveIssueStrict(parsed);
+    final worklogs =
+        await jiraClient.getIssueWorklogs(
+            issueIdOrKey: issue.issueId,
+            issueKey: issue.key,
+            connection: connection,
+            token: token,
+          )
+          ..sort((a, b) => a.startUtc.compareTo(b.startUtc));
+    return (issue, worklogs, connection.accountId);
+  }
+
+  /// Reads fresh issue details; the local issue cache is not used for content.
+  Future<Map<String, dynamic>> fetchJiraIssueDetails(String issueRef) async {
+    final parsed = IssueParser.parse(issueRef);
+    if (parsed == null) {
+      throw ArgumentError('Ожидается ключ или числовой ID задачи Jira.');
+    }
+    final connection = _currentConnection;
+    final token = await connectionStore.getSavedToken();
+    if (connection == null || token == null || token.isEmpty) {
+      throw StateError('Нет активного подключения к Jira.');
+    }
+    return jiraClient.getIssueDetails(
+      issueIdOrKey: parsed,
+      connection: connection,
+      token: token,
+    );
+  }
+
+  Future<(Map<String, dynamic>, http.StreamedResponse)> downloadJiraAttachment(
+    String issueRef,
+    String attachmentId,
+  ) async {
+    final parsed = IssueParser.parse(issueRef);
+    if (parsed == null || !RegExp(r'^\d+$').hasMatch(attachmentId)) {
+      throw ArgumentError('Ожидается ключ задачи Jira и числовой ID вложения.');
+    }
+    final connection = _currentConnection;
+    final token = await connectionStore.getSavedToken();
+    if (connection == null || token == null || token.isEmpty) {
+      throw StateError('Нет активного подключения к Jira.');
+    }
+    return jiraClient.downloadIssueAttachment(
+      issueIdOrKey: parsed,
+      attachmentId: attachmentId,
+      connection: connection,
+      token: token,
     );
   }
 
@@ -1239,6 +1354,7 @@ class AppState extends ChangeNotifier {
       plan: plan,
       existingWorklogs: _importedWorklogs,
       requirePauses: _currentBreaks.isNotEmpty,
+      allowWorklogOverlaps: true,
     );
   }
 
@@ -1651,6 +1767,7 @@ class AppState extends ChangeNotifier {
       plan: plan,
       existingWorklogs: existingWorklogs,
       requirePauses: false,
+      allowWorklogOverlaps: true,
     );
 
     if (validationErrors.isNotEmpty) {
@@ -1791,21 +1908,6 @@ class AppState extends ChangeNotifier {
         else
           item,
     ];
-
-    for (final segment in segments) {
-      if (segment.id != oldSegment.id &&
-          segment.startUtc.isBefore(oldSegment.endUtc)) {
-        continue;
-      }
-      for (final existing in importedWorklogs) {
-        if (segment.startUtc.isBefore(existing.endUtc) &&
-            segment.endUtc.isAfter(existing.startUtc)) {
-          throw ArgumentError(
-            'Интервал пересечётся с записью Jira ${existing.issueKey ?? existing.issueId}.',
-          );
-        }
-      }
-    }
 
     var dayStart = _currentDraft!.startUtc;
     var dayEnd = _currentDraft!.endUtc;

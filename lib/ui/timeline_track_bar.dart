@@ -127,6 +127,21 @@ class _TimelineTrackBarState extends State<TimelineTrackBar> {
     }
 
     items.sort((a, b) => a.start.compareTo(b.start));
+    final laneEnds = <DateTime>[];
+    final placedItems = <({_TrackItem item, int lane})>[];
+    for (final item in items) {
+      final end = item.start.add(Duration(seconds: item.durationSeconds));
+      var lane = laneEnds.indexWhere(
+        (occupiedUntil) => !occupiedUntil.isAfter(item.start),
+      );
+      if (lane == -1) {
+        lane = laneEnds.length;
+        laneEnds.add(end);
+      } else {
+        laneEnds[lane] = end;
+      }
+      placedItems.add((item: item, lane: lane));
+    }
 
     final totalSeconds = widget.draft.endUtc
         .difference(widget.draft.startUtc)
@@ -144,7 +159,7 @@ class _TimelineTrackBarState extends State<TimelineTrackBar> {
                 safeTotalSeconds / (trackWidth > 0 ? trackWidth : 1);
 
             return Container(
-              height: 28,
+              height: laneEnds.isEmpty ? 28 : laneEnds.length * 30 - 2,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(5),
                 color: AppColors.trackBreak(isDark),
@@ -152,7 +167,8 @@ class _TimelineTrackBarState extends State<TimelineTrackBar> {
               ),
               clipBehavior: Clip.antiAlias,
               child: Stack(
-                children: items.map((item) {
+                children: placedItems.map((placed) {
+                  final item = placed.item;
                   final left =
                       (item.start.difference(widget.draft.startUtc).inSeconds /
                               safeTotalSeconds *
@@ -179,8 +195,8 @@ class _TimelineTrackBarState extends State<TimelineTrackBar> {
                     key: seg == null ? null : Key('track_segment_${seg.id}'),
                     left: left,
                     width: right - left,
-                    top: 0,
-                    bottom: 0,
+                    top: placed.lane * 30,
+                    height: 28,
                     child: Tooltip(
                       message: item.label,
                       child: Stack(

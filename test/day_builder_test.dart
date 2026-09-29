@@ -619,6 +619,42 @@ void main() {
       final errors = DayBuilder.validate(plan: overlappingPlan);
       expect(errors, isNotEmpty);
       expect(errors.first, contains('Обнаружено пересечение'));
+      expect(
+        DayBuilder.validate(
+          plan: overlappingPlan,
+          requirePauses: false,
+          allowWorklogOverlaps: true,
+        ),
+        isEmpty,
+      );
+
+      final planWithBreak = DayPlanResult(
+        dayStartUtc: overlappingPlan.dayStartUtc,
+        dayEndUtc: overlappingPlan.dayEndUtc,
+        segments: overlappingPlan.segments,
+        breaks: [
+          Break(
+            id: 'nested-break',
+            draftId: 'd-1',
+            startUtc: now.add(const Duration(minutes: 30)),
+            durationSeconds: 300,
+            kind: BreakKind.short,
+          ),
+        ],
+        allocatedSecondsBySourceLogId: {},
+        totalNewWorkSeconds: 7300,
+        totalBreaksSeconds: 300,
+        totalExistingSeconds: 0,
+        totalDaySeconds: 28800,
+      );
+      expect(
+        DayBuilder.validate(
+          plan: planWithBreak,
+          requirePauses: false,
+          allowWorklogOverlaps: true,
+        ),
+        contains(predicate<String>((error) => error.contains('Перерыв'))),
+      );
     });
 
     test('День свыше 8 часов (например, 9 часов с обедом) валиден и не блокируется', () {

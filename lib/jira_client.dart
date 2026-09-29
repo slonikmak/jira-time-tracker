@@ -278,6 +278,154 @@ class JiraClient {
     }
   }
 
+  /// Fresh issue text, all visible comments, and attachment metadata.
+  Future<Map<String, dynamic>> getIssueDetails({
+    required String issueIdOrKey,
+    required JiraConnection connection,
+    required String token,
+  }) async {
+    final issue = await _getIssueData(
+      issueIdOrKey,
+      'summary,description,status,issuetype,priority,assignee,labels,created,updated,attachment',
+      connection,
+      token,
+    );
+    final fields = issue['fields'] as Map<String, dynamic>? ?? {};
+    final comments = <Map<String, dynamic>>[];
+    var startAt = 0;
+    var total = 1;
+    while (startAt < total) {
+      final uri = Uri.parse(
+        '${connection.apiBaseUrl}/rest/api/3/issue/$issueIdOrKey/comment',
+      ).replace(queryParameters: {'startAt': '$startAt', 'maxResults': '100'});
+      final page = await _getAuthorizedJson(uri, connection, token);
+      final rawComments = page['comments'] as List? ?? [];
+      total = page['total'] as int? ?? 0;
+      if (rawComments.isEmpty && startAt < total) {
+        throw const JiraApiException(
+          'Jira вернула неполный список комментариев',
+        );
+      }
+      for (final raw in rawComments) {
+        final comment = raw as Map<String, dynamic>;
+        final author = comment['author'] as Map<String, dynamic>? ?? {};
+        comments.add({
+          'id': comment['id']?.toString(),
+          'author_account_id': author['accountId'],
+          'author_name': author['displayName'],
+          'created': comment['created'],
+          'updated': comment['updated'],
+          'body': _extractTextFromComment(comment['body']),
+        });
+      }
+      startAt += rawComments.length;
+    }
+    final issueKey = issue['key']?.toString() ?? issueIdOrKey;
+    return {
+      'issue_id': issue['id']?.toString() ?? issueIdOrKey,
+      'issue_key': issueKey,
+      'summary': fields['summary'],
+      'description': _extractTextFromComment(fields['description']),
+      'status': (fields['status'] as Map?)?['name'],
+      'issue_type': (fields['issuetype'] as Map?)?['name'],
+      'priority': (fields['priority'] as Map?)?['name'],
+      'assignee': (fields['assignee'] as Map?)?['displayName'],
+      'labels': fields['labels'] as List? ?? [],
+      'created': fields['created'],
+      'updated': fields['updated'],
+      'comments': comments,
+      'attachments': [
+        for (final raw in fields['attachment'] as List? ?? [])
+          if (raw is Map<String, dynamic>)
+            {
+              'id': raw['id']?.toString(),
+              'filename': raw['filename'],
+              'mime_type': raw['mimeType'],
+              'size_bytes': raw['size'],
+              'created': raw['created'],
+              'author_account_id': (raw['author'] as Map?)?['accountId'],
+              'author_name': (raw['author'] as Map?)?['displayName'],
+              'download_path': '/api/issues/$issueKey/attachments/${raw['id']}',
+            },
+      ],
+    };
+  }
+
+  /// Returns a stream only for an attachment listed on the requested issue.
+  Future<(Map<String, dynamic>, http.StreamedResponse)>
+  downloadIssueAttachment({
+    required String issueIdOrKey,
+    required String attachmentId,
+    required JiraConnection connection,
+    required String token,
+  }) async {
+    final issue = await _getIssueData(
+      issueIdOrKey,
+      'attachment',
+      connection,
+      token,
+    );
+    final fields = issue['fields'] as Map<String, dynamic>? ?? {};
+    final attachments = fields['attachment'] as List? ?? [];
+    final attachment = attachments
+        .whereType<Map<String, dynamic>>()
+        .where((item) => item['id']?.toString() == attachmentId)
+        .firstOrNull;
+    if (attachment == null) {
+      throw const JiraApiException(
+        'Вложение не найдено в указанной задаче Jira',
+        statusCode: 404,
+      );
+    }
+    final uri = Uri.parse(
+      '${connection.apiBaseUrl}/rest/api/3/attachment/content/$attachmentId',
+    ).replace(queryParameters: {'redirect': 'false'});
+    final request = http.Request('GET', uri)
+      ..headers['Authorization'] = buildBasicAuthHeader(connection.email, token)
+      ..followRedirects = false;
+    final response = await _client.send(request);
+    if (response.statusCode != 200) {
+      await response.stream.drain<void>();
+      throw JiraApiException(
+        'Ошибка загрузки вложения Jira (код: ${response.statusCode})',
+        statusCode: response.statusCode,
+      );
+    }
+    return (attachment, response);
+  }
+
+  Future<Map<String, dynamic>> _getIssueData(
+    String issueIdOrKey,
+    String fields,
+    JiraConnection connection,
+    String token,
+  ) {
+    final uri = Uri.parse(
+      '${connection.apiBaseUrl}/rest/api/3/issue/$issueIdOrKey',
+    ).replace(queryParameters: {'fields': fields});
+    return _getAuthorizedJson(uri, connection, token);
+  }
+
+  Future<Map<String, dynamic>> _getAuthorizedJson(
+    Uri uri,
+    JiraConnection connection,
+    String token,
+  ) async {
+    final request = http.Request('GET', uri)
+      ..headers['Accept'] = 'application/json'
+      ..headers['Authorization'] = buildBasicAuthHeader(connection.email, token)
+      ..followRedirects = false;
+    final streamed = await _client.send(request);
+    final response = await http.Response.fromStream(streamed);
+    if (response.statusCode != 200) {
+      throw JiraApiException(
+        'Ошибка загрузки данных Jira (код: ${response.statusCode})',
+        statusCode: response.statusCode,
+      );
+    }
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
   /// Поиск задач с worklogs за диапазон дат через POST /rest/api/3/search/jql с пагинацией (A12).
   Future<List<Map<String, String>>> searchIssuesWithWorklogs({
     required DateTime date,
@@ -290,7 +438,9 @@ class JiraClient {
         '${fromDate.year.toString().padLeft(4, '0')}-${fromDate.month.toString().padLeft(2, '0')}-${fromDate.day.toString().padLeft(2, '0')}';
     final toDateStr =
         '${toDate.year.toString().padLeft(4, '0')}-${toDate.month.toString().padLeft(2, '0')}-${toDate.day.toString().padLeft(2, '0')}';
-    final jql = "worklogDate >= '$fromDateStr' AND worklogDate <= '$toDateStr'";
+    final jql =
+        'worklogAuthor = "${connection.accountId}" AND '
+        "worklogDate >= '$fromDateStr' AND worklogDate <= '$toDateStr'";
 
     final uri = Uri.parse('${connection.apiBaseUrl}/rest/api/3/search/jql');
     final authHeader = buildBasicAuthHeader(connection.email, token);
@@ -359,7 +509,7 @@ class JiraClient {
     final authHeader = buildBasicAuthHeader(connection.email, token);
     final worklogs = <ImportedWorklog>[];
     var startAt = 0;
-    const maxResults = 50;
+    const maxResults = 500;
     var total = 0;
     var isFirst = true;
 
@@ -462,17 +612,30 @@ class JiraClient {
       }
     }
 
-    // 3. Загружаем все страницы worklogs для всех задач
-    final allRawWorklogs = <ImportedWorklog>[];
-    for (final entry in issueMap.entries) {
-      final logs = await getIssueWorklogs(
-        issueIdOrKey: entry.key,
-        issueKey: entry.value,
-        connection: connection,
-        token: token,
-      );
-      allRawWorklogs.addAll(logs);
+    // 3. Читаем задачи параллельно, оставляя небольшой предел для Jira.
+    final entries = issueMap.entries.toList();
+    var next = 0;
+    Future<List<ImportedWorklog>> loadIssues() async {
+      final worklogs = <ImportedWorklog>[];
+      while (next < entries.length) {
+        final entry = entries[next++];
+        worklogs.addAll(
+          await getIssueWorklogs(
+            issueIdOrKey: entry.key,
+            issueKey: entry.value,
+            connection: connection,
+            token: token,
+          ),
+        );
+      }
+      return worklogs;
     }
+
+    final workers = entries.length < 4 ? entries.length : 4;
+    final batches = await Future.wait(
+      List.generate(workers, (_) => loadIssues()),
+    );
+    final allRawWorklogs = batches.expand((logs) => logs);
 
     // 4. Фильтруем строго по accountId пользователя и пересечению с локальным днем
     final localDayStartUtc = DateTime.utc(
@@ -690,11 +853,14 @@ class JiraClient {
           if (node['type'] == 'text' && node['text'] != null) {
             buffer.write(node['text']);
           }
+          if (node['type'] == 'hardBreak') buffer.writeln();
           if (node['content'] is List) {
             for (final child in node['content'] as List) {
               extract(child);
             }
-            if (node['type'] == 'paragraph') {
+            if (node['type'] == 'paragraph' ||
+                node['type'] == 'heading' ||
+                node['type'] == 'listItem') {
               buffer.writeln();
             }
           }

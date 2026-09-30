@@ -151,6 +151,60 @@ void main() {
       db.close();
     });
 
+    test(
+      'GET /api/day-settings возвращает диапазоны и правило одним ответом',
+      () async {
+        const settings = DaySettings(
+          startMinutesMin: 9 * 60,
+          startMinutesMax: 10 * 60,
+        );
+        appState.updateDaySettings(
+          settings,
+          agentRule: 'Начинай день после первого фактического лога.',
+        );
+
+        final req = await client.getUrl(
+          Uri.parse('${server.url}/api/day-settings'),
+        );
+        final res = await req.close();
+        final body =
+            jsonDecode(await res.transform(utf8.decoder).join())
+                as Map<String, dynamic>;
+
+        expect(res.statusCode, HttpStatus.ok);
+        expect(body['settings'], settings.toMap());
+        expect(body['rule'], 'Начинай день после первого фактического лога.');
+      },
+    );
+
+    test(
+      'Старый снимок агента не воссоздаёт очищенный пользователем день',
+      () async {
+        final source = await addSource('CLEAR-1', 1800);
+        final plan = {
+          'date': '2026-09-17',
+          'segments': [
+            {
+              'source_log_id': source.id,
+              'start': '09:00',
+              'duration_minutes': 30,
+            },
+          ],
+        };
+        final (createdStatus, created) = await postDay(plan);
+        expect(createdStatus, HttpStatus.ok);
+        appState.clearCurrentDay();
+
+        final (staleStatus, _) = await postDay({
+          ...plan,
+          'base_revision': created['revision'],
+        });
+        expect(staleStatus, HttpStatus.conflict);
+        expect(store.getDayDraft(scope: testScope, date: '2026-09-17'), isNull);
+        expect(store.getLocalLog(source.id), isNotNull);
+      },
+    );
+
     test('POST /api/logs создает лог времени и возвращает 201', () async {
       await ensureIssue('PROJ-101');
       final req = await client.postUrl(Uri.parse('${server.url}/api/logs'));

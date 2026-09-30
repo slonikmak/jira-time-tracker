@@ -49,6 +49,132 @@ void main() {
     restored.dispose();
   });
 
+  test('Правило агента сохраняется с диапазонами и переживает перезапуск', () {
+    final first = createState();
+    expect(first.agentDayRule, AppState.defaultAgentDayRule);
+    const settings = DaySettings(startMinutesMin: 9 * 60);
+    first.updateDaySettings(
+      settings,
+      agentRule: '  Сначала поставь сложные задачи.  ',
+    );
+    expect(first.agentDayRule, 'Сначала поставь сложные задачи.');
+    expect(
+      () => first.updateDaySettings(const DaySettings(), agentRule: '  '),
+      throwsArgumentError,
+    );
+    first.dispose();
+
+    final restored = createState();
+    expect(restored.daySettings.toMap(), settings.toMap());
+    expect(restored.agentDayRule, 'Сначала поставь сложные задачи.');
+    restored.dispose();
+  });
+
+  test('Очистка дня освобождает источник и не меняет его время', () {
+    final start = DateTime.utc(2026, 9, 24, 9);
+    final source = LocalLog(
+      id: 'source-1',
+      scope: 'default',
+      issueId: '1001',
+      titleSnapshot: 'PROJ-1',
+      accumulatedSeconds: 3600,
+      createdAtUtc: start,
+    );
+    store.saveLogAndIssue(
+      log: source,
+      issue: Issue(
+        scope: 'default',
+        issueId: '1001',
+        key: 'PROJ-1',
+        summary: 'Работа',
+        lastUsedAtUtc: start,
+      ),
+    );
+    store.saveDayDraft(
+      draft: DayDraft(
+        id: 'draft-1',
+        scope: 'default',
+        date: '2026-09-24',
+        startUtc: start,
+        endUtc: start.add(const Duration(hours: 1)),
+        seed: 1,
+        settingsSnapshot: const DaySettings().toJson(),
+      ),
+      draftLogs: const [
+        DraftLog(
+          draftId: 'draft-1',
+          sourceLogId: 'source-1',
+          sourceDurationSeconds: 3600,
+          descriptionSnapshot: '',
+        ),
+      ],
+      segments: [
+        Segment(
+          id: 'segment-1',
+          draftId: 'draft-1',
+          sourceLogId: 'source-1',
+          issueId: '1001',
+          startUtc: start,
+          durationSeconds: 3600,
+        ),
+      ],
+      breaks: const [],
+    );
+    final state = createState();
+    state.loadDraftForSelectedDate();
+    expect(state.isLogInDraft(source.id), isTrue);
+    state.setImportedWorklogs([
+      ImportedWorklog(
+        id: 'jira-1',
+        issueId: '1001',
+        startUtc: start,
+        durationSeconds: 600,
+        authorAccountId: 'account-1',
+      ),
+    ]);
+
+    state.clearCurrentDay();
+
+    expect(state.currentDraft, isNull);
+    expect(state.importedWorklogs.single.id, 'jira-1');
+    expect(state.isLogInDraft(source.id), isFalse);
+    expect(store.getLocalLog(source.id)!.accumulatedSeconds, 3600);
+    expect(
+      store.getDayDraft(
+        scope: state.activeScope,
+        date: state.selectedDateString,
+      ),
+      isNull,
+    );
+
+    store.saveDayDraft(
+      draft: DayDraft(
+        id: 'draft-sending',
+        scope: state.activeScope,
+        date: state.selectedDateString,
+        startUtc: start,
+        endUtc: start.add(const Duration(hours: 1)),
+        seed: 2,
+        settingsSnapshot: const DaySettings().toJson(),
+        status: DraftStatus.sending,
+      ),
+      draftLogs: const [],
+      segments: const [],
+      breaks: const [],
+    );
+    state.loadDraftForSelectedDate();
+    expect(state.canClearCurrentDay, isFalse);
+    expect(state.clearCurrentDay, throwsStateError);
+    expect(
+      store.getDayDraft(
+        scope: state.activeScope,
+        date: state.selectedDateString,
+      ),
+      isNotNull,
+    );
+    state.dispose();
+  });
+
   test('Повреждённые сохранённые настройки не становятся активными', () {
     store.setSetting(
       'day_settings',
@@ -99,7 +225,9 @@ void main() {
         const DaySettings(lunchDurationSecondsMin: -60),
         const DaySettings(lunchDurationSecondsMin: 0),
         const DaySettings(shortBreakCountMin: -1),
-        const DaySettings(shortBreakCountMax: DaySettings.maxShortBreakCount + 1),
+        const DaySettings(
+          shortBreakCountMax: DaySettings.maxShortBreakCount + 1,
+        ),
         const DaySettings(shortBreakDurationSecondsMax: 0),
       ];
 
@@ -196,15 +324,16 @@ void main() {
       );
       await expectLater(state.smartRebuildDay(customSeed: 45), throwsException);
       expect(state.currentDraft!.toMap(), unchangedDraft);
+      expect([
+        for (final segment in state.currentSegments) segment.toMap(),
+      ], unchangedSegments);
       expect(
-        [for (final segment in state.currentSegments) segment.toMap()],
-        unchangedSegments,
-      );
-      expect(
-        store.getDayDraft(
-          scope: state.activeScope,
-          date: state.selectedDateString,
-        )!.toMap(),
+        store
+            .getDayDraft(
+              scope: state.activeScope,
+              date: state.selectedDateString,
+            )!
+            .toMap(),
         unchangedDraft,
       );
       state.dispose();

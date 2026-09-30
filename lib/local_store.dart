@@ -230,6 +230,20 @@ class LocalStore {
     );
   }
 
+  void setSettings(Map<String, String> settings) {
+    _checkWritable();
+    _db.execute('BEGIN TRANSACTION;');
+    try {
+      for (final entry in settings.entries) {
+        setSetting(entry.key, entry.value);
+      }
+      _db.execute('COMMIT;');
+    } catch (_) {
+      _db.execute('ROLLBACK;');
+      rethrow;
+    }
+  }
+
   /// Восстановление после аварии: переводит зависшие sending в unknown (сценарий A19).
   void recoverUnfinishedSending() {
     if (isReadOnly) return;

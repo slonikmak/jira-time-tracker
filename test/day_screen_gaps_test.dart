@@ -5,6 +5,7 @@ import 'package:jira_time_tracker/app_state.dart';
 import 'package:jira_time_tracker/connection_store.dart';
 import 'package:jira_time_tracker/jira_client.dart';
 import 'package:jira_time_tracker/local_store.dart';
+import 'package:jira_time_tracker/main.dart';
 import 'package:jira_time_tracker/models.dart';
 import 'package:jira_time_tracker/secure_storage.dart';
 import 'package:jira_time_tracker/ui/day_screen.dart';
@@ -26,7 +27,7 @@ void main() {
     });
 
     testWidgets(
-      'Визуализирует паузу между задачами с разрывом 10:37 .. 14:32',
+      'Показывает паузу и очищает черновик только после подтверждения',
       (tester) async {
         tester.view.physicalSize = const Size(1280, 800);
         tester.view.devicePixelRatio = 1.0;
@@ -161,6 +162,23 @@ void main() {
         // Проверяем, что отображаются обе задачи
         expect(find.text('Утренняя часть'), findsOneWidget);
         expect(find.text('Послеобеденная часть'), findsOneWidget);
+
+        tester.view.physicalSize = const Size(800, 600);
+        await tester.pumpWidget(JiraTimeTrackerApp(appState: appState));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('День').first);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+
+        await tester.tap(find.widgetWithText(OutlinedButton, 'Очистить'));
+        await tester.pumpAndSettle();
+        expect(find.text('Очистить день?'), findsOneWidget);
+        expect(appState.currentDraft, isNotNull);
+        await tester.tap(find.widgetWithText(FilledButton, 'Очистить'));
+        await tester.pumpAndSettle();
+        expect(appState.currentDraft, isNull);
+        expect(store.getLocalLog('log-1')!.accumulatedSeconds, dur1);
+        expect(store.getLocalLog('log-2')!.accumulatedSeconds, dur2);
       },
     );
   });

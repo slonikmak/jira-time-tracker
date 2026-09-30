@@ -42,6 +42,7 @@ void main() {
       expect(body, contains('Jira Time Tracker Local Agent API'));
       expect(body, contains('/api/logs'));
       expect(body, contains('/api/day'));
+      expect(body, contains('/api/day-settings'));
       expect(body, contains('/api/issues?q=текст'));
       expect(body, contains('/api/issues/PROJ-123/attachments/10001'));
       expect(body, contains('source_log_id'));
@@ -78,6 +79,7 @@ void main() {
         );
         expect(json['paths'], contains('/api/issues/{issueKey}/worklogs'));
         expect(json['paths'], contains('/api/day'));
+        expect(json['paths'], contains('/api/day-settings'));
         expect(json['paths'], contains('/api/quick-issues'));
         expect(json['paths']['/api/quick-issues'], contains('post'));
         expect(json['paths'], contains('/api/quick-issues/{issueId}'));

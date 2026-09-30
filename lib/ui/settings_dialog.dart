@@ -72,6 +72,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _tokenController;
   late final TextEditingController _agentUrlController;
   late final TextEditingController _skillPromptController;
+  late final TextEditingController _agentDayRuleController;
   late final Map<String, TextEditingController> _dayControllers;
 
   bool _isLoading = true;
@@ -94,6 +95,9 @@ class _SettingsPageState extends State<SettingsPage> {
     _agentUrlController = TextEditingController(text: agentUrl);
     _skillPromptController = TextEditingController(
       text: AgentApiServer.generateSkillPrompt(agentUrl),
+    );
+    _agentDayRuleController = TextEditingController(
+      text: widget.appState.agentDayRule,
     );
     _dayControllers = {
       for (final key in [
@@ -136,6 +140,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _tokenController.dispose();
     _agentUrlController.dispose();
     _skillPromptController.dispose();
+    _agentDayRuleController.dispose();
     for (final controller in _dayControllers.values) {
       controller.dispose();
     }
@@ -291,7 +296,10 @@ class _SettingsPageState extends State<SettingsPage> {
       return;
     }
     try {
-      widget.appState.updateDaySettings(settings);
+      widget.appState.updateDaySettings(
+        settings,
+        agentRule: _agentDayRuleController.text,
+      );
       setState(() {
         _dayErrors = {};
         _dayMessage = 'Параметры сборки дня сохранены.';
@@ -824,6 +832,25 @@ class _SettingsPageState extends State<SettingsPage> {
           'Минимальный рабочий интервал — 15 минут.',
           style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
         ),
+        const SizedBox(height: 20),
+        Text('Правило сборки для агента', style: theme.textTheme.titleSmall),
+        const SizedBox(height: 6),
+        Text(
+          'Агент получает этот текст вместе с диапазонами через локальный API. Встроенный сборщик использует только диапазоны.',
+          style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          key: const ValueKey('agent-day-rule'),
+          controller: _agentDayRuleController,
+          enabled: !widget.appState.isReadOnly,
+          minLines: 5,
+          maxLines: 8,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            hintText: 'Опишите, как агенту использовать параметры сборки дня',
+          ),
+        ),
         if (_dayMessage != null) ...[
           const SizedBox(height: 12),
           Text(
@@ -854,6 +881,8 @@ class _SettingsPageState extends State<SettingsPage> {
                   : () {
                       setState(() {
                         _fillDaySettings(const DaySettings());
+                        _agentDayRuleController.text =
+                            AppState.defaultAgentDayRule;
                         _dayErrors = {};
                         _dayMessage = null;
                       });

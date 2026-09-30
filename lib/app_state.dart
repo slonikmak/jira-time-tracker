@@ -44,6 +44,12 @@ class AgentDayRevisionConflict implements Exception {
 
 /// Состояние приложения, координация данных, задач, таймеров и подключений.
 class AppState extends ChangeNotifier {
+  static const defaultAgentDayRule =
+      '''Собирай день из фактически выполненной работы, не придумывая задачи и описания. Каждый интервал связывай с исходным логом; по возможности сохраняй суммарную длительность источника.
+
+Поля start_minutes задают диапазон начала дня в минутах от полуночи; total_duration_seconds — полную длительность дня вместе с паузами. Выбери значения внутри этих диапазонов. Поля lunch_start_minutes и lunch_duration_seconds задают начало и длительность длинной паузы; длительность 0–0 отключает её. Поля short_break_count и short_break_duration_seconds задают число и длительность коротких пауз. Размести паузы вне работы.
+
+Учитывай существующие записи Jira, не создавай их повторно. Не делай рабочие интервалы короче 15 минут. Если факты работы и настройки несовместимы, объясни конфликт пользователю вместо выдумывания времени.''';
   final LocalStore store;
   final ConnectionStore connectionStore;
   final JiraClient jiraClient;
@@ -103,6 +109,7 @@ class AppState extends ChangeNotifier {
         _daySettings = const DaySettings();
       }
     }
+    _agentDayRule = store.getSetting('agent_day_rule') ?? defaultAgentDayRule;
     _initData();
     if (autoStartApiServer && !isReadOnly) {
       startApiServer();
@@ -157,6 +164,7 @@ class AppState extends ChangeNotifier {
   List<Break> _currentBreaks = [];
   List<ImportedWorklog> _importedWorklogs = [];
   DaySettings _daySettings = const DaySettings();
+  String _agentDayRule = defaultAgentDayRule;
   final Set<String> _lockedSourceLogIds = {};
   List<String> _validationErrors = [];
   bool _isBuildingDay = false;
@@ -189,6 +197,7 @@ class AppState extends ChangeNotifier {
   bool get jiraWorklogsLoadFailed => _jiraWorklogsLoadFailed;
   bool get isSubmittingDay => _isSubmittingDay;
   DaySettings get daySettings => _daySettings;
+  String get agentDayRule => _agentDayRule;
   Set<String> get lockedSourceLogIds => Set.unmodifiable(_lockedSourceLogIds);
   List<String> get validationErrors => List.unmodifiable(_validationErrors);
   bool get isBuildingDay => _isBuildingDay;
@@ -200,6 +209,16 @@ class AppState extends ChangeNotifier {
       _currentDraft != null &&
       (_currentDraft!.status != DraftStatus.draft ||
           _currentSegments.any((s) => s.sendState == SendState.sent));
+
+  bool get canClearCurrentDay =>
+      _currentDraft != null &&
+      !isReadOnly &&
+      !_isBuildingDay &&
+      !_isSubmittingDay &&
+      _currentDraft!.status == DraftStatus.draft &&
+      _currentSegments.every(
+        (segment) => segment.sendState == SendState.pending,
+      );
 
   int get totalDayDurationSeconds => _currentDraft != null
       ? _currentDraft!.endUtc.difference(_currentDraft!.startUtc).inSeconds
@@ -1265,14 +1284,36 @@ class AppState extends ChangeNotifier {
     setSelectedDate(DateTime(now.year, now.month, now.day));
   }
 
-  void updateDaySettings(DaySettings settings) {
+  void updateDaySettings(DaySettings settings, {String? agentRule}) {
     final errors = settings.validationErrors();
     if (errors.isNotEmpty) {
       throw ArgumentError(errors.values.join('\n'));
     }
-    store.setSetting('day_settings', settings.toJson());
+    if (agentRule != null && agentRule.trim().isEmpty) {
+      throw ArgumentError('Правило для агента не может быть пустым.');
+    }
+    store.setSettings({
+      'day_settings': settings.toJson(),
+      if (agentRule != null) 'agent_day_rule': agentRule.trim(),
+    });
+    if (agentRule != null) _agentDayRule = agentRule.trim();
     _daySettings = settings;
     notifyListeners();
+  }
+
+  void clearCurrentDay() {
+    final draft = _currentDraft;
+    if (draft == null) return;
+    if (!canClearCurrentDay) {
+      throw StateError(
+        'Нельзя очистить день после начала отправки или в режиме только чтения.',
+      );
+    }
+    store.deleteDayDraft(draft.id);
+    _activeDraftDatesBySourceLogId = store.getActiveDraftDatesBySourceLogId(
+      scope: activeScope,
+    );
+    loadDraftForSelectedDate();
   }
 
   void toggleLogLock(String sourceLogId) {
@@ -1609,6 +1650,10 @@ class AppState extends ChangeNotifier {
           'Черновик дня изменился после чтения. Получите актуальный snapshot и повторите запись.',
         );
       }
+    } else if (baseRevision != null) {
+      throw const AgentDayRevisionConflict(
+        'Черновик дня был удалён после чтения. Получите актуальный snapshot и повторите запись.',
+      );
     }
 
     final draftId = targetDraft?.id ?? const Uuid().v4();

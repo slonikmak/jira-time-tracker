@@ -254,6 +254,19 @@ class DayScreen extends StatelessWidget {
         ),
       if (draft != null)
         OutlinedButton.icon(
+          icon: const Icon(Icons.delete_sweep_outlined, size: 16),
+          label: const Text('Очистить'),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(0, 36),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            textStyle: const TextStyle(fontSize: 13),
+          ),
+          onPressed: appState.canClearCurrentDay
+              ? () => _confirmClearCurrentDay(context)
+              : null,
+        ),
+      if (draft != null)
+        OutlinedButton.icon(
           icon: const Icon(Icons.auto_awesome, size: 16),
           label: const Text('Умная пересборка'),
           style: OutlinedButton.styleFrom(
@@ -1854,6 +1867,35 @@ class DayScreen extends StatelessWidget {
               _handleSmartRebuildDay(context);
             },
             child: const Text('Пересобрать'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmClearCurrentDay(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Очистить день?'),
+        content: const Text(
+          'Все интервалы и паузы черновика будут удалены. Исходные логи вернутся в очередь. Записи Jira останутся на экране.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              try {
+                appState.clearCurrentDay();
+              } catch (error) {
+                _showEditError(context, error);
+              }
+            },
+            child: const Text('Очистить'),
           ),
         ],
       ),

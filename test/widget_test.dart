@@ -244,12 +244,22 @@ void main() {
       find.byKey(const ValueKey('day-start-max')),
       '09:30',
     );
+    await tester.enterText(
+      find.byKey(const ValueKey('agent-day-rule')),
+      'Сначала ставь задачи с фиксированным временем.',
+    );
+    await tester.ensureVisible(find.text('Сохранить параметры'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Сохранить параметры'));
     await tester.pumpAndSettle();
 
     expect(appState.daySettings.startMinutesMin, 8 * 60 + 30);
     expect(appState.daySettings.startMinutesMax, 9 * 60 + 30);
     expect(store.getSetting('day_settings'), isNotNull);
+    expect(
+      appState.agentDayRule,
+      'Сначала ставь задачи с фиксированным временем.',
+    );
   });
 
   testWidgets(

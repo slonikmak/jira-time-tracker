@@ -86,10 +86,11 @@ class AgentApiServer {
 - Агент может создавать, редактировать, удалять, делить и объединять свободные queue logs.
 
 ## Сборка дня
-1. Вызови `GET /api/day?date=YYYY-MM-DD` для свежих worklogs Jira и текущего draft. Если Jira недоступна, остановись и сообщи об ошибке.
-2. Если draft существует, сохрани его top-level `revision`.
-3. Вызови `POST /api/day`, передав весь набор segments целиком. Каждый segment должен ссылаться на свой `source_log_id`; `issue_key` необязателен и, если передан, должен соответствовать задаче источника.
-4. При существующем draft передай `base_revision`. Ответ `409` означает конфликт правок: перечитай дату, объедини изменения и отправь snapshot заново.
+1. Перед каждой сборкой вызови `GET /api/day-settings`. В одном ответе находятся актуальные числовые диапазоны `settings` и редактируемое пользователем текстовое `rule`. Применяй оба при планировании; не полагайся на старую копию правила.
+2. Вызови `GET /api/day?date=YYYY-MM-DD` для свежих worklogs Jira и текущего draft. Если Jira недоступна, остановись и сообщи об ошибке.
+3. Если draft существует, сохрани его top-level `revision`.
+4. Вызови `POST /api/day`, передав весь набор segments целиком. Каждый segment должен ссылаться на свой `source_log_id`; `issue_key` необязателен и, если передан, должен соответствовать задаче источника.
+5. При существующем draft передай `base_revision`. Ответ `409` означает конфликт правок: перечитай дату, объедини изменения и отправь snapshot заново.
 
 ```json
 {
@@ -147,6 +148,21 @@ class AgentApiServer {
 
       if (path == '/api/openapi.json' && request.method == 'GET') {
         _sendOpenApi(response);
+        return;
+      }
+
+      if (path == '/api/day-settings' && request.method == 'GET') {
+        final state = appState;
+        if (state == null) {
+          _sendJson(response, HttpStatus.serviceUnavailable, {
+            'error': 'AppState not available',
+          });
+        } else {
+          _sendJson(response, HttpStatus.ok, {
+            'settings': state.daySettings.toMap(),
+            'rule': state.agentDayRule,
+          });
+        }
         return;
       }
 
@@ -1336,7 +1352,7 @@ class AgentApiServer {
 - `PATCH /api/quick-issues/{issueId}` принимает `{"note":"Новое описание"}`; `null` очищает описание. `DELETE /api/quick-issues/{issueId}` убирает ссылку из быстрого списка, не удаляя задачу и логи.
 
 ## Snapshot дня
-1. Получи доступные источники через `GET /api/logs` и данные дня через `GET /api/day?date=...`.
+1. Перед каждой сборкой получи актуальные диапазоны и пользовательское правило одним запросом `GET /api/day-settings` и используй оба. Затем получи доступные источники через `GET /api/logs` и данные дня через `GET /api/day?date=...`.
 2. Для каждого segment передай `source_log_id`, `start` (`HH:MM` или ISO-8601), длительность и описание. `issue_key` необязателен; если передан, он должен совпадать с задачей источника.
 3. Передай массив `segments` целиком. Если GET вернул draft, включи его revision в `base_revision`.
 
@@ -1381,6 +1397,32 @@ class AgentApiServer {
             'summary': 'Get OpenAPI 3.0 specification',
             'responses': {
               '200': {'description': 'OpenAPI JSON schema'},
+            },
+          },
+        },
+        '/api/day-settings': {
+          'get': {
+            'summary': 'Get current day-building ranges and agent rule',
+            'responses': {
+              '200': {
+                'description': 'Saved numeric settings and user-editable rule',
+                'content': {
+                  'application/json': {
+                    'schema': {
+                      'type': 'object',
+                      'required': ['settings', 'rule'],
+                      'properties': {
+                        'settings': {
+                          'type': 'object',
+                          'description': 'Current DaySettings numeric ranges',
+                        },
+                        'rule': {'type': 'string'},
+                      },
+                    },
+                  },
+                },
+              },
+              '503': {'description': 'AppState not available'},
             },
           },
         },

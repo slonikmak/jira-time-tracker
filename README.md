@@ -147,7 +147,7 @@ workflow и порядок выпуска описаны в [инструкци�
 ## 4. Расположение локальных данных и безопасность
 
 Все локальные данные приложения хранятся в стандартном каталоге пользовательских данных Windows (`getApplicationSupportDirectory`):
-`%APPDATA%\jira_time_tracker\`
+`%APPDATA%\com.example\jira_time_tracker\`
 
 На macOS используется `getApplicationSupportDirectory`: обычно
 `~/Library/Containers/com.slonikmak.jiraTimeTracker/Data/Library/Application Support/com.slonikmak.jiraTimeTracker/`

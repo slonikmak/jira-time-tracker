@@ -18,6 +18,9 @@
 [Workflow](../.github/workflows/desktop-release.yml) запускается для push в `main`,
 pull request, тега `v*` или вручную. Он использует Flutter **3.41.3**,
 фиксированные зависимости из `pubspec.lock`, анализатор, тесты и release-сборку.
+После сборки запускает готовое приложение и проверяет ответ локального API
+`GET /api/day-settings`: это проверяет нативный старт, SQLite и чтение credentials
+на чистом runner. Тест не подключается к рабочей Jira.
 Каждая платформа собирается на своей ОС: Windows x64, macOS arm64, macOS x64.
 Архивы доступны как artifacts в завершённом run в течение 14 дней.
 

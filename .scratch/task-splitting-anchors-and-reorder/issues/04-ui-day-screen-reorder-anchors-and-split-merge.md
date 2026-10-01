@@ -1,29 +1,29 @@
-# Issue 04: UI экрана «День»: ручной порядок сегментов, якоря и разделение/объединение
+# Issue 04: Day UI: manual segment order, anchors, and split/merge
 
-## Зависит от:
-- Issue 01 (Методы `splitSegment`, `mergeSegments`, `toggleSegmentFixed`)
-- Issue 02 (Алгоритм пересборки дня `rebuildDayPlan`)
+## Depends on:
+- Issue 01 (`splitSegment`, `mergeSegments`, `toggleSegmentFixed`)
+- Issue 02 (`rebuildDayPlan` algorithm)
 
-## Описание задачи:
-1. **Ручное изменение порядка сегментов**:
-   - В списке сегментов дня (под таймлайном) использовать `ReorderableListView` с ручкой перетаскивания.
-   - На карточках сегментов добавить кнопки быстрого перемещения: «Вверх» `▲` и «Вниз» `▼`.
-2. **Фиксация якорей (Pinned Anchors)**:
-   - Кнопка-иконка замка `🔒` / `🔓` на карточке сегмента: переключение `isFixed`.
-   - На таймлайне фиксированные сегменты визуально выделяются (например, значок замка или акцентная рамка).
-3. **Разделение сегмента (Split)**:
-   - В меню карточки сегмента пункт «Разбить».
-   - Диалог ввода смещения времени разреза (в минутах от начала сегмента).
-   - Вызывает `appState.splitSegment(...)`.
-4. **Объединение сегментов (Merge)**:
-   - В меню карточки сегмента пункт «Объединить с...».
-   - Список остальных сегментов текущего черновика дня.
-   - Вызывает `appState.mergeSegments(...)`.
-5. **Кнопка «Пересобрать день»**:
-   - Кнопка на панели действий вкладки «День» запускает пересборку с сохранением текущего порядка задач и фиксированных якорей.
+## Task description:
+1. **Manual segment reordering:**
+   - Use `ReorderableListView` with a drag handle below the timeline.
+   - Add quick-move Up `▲` and Down `▼` buttons on cards.
+2. **Pinned anchors:**
+   - Lock icon `🔒` / `🔓` toggles `isFixed`.
+   - Visually distinguish fixed timeline segments with a lock or accent border.
+3. **Split segment:**
+   - Add Split to the card menu.
+   - Dialog accepts split offset in minutes from the segment start.
+   - Call `appState.splitSegment(...)`.
+4. **Merge segments:**
+   - Add Merge with... to the card menu.
+   - List other segments in the current day draft.
+   - Call `appState.mergeSegments(...)`.
+5. **Rebuild day button:**
+   - The Day action bar rebuilds while preserving current task order and fixed anchors.
 
-## Критерии приемки:
-- Виджет-тесты на перетаскивание / изменение порядка сегментов в `DayScreen`.
-- Тест на переключение флага `isFixed` у сегмента.
-- Тест на вызов «Пересобрать день» с проверкой сохранения порядка.
-- Тест на разделение и объединение сегментов.
+## Acceptance criteria:
+- `DayScreen` drag/reorder widget tests.
+- Segment `isFixed` toggling test.
+- Rebuild day test verifying order preservation.
+- Segment splitting/merging tests.

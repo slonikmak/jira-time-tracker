@@ -1,18 +1,18 @@
-# 02. Простой интерфейс действий над зазором (GapActionsDialog)
+# 02. Simple gap actions interface (GapActionsDialog)
 
 Status: resolved
 
-## Описание
-Заменить перегруженный `EditBreakDialog` на простой, наглядный диалог действий над зазором `GapActionsDialog`:
-1. Заголовок с временем и длительностью зазора: например, `Свободное время: 12:00 — 13:00 (1 ч)`.
-2. Блок быстрых карточек/кнопок действий:
-   - 🧲 **«Схлопнуть паузу»**: подтянуть задачи вплотную, убрав дырку.
-   - ⏱️ **«Растянуть задачу»**: продлить задачу $L$ на это время (заблокировано, если $L$ — запись из Jira).
-   - 🍽️ **«Сделать обедом» / ☕ «Сделать перерывом»**: переключение типа.
-3. Блок **«Задать точную длительность»**:
-   - Быстрые чипы: `15 мин`, `30 мин`, `45 мин`, `1 час`.
-   - Поле ручного ввода минут.
-   - Подсказка: «Последующие задачи сдвинутся на X мин».
-   - Кнопка «Применить сдвиг».
-4. Информационный баннер при упоре в запись Jira (если сдвиг заблокирован).
-5. Widget-тесты.
+## Description
+Replace overloaded `EditBreakDialog` with a simple, clear `GapActionsDialog`:
+1. Heading with gap time/duration, e.g. `Free time: 12:00 — 13:00 (1 h)`.
+2. Quick action cards/buttons:
+   - 🧲 **Collapse break:** pull tasks together, removing the gap.
+   - ⏱️ **Extend task:** extend task $L$ by this time; disabled if $L$ is a Jira record.
+   - 🍽️ **Make lunch** / ☕ **Make break:** switch type.
+3. **Set exact duration:**
+   - Chips: `15 min`, `30 min`, `45 min`, `1 hour`.
+   - Manual minutes field.
+   - Hint: “Following tasks will shift by X min.”
+   - Apply shift button.
+4. Informational banner when a Jira record blocks shifting.
+5. Widget tests.

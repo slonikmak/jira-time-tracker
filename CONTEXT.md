@@ -1,79 +1,79 @@
 # Jira Time Tracker
 
-Локальное приложение на Flutter Desktop (Windows) для учёта рабочего времени разработчика, сборки расписания дня и надёжной отправки worklogs в Jira.
+A local Flutter Desktop application for Windows and macOS that tracks developers' work time, builds day schedules, and reliably submits worklogs to Jira.
 
 ## Language
 
-### Логи и задачи
+### Logs and issues
 
 **LocalLog**:
-Исходный факт о затраченном времени на одну задачу, созданный таймером, ручным вводом или Local Agent API. Один LocalLog можно спроецировать в один или несколько Segment одного DayDraft; если части должны жить в разных днях, сначала создаются независимые LocalLog.
+An original record of time spent on one issue, created by a timer, manual entry, or the Local Agent API. A LocalLog can be projected into one or more Segments of one DayDraft. To place parts on different dates, first create independent LocalLogs.
 _Avoid_: Timer, Time entry, Worklog
 
 **Issue**:
-Кэшированная карточка задачи Jira (ключ, заголовок, статус, время последнего взаимодействия), на которую ведётся учёт.
+A cached Jira issue record (key, summary, status, last interaction time) against which time is tracked.
 _Avoid_: Task, Ticket
 
 **QuickIssue**:
-Сохранённая пользователем ссылка на существующую Issue для быстрого повторного выбора. Каталог QuickIssue принадлежит конкретной паре «Jira-сайт — аккаунт» и не определяет тип или назначение самой задачи в Jira.
-_Avoid_: ServiceTicket, встроенный каталог компании, отдельный тип Jira-задачи
+A user-saved reference to an existing Issue for quick repeated selection. Its catalog belongs to a specific Jira site and account and does not determine the issue's type or purpose in Jira.
+_Avoid_: ServiceTicket, built-in company catalog, separate Jira issue type
 
-### Сборка и расписание
+### Building and scheduling
 
 **DayDraft**:
-Черновик расписания на конкретную календарную дату в рамках активного подключения Jira.
+A draft schedule for a specific calendar date within the active Jira connection.
 _Avoid_: Plan, Schedule, Day plan
 
 **DraftLog**:
-Привязка одного LocalLog к одному DayDraft и снимок исходной длительности и описания на момент сборки. Для пары «черновик — источник» существует ровно одна привязка, даже если источник представлен несколькими Segment.
+The association of one LocalLog with one DayDraft, including a snapshot of its original duration and description when built. There is exactly one association per draft/source pair, even if the source is represented by several Segments.
 _Avoid_: Segment, Copied log, Worklog
 
 **Segment**:
-Отдельный рабочий интервал DayDraft с обратной ссылкой ровно на один LocalLog. Один LocalLog может дать несколько Segment одного дня; каждый Segment после отправки соответствует одному Jira worklog. Разделение Segment меняет представление дня, но не создаёт новый LocalLog.
+A single working interval in a DayDraft with a reference to exactly one LocalLog. One LocalLog can produce several Segments on the same day; after submission, each Segment corresponds to one Jira worklog. Splitting a Segment changes the day's representation without creating a new LocalLog.
 _Avoid_: Chunk, Worklog draft, Interval
 
 **ExistingWorklog**:
-Уже существующая в Jira запись worklog, доступная для чтения и учитываемая при построении дня. Может пересекаться с другими рабочими интервалами.
+A worklog already in Jira, available for reading and considered during day building. It may overlap other work intervals.
 _Avoid_: Remote log, Imported worklog
 
 **As-Recorded Build**:
-Дефолтный режим сборки дня («Собрать день»): переносит логи на таймлайн в исходное время суток «как записано» со сдвигом при наложениях и без деления задач $\le 1$ часа.
+The default day-building mode (**Build day**): transfers logs to the timeline at their original local times, shifting overlaps without splitting issues lasting $\le 1$ hour.
 _Avoid_: Simple build, Raw build
 
 **Smart Rebuild**:
-Алгоритмическая оптимизация расписания («Умная пересборка»): планирует физиологичный длинный перерыв, короткие паузы и делит задачи свыше 1 часа.
+Algorithmic schedule optimization (**Smart rebuild**): plans a long break and short breaks and splits issues lasting more than one hour.
 _Avoid_: Auto build, Magic build
 
 **DaySettings**:
-Общие для приложения диапазоны начала и длительности дня, длинной паузы и дополнительных коротких пауз, которые использует алгоритмическая пересборка. Сохранённый DayDraft содержит снимок значений, использованных при его последней генерации.
-_Avoid_: Настройки конкретного Jira-аккаунта, настройки открытого черновика
+Application-wide ranges for the day's start and duration, the long break, and additional short breaks, used by the algorithmic rebuild. A saved DayDraft contains a snapshot of the settings used for its latest generation.
+_Avoid_: Jira-account settings, settings of the open draft
 
 **Agent Day Rule**:
-Редактируемое пользователем текстовое правило о том, как AI-агент применяет DaySettings при подготовке расписания. Оно не меняет встроенную алгоритмическую сборку.
-_Avoid_: Алгоритм сборщика, правило отдельного Jira-аккаунта
+A user-editable text rule describing how an AI agent should apply DaySettings when preparing a schedule. It does not change the built-in algorithmic builder.
+_Avoid_: Builder algorithm, per-account rule
 
 **Timeline Gap**:
-Вычисляемый промежуток времени между границами дня, не занятый ни одним рабочим интервалом. Все паузы равноправны, понятие отдельной сущности обеда упразднено. Не является статической записью базы данных.
+A computed interval within day boundaries that is not occupied by any work interval. All breaks have equal status; lunch is no longer a separate entity. A gap is not a static database record.
 _Avoid_: Break entity, Empty slot, Hole
 
 **Ripple Push**:
-Каскадное выталкивание последующих рабочих интервалов вправо по шкале времени при расширении задачи или зазора со строгим сохранением исходной длительности всех задач.
+Cascading movement of subsequent work intervals to the right when an issue or gap grows, strictly preserving the original durations of all affected issues.
 _Avoid_: Task truncate, Neighbor resize, Force squeeze
 
 **Gap Actions**:
-Набор целевых контекстных действий над промежутком свободного времени: «Схлопнуть паузу» (сдвиг встык), «Растянуть задачу» (поглощение зазора работой) и «Задать длительность» (выталкивание волной).
+Contextual actions on free time: **Close gap** (move intervals together), **Fill gap** (extend work into the gap), and **Set duration** (ripple-push later intervals).
 _Avoid_: Manual break edit dialog, Break interval hack
 
 **Timeline Drag Handles**:
-Интерактивные ручки левой и правой границы рабочего сегмента на шкале времени. Правая ручка масштабирует задачу с синхронным сдвигом всего правого хвоста дня (Accordion / Ripple). Левая ручка масштабирует задачу за счёт изменения предваряющей паузы с жестким упором в соседа слева. Минимальный размер задачи — 10 минут. Активный блок подсвечивается контрастным контуром.
+Interactive handles on a working segment's left and right boundaries. The right handle resizes the issue and moves the entire right tail in sync (Accordion / Ripple). The left handle resizes the issue by consuming the preceding gap, stopping at the previous neighbor. The minimum duration is 10 minutes. A contrasting outline highlights the active block.
 _Avoid_: Freeform canvas, Elastic collision
 
-### Интеграция и агенты
+### Integration and agents
 
 **Local Agent API**:
-Встроенный HTTP REST-сервер на loopback-интерфейсе (`127.0.0.1`, обычно порт `8765`), позволяющий внешним AI-агентам и скриптам управлять свободными LocalLog, читать worklogs Jira по дате или Issue и атомарно заменять целый DayDraft. API не отправляет worklogs в Jira.
+An embedded HTTP REST server on loopback (`127.0.0.1`, usually port `8765`). External AI agents and scripts can manage free LocalLogs, read Jira worklogs by date or Issue, and atomically replace a complete DayDraft. The API does not submit worklogs to Jira.
 _Avoid_: Cloud webhook, Remote backend, Headless CLI
 
 **Agent Day Snapshot**:
-Полное представление предлагаемого DayDraft, которое агент сохраняет одной операцией: дата, версия прочитанного состояния и весь набор Segment со ссылками на существующие LocalLog. Это замена черновика, а не последовательность команд редактирования интервалов.
+A complete proposed DayDraft saved by an agent in one operation: date, revision of the state it read, and all Segments referencing existing LocalLogs. It replaces a draft rather than streaming interval-editing commands.
 _Avoid_: Patch day, Send day, Segment command stream

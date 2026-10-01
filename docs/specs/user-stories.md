@@ -1,378 +1,377 @@
-# Jira Time Tracker — пользовательские истории и агентские сценарии
+# Jira Time Tracker — user stories and agent scenarios
 
-Дата: 2026-09-25.
+Date: 2026-09-25.
 
-## 1. Назначение документа
+## 1. Document purpose
 
-Этот документ описывает продукт с точки зрения людей и локальных AI-агентов: кто, зачем и каким результатом пользуется Jira Time Tracker. Он служит картой сценариев и не дублирует подробные правила реализации.
+This document describes the product from the perspective of people and local AI agents: who uses Jira Time Tracker, why, and what result they obtain. It maps scenarios without duplicating detailed implementation rules.
 
-Связанные источники истины:
+Related sources of truth:
 
-- точные правила времени, сборки, Jira и критерии A01–A24 — [спецификация MVP](jira-time-tracker-mvp.md);
-- экраны и представление состояний — [UX/UI](../design/UX.md);
-- сущности, модули и транзакции — [ARCHITECTURE.md](../../ARCHITECTURE.md);
-- термины — [CONTEXT.md](../../CONTEXT.md);
-- граница и причины появления Local Agent API — [ADR-0006](../adr/0006-local-agent-http-server.md);
-- фактический HTTP-контракт запущенного приложения — `GET /api/openapi.json`, человекочитаемая справка — `GET /api/help`.
+- exact rules for time, building, Jira, and criteria A01–A24 — [MVP specification](jira-time-tracker-mvp.md);
+- screens and state presentation — [UX/UI](../design/UX.md);
+- entities, modules, and transactions — [ARCHITECTURE.md](../../ARCHITECTURE.md);
+- terminology — [CONTEXT.md](../../CONTEXT.md);
+- the boundary and rationale for the Local Agent API — [ADR-0006](../adr/0006-local-agent-http-server.md);
+- the running application's actual HTTP contract — `GET /api/openapi.json`; human-readable help — `GET /api/help`.
 
-User story фиксирует ценность и наблюдаемый результат, но сама по себе не доказывает реализацию. Проверкой служат связанные автоматические тесты и ручные сценарии A01–A24.
+A user story records value and an observable outcome, but does not itself prove implementation. Related automated tests and manual scenarios A01–A24 provide verification.
 
-## 2. Участники и общие границы
+## 2. Actors and shared boundaries
 
-| Участник | Роль |
+| Actor | Role |
 |---|---|
-| Пользователь | Ведёт время, редактирует очередь и день, проверяет результат и единолично подтверждает отправку в Jira. |
-| Локальный AI-агент | Через Local Agent API создаёт и редактирует локальные логи, читает состояние дня и может подготовить черновик. |
-| Jira Cloud | Источник задач и существующих worklogs; принимает новые worklogs только после действия пользователя. |
-| Второй экземпляр приложения | Может читать данные, но не изменяет их и не отправляет worklogs, пока другой экземпляр владеет блокировкой. |
+| User | Tracks time, edits the queue and day, reviews the result, and alone confirms submission to Jira. |
+| Local AI agent | Creates and edits local logs through the Local Agent API, reads day state, and can prepare a draft. |
+| Jira Cloud | Supplies issues and existing worklogs; accepts new worklogs only after a user action. |
+| Second application instance | Can read data, but cannot change it or submit worklogs while another instance owns the lock. |
 
-Общие продуктовые ограничения:
+Shared product constraints:
 
-- UI и Local Agent API работают с одними локальными `Issue`, `LocalLog` и `DayDraft`.
-- Создание лога или черновика ничего не публикует в Jira.
-- Local Agent API не предоставляет действие финальной отправки дня в Jira.
-- Перед отправкой человек видит итоговый таймлайн и явно нажимает «Отправить в Jira».
-- API доступен только на loopback-интерфейсе текущего компьютера; приложение должно быть запущено.
-- Токен Jira не передаётся агенту и не возвращается API.
+- The UI and Local Agent API use the same local `Issue`, `LocalLog`, and `DayDraft`.
+- Creating a log or draft publishes nothing to Jira.
+- The Local Agent API provides no final day submission action.
+- Before submission, a person sees the final timeline and explicitly clicks “Submit to Jira.”
+- The API is available only on the current computer's loopback interface; the application must be running.
+- The Jira token is neither passed to the agent nor returned by the API.
 
-## 3. Истории пользователя в приложении
+## 3. User stories in the application
 
-### US-H01. Подключить Jira безопасно
+### US-H01. Connect to Jira safely
 
-**Как пользователь, я хочу** проверить и сохранить подключение к своему Jira Cloud, **чтобы** приложение могло находить задачи, читать мой день и отправлять подтверждённые мной worklogs.
+**As a user, I want** to verify and save my Jira Cloud connection **so that** the application can find issues, read my day, and submit worklogs I have approved.
 
-Критерии:
+Criteria:
 
-- Проверка подключения не создаёт и не меняет worklogs.
-- Поддерживаются обычный и scoped-маршрут токена.
-- Сохранённые настройки имеют приоритет над переменными окружения; отмена не меняет рабочее подключение.
-- Токен хранится вне SQLite, исходников и логов.
-- Смена Jira-сайта или аккаунта меняет scope и не позволяет отправить чужой старый черновик.
+- Connection verification neither creates nor changes worklogs.
+- Both regular and scoped token routes are supported.
+- Saved settings take precedence over environment variables; cancellation does not change the active connection.
+- The token is stored outside SQLite, source files, and logs.
+- Changing the Jira site or account changes the scope and prevents submission of an old draft belonging to another connection.
 
-Покрытие: A16, A17.
+Coverage: A16, A17.
 
-### US-H02. Добавить нужную Jira-задачу
+### US-H02. Add the Jira issue I need
 
-**Как пользователь, я хочу** добавить задачу по ключу, числовому ID или URL, **чтобы** учитывать время на ней независимо от assignee.
+**As a user, I want** to add an issue by key, numeric ID, or URL **so that** I can track time against it regardless of assignee.
 
-Критерии:
+Criteria:
 
-- Jira возвращает канонический ключ, название и доступный статус.
-- Повторное добавление не создаёт дубликат, а поднимает существующую задачу в списке.
-- Поиск и фильтр давности меняют видимость задач, но не удаляют задачи или логи.
+- Jira returns the canonical key, title, and available status.
+- Adding an existing issue again moves it up the list without creating a duplicate.
+- Search and activity-age filters change visibility without deleting issues or logs.
 
-Покрытие: A05.
+Coverage: A05.
 
-### US-H03. Быстро записать время вручную
+### US-H03. Record time manually in a few steps
 
-**Как пользователь, я хочу** указать задачу, длительность и необязательное описание без запуска таймера, **чтобы** сразу получить остановленный лог в очереди.
+**As a user, I want** to enter an issue, duration, and optional description without starting a timer **so that** I immediately obtain a stopped log in the queue.
 
-Критерии:
+Criteria:
 
-- Длительность положительна; часы и минуты проверяются до сохранения.
-- Можно задать фиксированное локальное время начала.
-- Ручной ввод не останавливает и не заменяет работающие таймеры.
-- Сохранение лога не выполняет POST в Jira.
+- Duration is positive; hours and minutes are validated before saving.
+- A fixed local start time can be specified.
+- Manual entry neither stops nor replaces running timers.
+- Saving a log does not perform a POST to Jira.
 
-Покрытие: A01, A04.
+Coverage: A01, A04.
 
-### US-H04. Вести несколько независимых таймеров
+### US-H04. Run several independent timers
 
-**Как пользователь, я хочу** одновременно учитывать работу по нескольким задачам, **чтобы** переключение контекста не смешивало записи.
+**As a user, I want** to track work on several issues simultaneously **so that** context switches do not mix records.
 
-Критерии:
+Criteria:
 
-- У разных задач таймеры независимы.
-- Остановка фиксирует накопленное время; новый запуск создаёт новый лог по правилам спецификации.
-- Пауза не входит в длительность, а закрытие приложения и сон Windows не теряют прошедшее время.
-- Работающий лог нельзя включить в сборку дня, пока он не остановлен.
+- Timers for different issues are independent.
+- Stopping records the accumulated time; a new start creates a new log according to the specification.
+- Paused time is excluded; application shutdown and Windows sleep do not lose elapsed time.
+- A running log cannot be included in a day build until stopped.
 
-Покрытие: A02–A04.
+Coverage: A02–A04.
 
-### US-H05. Подготовить очередь логов
+### US-H05. Prepare the log queue
 
-**Как пользователь, я хочу** исправлять, удалять, разделять и объединять свободные логи, **чтобы** очередь соответствовала реально выполненной работе до сборки дня.
+**As a user, I want** to correct, delete, split, and merge free logs **so that** the queue reflects work actually performed before building a day.
 
-Критерии:
+Criteria:
 
-- Свободный остановленный лог можно изменить или удалить.
-- Лог можно разделить на две положительные части; несколько свободных логов можно объединить.
-- Работающий, использованный или защищённый начавшейся отправкой лог нельзя разрушительно изменить.
-- Лог в черновике другой даты показывает эту дату вместо вводящего в заблуждение checkbox.
-- До первой отправки пользователь может явно убрать лог из черновика и вернуть его в очередь.
+- A free stopped log can be edited or deleted.
+- A log can be split into two positive parts; several free logs can be merged.
+- A running, consumed, or submission-protected log cannot be changed destructively.
+- A log in a draft for another date displays that date instead of a misleading checkbox.
+- Before the first submission, the user can explicitly remove a log from a draft and return it to the queue.
 
-Покрытие: A04, A10, A11, A13.
+Coverage: A04, A10, A11, A13.
 
-### US-H06. Собрать выбранные логи на нужную дату
+### US-H06. Build selected logs for the required date
 
-**Как пользователь, я хочу** выбрать остановленные логи и дату, **чтобы** получить локальный черновик дня, не публикуя его в Jira.
+**As a user, I want** to select stopped logs and a date **so that** I obtain a local day draft without publishing it to Jira.
 
-Критерии:
+Criteria:
 
-- Дата создания лога не ограничивает дату будущего дня.
-- Дефолтная команда «Собрать день» переносит логи на таймлайн в режиме As-Recorded Build.
-- Один лог одновременно принадлежит не более чем одному незавершённому черновику.
-- Выбранные логи не исчезают молча; невозможная сборка возвращает понятную ошибку и сохраняет прежний черновик.
+- A log's creation date does not constrain its eventual day date.
+- The default “Build day” command places logs on the timeline using As-Recorded Build.
+- A log belongs to at most one unfinished draft at a time.
+- Selected logs never disappear silently; an impossible build returns an understandable error and preserves the previous draft.
 
-Покрытие: A06, A08, A10, A11.
+Coverage: A06, A08, A10, A11.
 
-### US-H07. Получить реалистичное расписание
+### US-H07. Obtain a realistic schedule
 
-**Как пользователь, я хочу** выполнить Smart Rebuild с паузами, делением длинной работы и сохранением выбранных ограничений, **чтобы** быстро получить правдоподобный рабочий день.
+**As a user, I want** to run Smart Rebuild with breaks, long-work splitting, and preserved constraints **so that** I can quickly obtain a plausible working day.
 
-Критерии:
+Criteria:
 
-- Сборщик учитывает сохранённые `DaySettings`, фиксированные длительности и фиксированные старты.
-- Все выбранные логи представлены, суммы сходятся, интервалы и существующие Jira worklogs не пересекаются.
-- Разбиение не меняет исходный локальный лог; части сохраняют связь с источником.
-- Ручные правки заменяются только после явного подтверждения пересборки.
+- The builder respects saved `DaySettings`, fixed durations, and fixed starts.
+- All selected logs are represented, totals reconcile, and intervals do not overlap one another or existing Jira worklogs.
+- Splitting does not change the source local log; parts retain their source link.
+- Manual edits are replaced only after explicit rebuild confirmation.
 
-Покрытие: A06–A09.
+Coverage: A06–A09.
 
-### US-H08. Проверить и исправить черновик дня
+### US-H08. Review and correct a day draft
 
-**Как пользователь, я хочу** видеть таймлайн, источники, паузы и итоговые суммы и редактировать рабочие интервалы, **чтобы** перед отправкой день соответствовал фактам.
+**As a user, I want** to see the timeline, sources, breaks, and totals and edit work intervals **so that** the day reflects the facts before submission.
 
-Критерии:
+Criteria:
 
-- Можно менять начало, длительность, описание, порядок и фиксацию интервалов, а также разделять, объединять и удалять их.
-- Изменение интервала или паузы пересчитывает следующие позиции, суммы и конфликты по правилам Ripple Push.
-- Ошибка валидации блокирует отправку, но не уничтожает сохранённый черновик.
-- До отправки можно очистить весь черновик и вернуть его источники в очередь для новой сборки.
-- После начала отправки состав и дата защищены от пересборки.
+- Starts, durations, descriptions, order, and interval locks can be changed; intervals can be split, merged, or deleted.
+- Changing an interval or break recalculates subsequent positions, totals, and conflicts according to Ripple Push rules.
+- A validation error blocks submission without destroying the saved draft.
+- Before submission, the whole draft can be cleared and its sources returned to the queue for a new build.
+- Once submission starts, membership and date are protected from rebuilding.
 
-Покрытие: A09, A10, A13, A18, A27.
+Coverage: A09, A10, A13, A18, A27.
 
-### US-H09. Видеть уже отправленное время Jira
+### US-H09. See time already submitted to Jira
 
-**Как пользователь, я хочу** при открытии даты видеть свои существующие Jira worklogs, **чтобы** понимать уже учтённое время и не создавать дубликаты.
+**As a user, I want** to see my existing Jira worklogs when opening a date **so that** I understand time already recorded and avoid duplicates.
 
-Критерии:
+Criteria:
 
-- Записи загружаются непосредственно из Jira для выбранной локальной даты и текущего accountId.
-- Пагинация, часовой пояс и worklogs около полуночи обрабатываются явно.
-- Ошибка или неполная загрузка не выдаётся за пустой день.
-- Записи Jira доступны только для чтения и остаются видимыми даже без локального `DayDraft`.
+- Records are loaded directly from Jira for the selected local date and current accountId.
+- Pagination, time zones, and worklogs around midnight are handled explicitly.
+- Failed or incomplete loading is never presented as an empty day.
+- Jira records are read-only and remain visible even without a local `DayDraft`.
 
-Покрытие: A07, A12, A13, A18.
+Coverage: A07, A12, A13, A18.
 
-### US-H10. Отправить день без дубликатов
+### US-H10. Submit a day without duplicates
 
-**Как пользователь, я хочу** явно отправить проверенный черновик в Jira и безопасно продолжить после частичного сбоя, **чтобы** ни один интервал не потерялся и не отправился дважды.
+**As a user, I want** to explicitly submit a reviewed draft to Jira and safely continue after a partial failure **so that** no interval is lost or submitted twice.
 
-Критерии:
+Criteria:
 
-- Каждый `Segment` отправляется отдельно, а уже подтверждённые `sent` не повторяются.
-- Исходный лог становится использованным только после подтверждения всех оставшихся частей.
-- Неоднозначный сетевой результат становится `unknown`, а не автоматически повторяется.
-- Сверка по служебной property или ручная привязка восстанавливает подтверждённый worklog без второго POST.
+- Each `Segment` is submitted separately; already confirmed `sent` segments are not repeated.
+- A source log becomes consumed only after all remaining parts are confirmed.
+- An ambiguous network result becomes `unknown` rather than being retried automatically.
+- Reconciliation using the service property or manual linking restores a confirmed worklog without a second POST.
 
-Покрытие: A10, A14, A15.
+Coverage: A10, A14, A15.
 
-### US-H11. Продолжить работу после перезапуска или во втором окне
+### US-H11. Continue after restarting or in a second window
 
-**Как пользователь, я хочу** после перезапуска увидеть таймеры, очередь и черновики в согласованном состоянии, **чтобы** сбой приложения не приводил к потере времени или повторной отправке.
+**As a user, I want** to find timers, the queue, and drafts in a consistent state after restarting **so that** an application failure does not lose time or cause repeated submission.
 
-Критерии:
+Criteria:
 
-- Локальные данные и активные таймеры восстанавливаются.
-- Незавершённый `sending` восстанавливается как `unknown`.
-- Второй экземпляр работает только для чтения и не выполняет изменяющие операции или отправку.
+- Local data and active timers are restored.
+- An unfinished `sending` state is recovered as `unknown`.
+- A second instance is read-only and performs no mutations or submission.
 
-Покрытие: A03, A14, A15, A19.
+Coverage: A03, A14, A15, A19.
 
-### US-H12. Настроить быстрые задачи для своего Jira-аккаунта
+### US-H12. Configure quick issues for my Jira account
 
-**Как пользователь, я хочу** сохранить часто используемые Jira-задачи в каталоге своего подключения, **чтобы** быстро создавать по ним логи без встроенного списка чужой компании.
+**As a user, I want** to save frequently used Jira issues in my connection's catalog **so that** I can quickly create logs without a built-in list from someone else's company.
 
-Критерии:
+Criteria:
 
-- Каталог изначально пуст и принадлежит паре «Jira-сайт — аккаунт».
-- Задача добавляется по ключу, ID или URL только после успешной проверки в Jira; key и summary не подменяются локальными значениями.
-- Необязательная локальная подсказка редактируется отдельно, записи показываются в порядке добавления.
-- Удаление быстрой ссылки не удаляет Issue, LocalLog, DayDraft, Segment или историю.
-- Пустое меню на экране «Работа» ведёт в раздел «Быстрые задачи» настроек; выбор записи открывает ручной ввод с выбранной issue.
-- Настройки имеют левую навигацию по четырём разделам; тема остаётся в шапке, общей кнопки сохранения нет.
+- The catalog is initially empty and belongs to a Jira site/account pair.
+- An issue is added by key, ID, or URL only after successful Jira verification; key and summary are not replaced with local values.
+- An optional local hint is edited separately; entries appear in insertion order.
+- Removing a shortcut does not delete Issue, LocalLog, DayDraft, Segment, or history.
+- An empty menu on the Work screen opens the Quick issues settings section; selecting an entry opens manual entry with that issue selected.
+- Settings have four sections in left-side navigation; the theme remains in the header and there is no global save button.
 
-Покрытие: отдельная спецификация «Настраиваемые быстрые задачи и новая структура настроек».
+Coverage: the separate “Configurable quick issues and new settings structure” specification.
 
-## 4. Истории локального AI-агента
+## 4. Local AI agent stories
 
-### US-A01. Обнаружить доступные действия
+### US-A01. Discover available actions
 
-**Как локальный AI-агент, я хочу** получить актуальный адрес и машиночитаемый контракт API, **чтобы** использовать возможности приложения без знания его внутреннего кода.
+**As a local AI agent, I want** to obtain the current API address and machine-readable contract **so that** I can use the application without knowing its internal code.
 
-Критерии:
+Criteria:
 
-- Пользователь копирует из настроек готовую инструкцию с фактическим URL сервера.
-- `GET /api/help` описывает сценарии и примеры, `GET /api/openapi.json` возвращает OpenAPI 3.0.
-- `GET /api/quick-issues` возвращает быстрые задачи активного Jira scope, их заголовки и локальные подсказки.
-- `GET /api/issues/{issueKey}/worklogs` возвращает доступные записи Jira по конкретной задаче.
-- Агент не предполагает фиксированный порт: при конфликте приложение может выбрать следующий свободный.
+- The user copies a ready-made instruction containing the actual server URL from Settings.
+- `GET /api/help` describes scenarios and examples; `GET /api/openapi.json` returns OpenAPI 3.0.
+- `GET /api/quick-issues` returns quick issues in the active Jira scope, their titles, and local hints.
+- `GET /api/issues/{issueKey}/worklogs` returns available Jira records for a particular issue.
+- The agent does not assume a fixed port: on a conflict, the application may select the next free port.
 
-### US-A02. Залогировать выполненную работу
+### US-A02. Log completed work
 
-**Как локальный AI-агент, я хочу** создать остановленный лог по проверенной Jira issue, при необходимости выбрав её из быстрых задач пользователя, **чтобы** результат моей работы появился в общей очереди пользователя.
+**As a local AI agent, I want** to create a stopped log for a verified Jira issue, optionally selecting it from the user's quick issues, **so that** my work appears in the user's shared queue.
 
-Критерии:
+Criteria:
 
-- `POST /api/logs` принимает `issue_key`, положительную длительность, необязательные описание и `fixed_start_time`.
-- Если задачи ещё нет локально, приложение разрешает её через Jira и добавляет в кэш.
-- Ответ возвращает созданный лог с ID; тот же лог сразу виден в UI.
-- Операция не отправляет worklog в Jira.
+- `POST /api/logs` accepts `issue_key`, positive duration, optional description, and `fixed_start_time`.
+- If the issue is not yet stored locally, the application resolves it through Jira and caches it.
+- The response returns the created log with its ID; the same log immediately appears in the UI.
+- The operation does not submit a worklog to Jira.
 
-### US-A03. Проверить и скорректировать очередь
+### US-A03. Review and correct the queue
 
-**Как локальный AI-агент, я хочу** прочитать очередь и исправить свободную ошибочную запись, **чтобы** оставить пользователю понятный набор источников.
+**As a local AI agent, I want** to read the queue and correct a free erroneous entry **so that** I leave the user an understandable set of sources.
 
-Критерии:
+Criteria:
 
-- `GET /api/logs` возвращает неиспользованные логи с задачей, длительностью, описанием и фиксированным стартом.
-- Очередь можно фильтровать по тексту, ключу задачи и доступности `free`, `running` или `in_draft`; для привязанного источника возвращается дата черновика.
-- `GET /api/issues?q=...` ищет локально известные задачи по ключу и названию, чтобы агент мог выбрать источник без угадывания.
-- `PATCH /api/logs/{id}` меняет разрешённые поля свободного лога.
-- `DELETE /api/logs/{id}` удаляет только лог, который доменные правила разрешают удалить.
-- Ошибка в ID, формате или состоянии возвращается как явная ошибка и не вызывает частичного изменения.
+- `GET /api/logs` returns unconsumed logs with issue, duration, description, and fixed start.
+- The queue can be filtered by text, issue key, and availability `free`, `running`, or `in_draft`; a linked source includes its draft date.
+- `GET /api/issues?q=...` searches locally known issues by key and title so the agent can select a source without guessing.
+- `PATCH /api/logs/{id}` changes permitted fields of a free log.
+- `DELETE /api/logs/{id}` deletes only a log that domain rules allow deleting.
+- An invalid ID, format, or state returns an explicit error without a partial mutation.
 
-### US-A04. Подготовить независимые источники
+### US-A04. Prepare independent sources
 
-**Как локальный AI-агент, я хочу** разделить или объединить свободные исходные логи, **чтобы** подготовить независимые факты работы до их размещения по дням.
+**As a local AI agent, I want** to split or merge free source logs **so that** I can prepare independent work facts before assigning them to days.
 
-Критерии:
+Criteria:
 
-- `POST /api/logs/{id}/split` делит свободный остановленный лог на две положительные части.
-- `POST /api/logs/merge` принимает не менее двух свободных логов и может указать целевую задачу и итоговое описание.
-- Работающие, использованные и уже включённые в черновик логи защищены от этих операций.
-- Деление LocalLog нужно, когда его части должны получить независимый жизненный цикл, в частности попасть в разные дни. Деление одного источника на несколько интервалов внутри дня создаёт несколько `Segment`, а не новые LocalLog.
+- `POST /api/logs/{id}/split` splits a free stopped log into two positive parts.
+- `POST /api/logs/merge` accepts at least two free logs and can specify a target issue and final description.
+- Running, consumed, and draft-linked logs are protected from these operations.
+- Splitting a LocalLog is necessary when its parts need independent lifecycles, particularly placement in different days. Splitting one source into several intervals within a day creates several `Segment` objects, not new LocalLog objects.
 
-### US-A05. Прочитать состояние выбранного дня
+### US-A05. Read the selected day's state
 
-**Как локальный AI-агент, я хочу** запросить состояние календарной даты, **чтобы** учитывать существующие Jira worklogs и текущий черновик при планировании.
+**As a local AI agent, I want** to request the state of a calendar date **so that** planning accounts for existing Jira worklogs and the current draft.
 
-Критерии:
+Criteria:
 
-- `GET /api/day?date=YYYY-MM-DD` возвращает дату, существующие Jira worklogs и локальный черновик с сегментами и паузами.
-- Ответ относится именно к запрошенной локальной дате и не подменяет ошибку Jira пустым списком.
-- Ответ содержит детерминированную `revision` состояния дня для защиты от перезаписи более свежих ручных изменений.
-- Существующие Jira worklogs доступны только для чтения; новые рабочие интервалы могут идти параллельно с ними.
-- Время возвращается в однозначном формате, достаточном для корректной работы в локальном часовом поясе.
+- `GET /api/day?date=YYYY-MM-DD` returns the date, existing Jira worklogs, and a local draft with segments and breaks.
+- The response concerns the requested local date and never substitutes an empty list for a Jira error.
+- The response contains a deterministic day-state `revision` to prevent overwriting newer manual edits.
+- Existing Jira worklogs are read-only; new work intervals may run in parallel with them.
+- Times use an unambiguous format sufficient for correct operation in the local time zone.
 
-### US-A06. Передать готовый план дня
+### US-A06. Provide a complete day plan
 
-**Как локальный AI-агент, я хочу** сохранить рассчитанные мной интервалы как `DayDraft`, **чтобы** пользователь увидел их на обычном экране «День» и мог проверить перед отправкой.
+**As a local AI agent, I want** to save intervals I have calculated as a `DayDraft` **so that** the user sees them on the normal Day screen and can review them before submission.
 
-Критерии:
+Criteria:
 
-- Перед планированием агент одним запросом `GET /api/day-settings` получает сохранённые диапазоны и текстовое правило пользователя; не использует устаревшую копию из инструкции.
+- Before planning, the agent retrieves saved ranges and the user's text rule in one `GET /api/day-settings` request; it does not use a stale copy from an instruction.
+- `POST /api/day` accepts a date and a complete nonempty set of segments with required `source_log_id`, start, positive duration, optional description, and `is_fixed`.
+- Each source already exists, is stopped and unconsumed, and is not held by another draft; the segment's issue is derived from its source rather than accepted as independent truth.
+- One LocalLog can be represented by several Segment objects on the same day. It retains one DraftLog with a snapshot of the full source duration; each Segment becomes a separate Jira worklog.
+- If a draft already exists for the date, the request supplies `base_revision` obtained from `GET /api/day`; a stale version is rejected without changes.
+- The application checks date boundaries and breaks, allows overlapping work intervals, and atomically replaces only a complete valid draft for the selected date.
+- A successful plan appears in the UI; invalid input does not damage the previous draft.
+- The operation does not submit worklogs to Jira.
 
-- `POST /api/day` принимает дату и полный непустой набор сегментов с обязательным `source_log_id`, началом, положительной длительностью, необязательным описанием и `is_fixed`.
-- Каждый источник уже существует, остановлен, не использован и не занят другим черновиком; задача сегмента выводится из источника, а не принимается как независимая истина.
-- Один LocalLog может быть представлен несколькими Segment того же дня. Для него сохраняется один DraftLog со снимком полной исходной длительности, а каждый Segment станет отдельным Jira worklog.
-- Если черновик даты уже существует, запрос передаёт `base_revision`, полученную из `GET /api/day`; устаревшая версия отклоняется без изменений.
-- Приложение проверяет границы даты и паузы, разрешает пересечения рабочих интервалов и атомарно заменяет только целый валидный черновик выбранной даты.
-- Успешный план появляется в UI; невалидный ответ не повреждает предыдущий черновик.
-- Операция не отправляет worklogs в Jira.
+Coverage: A21–A24, A28.
 
-Покрытие: A21–A24, A28.
+### US-A07. Hand control to a person
 
-### US-A07. Передать контроль человеку
+**As a local AI agent, I want** to finish at a saved log or draft **so that** the final Jira decision remains with the user.
 
-**Как локальный AI-агент, я хочу** завершить работу на сохранённом логе или черновике, **чтобы** окончательное решение о Jira оставалось у пользователя.
+Criteria:
 
-Критерии:
+- The agent reports what was created or changed and gives the result's date/ID.
+- The user can edit the agent's result using the same UI controls.
+- Final submission is possible only through an explicit user action in the application.
 
-- Агент сообщает, что создано или изменено, и указывает дату/ID результата.
-- Пользователь может отредактировать агентский результат теми же средствами UI.
-- Единственный путь финальной отправки — явное действие пользователя в приложении.
+### US-A08. Fail safely on unavailability or conflict
 
-### US-A08. Завершиться безопасно при недоступности или конфликте
+**As a local AI agent, I want** an explicit error when the application is unavailable, read-only, or receives invalid data **so that** I do not claim time was saved when it was not.
 
-**Как локальный AI-агент, я хочу** получить явную ошибку при недоступном приложении, режиме только чтения или невалидных данных, **чтобы** не утверждать, что время сохранено, когда этого не произошло.
+Criteria:
 
-Критерии:
+- A network failure, HTTP error, or validation error counts as failure until a confirmed API response.
+- The agent does not bypass the loopback API by writing directly to SQLite and does not request the Jira token.
+- After an ambiguous client failure, the agent reads state before repeating a mutation.
 
-- Сетевой сбой, HTTP-ошибка и ошибка валидации считаются неуспехом до подтверждённого ответа API.
-- Агент не обходит loopback API прямой записью в SQLite и не запрашивает Jira token.
-- После неоднозначного клиентского сбоя агент проверяет состояние чтением, прежде чем повторять изменяющую операцию.
+### US-A09. Read Jira history for an issue
 
-### US-A09. Прочитать историю Jira по тикету
+**As a local AI agent, I want** to retrieve existing worklogs for a selected Jira issue **so that** I can answer what was logged against it and when.
 
-**Как локальный AI-агент, я хочу** получить уже созданные worklogs выбранной Jira-задачи, **чтобы** ответить, что и когда было залогировано по ней.
+Criteria:
 
-Критерии:
+- `GET /api/issues/{issueKey}/worklogs` reads all available issue records with pagination, regardless of date, including other authors' records.
+- The response contains author, start, duration, and description; `is_mine` identifies the current Jira account's records.
+- A Jira error is never presented as empty history. Reading neither creates worklogs nor changes the local queue.
 
-- `GET /api/issues/{issueKey}/worklogs` читает все доступные записи задачи с пагинацией, независимо от даты, включая записи других авторов.
-- Ответ содержит автора, начало, длительность и описание; `is_mine` отличает записи текущего Jira-аккаунта.
-- Ошибка Jira не выдаётся за пустую историю. Чтение не создаёт worklogs и не меняет локальную очередь.
+### US-A10. Read a Jira issue card and download an attachment
 
-### US-A10. Прочитать карточку Jira и скачать вложение
+**As a local AI agent, I want** to obtain issue text, all visible comments, and attachment metadata **so that** I understand the work context and can separately download a required file.
 
-**Как локальный AI-агент, я хочу** получить текст задачи, все видимые комментарии и список вложений, **чтобы** понять контекст работы и при необходимости отдельно скачать нужный файл.
+Criteria:
 
-Критерии:
+- `GET /api/issues/{issueKey}` fetches current Jira data, loads all comment pages, and returns description and comment text with authors and dates.
+- Each attachment is represented by metadata and `download_path`; binary content is not included in the issue-card response.
+- `GET /api/issues/{issueKey}/attachments/{attachmentId}` serves a file only if its ID belongs to the specified issue; a Jira error does not become an empty successful response.
+- Reading neither changes the local queue nor creates worklogs.
 
-- `GET /api/issues/{issueKey}` берёт актуальные данные из Jira, загружает все страницы комментариев и возвращает текст описания и комментариев вместе с авторами и датами.
-- Каждое вложение представлено метаданными и `download_path`; бинарное содержимое не включается в ответ карточки.
-- `GET /api/issues/{issueKey}/attachments/{attachmentId}` отдаёт файл только если его ID принадлежит указанной задаче; при ошибке Jira не возвращает пустой успешный ответ.
-- Чтение не меняет локальную очередь и не создаёт worklogs.
+## 5. Shared end-to-end scenarios
 
-## 5. Совместные end-to-end сценарии
+### E2E-01. The agent completes work; the user builds and submits the day
 
-### E2E-01. Агент выполнил задачу, пользователь собрал и отправил день
+1. The user starts the application and gives the agent the Local Agent API instruction.
+2. The agent works on `PROJ-123` and creates a local log through `POST /api/logs`.
+3. The user sees the entry in the queue alongside manual and timer-created logs.
+4. The user selects logs and a date, builds the day, and edits it as needed.
+5. The user reviews existing Jira worklogs and explicitly submits the draft.
 
-1. Пользователь запускает приложение и передаёт агенту инструкцию Local Agent API.
-2. Агент выполняет работу по `PROJ-123` и создаёт локальный лог через `POST /api/logs`.
-3. Пользователь видит запись в очереди вместе с логами, созданными вручную или таймерами.
-4. Пользователь выбирает логи и дату, собирает и при необходимости правит день.
-5. Пользователь проверяет существующие Jira worklogs и явно отправляет черновик.
+Result: the agent automated recording work, but Jira changed only after human confirmation.
 
-Результат: агент автоматизировал фиксацию работы, но Jira изменилась только после подтверждения человеком.
+### E2E-02. The agent prepares an entire day draft
 
-### E2E-02. Агент подготовил весь черновик дня
+1. The agent reads `GET /api/day?date=...` and obtains Jira worklogs, the current draft, and its `revision`.
+2. The agent selects existing free LocalLog objects, builds a complete set of Segment objects linked back to their sources, places work in parallel with other worklogs if needed, and submits the snapshot through `POST /api/day` with `base_revision`.
+3. The application validates and saves `DayDraft` or returns an error without damaging previous state.
+4. The user opens Day, checks the timeline, sources, and totals, then edits or submits it.
 
-1. Агент читает `GET /api/day?date=...` и получает Jira worklogs, текущий черновик и его `revision`.
-2. Агент выбирает существующие свободные LocalLog, строит полный набор Segment с обратными ссылками на источники, при необходимости ставит работу параллельно другим worklogs и отправляет снимок через `POST /api/day` с `base_revision`.
-3. Приложение валидирует и сохраняет `DayDraft` либо возвращает ошибку без повреждения прежнего состояния.
-4. Пользователь открывает вкладку «День», сверяет таймлайн, источники и суммы, затем исправляет или отправляет его.
+Result: the agent can plan, but cannot bypass visual review and human-in-the-loop submission.
 
-Результат: агент может планировать, но не может обойти визуальную проверку и human-in-the-loop отправку.
+### E2E-03. A person and agent correct the same queue
 
-### E2E-03. Человек и агент исправляют одну очередь
+1. The user creates a timer log; the agent creates another log through the API.
+2. The agent retrieves the current queue with source availability and, if needed, splits a log across different days or merges related free sources.
+3. The UI updates from the same `AppState` and shows the new membership without separate synchronization.
+4. After a log enters a draft, domain rules reject the agent's attempt to change it destructively.
 
-1. Пользователь создаёт лог таймером, агент создаёт другой лог через API.
-2. Агент получает актуальную очередь с доступностью источников и при необходимости разделяет лог для разных дней либо объединяет связанные свободные источники.
-3. UI обновляется из того же `AppState` и показывает новый состав без отдельной синхронизации.
-4. После включения лога в черновик агентская попытка разрушительно изменить его отклоняется доменными правилами.
+Result: UI and API remain two interfaces to one model rather than independent stores.
 
-Результат: UI и API остаются двумя интерфейсами к одной модели, а не двумя независимыми хранилищами.
+### E2E-04. An error does not become false success
 
-### E2E-04. Ошибка не превращается в ложный успех
+1. The agent submits an invalid log/plan or calls a stopped application.
+2. The agent receives an HTTP or network error and reports that the result was not saved.
+3. Before retrying, the agent reads the queue or day and checks whether the expected object appeared.
+4. If a second application instance is read-only, the user returns to the writable instance.
 
-1. Агент отправляет невалидный лог/план либо обращается к остановленному приложению.
-2. Агент получает HTTP- или сетевую ошибку и сообщает, что результат не сохранён.
-3. Перед повтором агент читает очередь или день и проверяет, появился ли ожидаемый объект.
-4. Если приложение открыто вторым экземпляром только для чтения, пользователь возвращается к пишущему экземпляру.
+Result: local data is undamaged, Jira is unaffected, and the person knows the actual outcome.
 
-Результат: локальные данные не повреждены, Jira не затронута, а человек знает фактический исход.
+### E2E-05. The user configures a recurring Jira issue
 
-### E2E-05. Пользователь настраивает повторяющуюся Jira-задачу
+1. The user connects Jira and opens Settings → Quick issues.
+2. The application retrieves an issue from Jira by key or URL; the user adds an optional hint and saves the shortcut.
+3. On Work, the issue appears in the menu in insertion order and opens manual time entry.
+4. The Local Agent API returns the same entry with its local description only in the active Jira scope; the agent can add a shortcut, change its description, or remove it through the API.
+5. Removing the shortcut removes it from the menu and API while retaining the issue, logs, and history.
 
-1. Пользователь подключает Jira и открывает «Настройки → Быстрые задачи».
-2. По ключу или URL приложение получает issue из Jira; пользователь добавляет необязательную подсказку и сохраняет ссылку.
-3. На экране «Работа» задача появляется в меню в порядке добавления и открывает ручной ввод времени.
-4. Local Agent API возвращает ту же запись с локальным описанием только в активном Jira scope; агент может добавить ссылку, изменить описание и удалить ссылку через API.
-5. Удаление ссылки убирает её из меню и API, но оставляет задачу, логи и историю.
+Result: the application contains no corporate defaults; the connection owner configures the quick workflow.
 
-Результат: приложение не содержит корпоративных значений по умолчанию, а быстрый сценарий настраивается владельцем подключения.
+## 6. Traceability
 
-## 6. Трассировка
-
-| Область | Основное доказательство |
+| Area | Main evidence |
 |---|---|
-| Истории US-H01–US-H12 | Приёмочные сценарии A01–A19, E2E-05 и связанные `flutter_test` из раздела 12 MVP-спецификации. |
-| Базовое обнаружение API | `test/agent_api_server_test.dart`, `test/agent_api_integration_and_ui_test.dart`. |
-| CRUD логов, поиск и план дня | A20–A24, `test/agent_api_endpoints_test.dart`. |
-| Управление быстрыми задачами через API | A26, `test/quick_issues_test.dart`. |
-| Карточка Jira, комментарии и вложения | A25, US-A10, `test/agent_api_issue_details_test.dart`. |
-| Разделение, объединение и фиксированный старт | `test/agent_api_split_merge_test.dart`. |
-| Финальная Jira-отправка | Только UI/AppState/WorklogSender; Local Agent API такого endpoint не имеет. |
+| Stories US-H01–US-H12 | Acceptance scenarios A01–A19, E2E-05, and related `flutter_test` tests from section 12 of the MVP specification. |
+| Basic API discovery | `test/agent_api_server_test.dart`, `test/agent_api_integration_and_ui_test.dart`. |
+| Log CRUD, search, and day planning | A20–A24, `test/agent_api_endpoints_test.dart`. |
+| Managing quick issues through the API | A26, `test/quick_issues_test.dart`. |
+| Jira issue card, comments, and attachments | A25, US-A10, `test/agent_api_issue_details_test.dart`. |
+| Splitting, merging, and fixed start | `test/agent_api_split_merge_test.dart`. |
+| Final Jira submission | UI/AppState/WorklogSender only; the Local Agent API has no such endpoint. |

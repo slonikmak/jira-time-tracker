@@ -1,102 +1,102 @@
-# Спецификация: Разделение (Split), объединение (Merge), фиксированное время (Anchors) и ручной порядок сегментов
+# Specification: Splitting, merging, fixed times (anchors), and manual segment order
 
-## 1. Контекст и цель
-В процессе работы с трекером времени пользователю требуется:
-1. Гибко управлять сырыми записями времени (`LocalLog` на вкладке «Работа») и финальными сегментами дня (`Segment` на вкладке «День»), в частности:
-   - Разделять длинные записи на две части с указанием времени и комментариев.
-   - Объединять мелкие записи по одной или разным задачам в одну.
-2. Фиксировать точное время старта для регулярных или жестко запланированных активностей (например, созвоны/митинги в 11:00).
-3. Вручную менять порядок задач в собранном дне (drag-and-drop или кнопки вверх/вниз).
-4. Алгоритм пересборки дня должен сохранять заданную пользователем последовательность задач, жестко ставить фиксированные якоря, а плавающие задачи распределять в окна между ними (аккуратно разрезая задачи вокруг якоря, если окно не меньше 15 минут, либо сдвигая за якорь).
-5. Развязать сырые логи и сегменты дня: сырые логи — это входящий пул фактов, а день — независимый таймлайн, который отправляется в Jira.
-
----
-
-## 2. Модель данных и хранилище (SQLite)
-
-### 2.1 Таблица `local_logs`
-- Добавляется колонка: `fixed_start_time TEXT` (формат `HH:mm` в локальном времени, например `'11:00'`, либо `NULL` для плавающих записей).
-
-### 2.2 Таблица `segments`
-- Добавляется колонка: `is_fixed INTEGER NOT NULL DEFAULT 0` (1 — сегмент зафиксирован на своем `start_utc`, 0 — плавающий).
-- `source_log_id TEXT`: остается строкой, но трактуется как мягкая информационная ссылка (может быть `NULL` или пустым при ручном создании/слиянии).
-
-### 2.3 Модели в Dart (`lib/models.dart`)
-- `LocalLog`: поле `String? fixedStartTime` (HH:mm). `toMap`, `fromMap`, `copyWith`.
-- `Segment`: поле `bool isFixed`. `toMap`, `fromMap`, `copyWith`.
-- `DayBuilderLogInput`: поля `bool isFixed`, `String? fixedStartTime`.
+## 1. Context and goal
+Time-tracker users need to:
+1. Manage raw time records (`LocalLog` on Work) and final day intervals (`Segment` on Day):
+   - Split long records into two parts with specified time/comments.
+   - Merge small records from one or different issues.
+2. Fix exact starts for recurring or strictly scheduled activities, e.g. calls/meetings at 11:00.
+3. Reorder tasks in a built day manually with drag-and-drop or up/down buttons.
+4. Rebuild while preserving user sequence, placing fixed anchors exactly, and fitting floating tasks between them: split around an anchor if the window is at least 15 minutes, otherwise move after it.
+5. Decouple raw logs from day segments: raw logs are an incoming pool of facts; a day is an independent timeline submitted to Jira.
 
 ---
 
-## 3. Алгоритм сборки и пересборки дня (`DayBuilder`)
+## 2. Data model and storage (SQLite)
 
-1. **Якоря (Anchors):**
-   - Сегменты с `isFixed == true` или логи с `fixedStartTime != null` размещаются строго в свое фиксированное время (`start_utc = localDate + fixedStartTime`).
-   - Если два фиксированных сегмента пересекаются друг с другом $\to$ выбрасывается `DayBuilderException` с понятным текстом ошибки.
-2. **Последовательность (User Sequence Order):**
-   - При пересборке дня или при наличии предварительного порядка алгоритм больше не рандомизирует порядок задач случайным образом. Он строго идет по заданной пользователем цепочке задач.
-3. **Размещение плавающих задач вокруг якорей:**
-   - Плавающие задачи и паузы распределяются в свободные окна:
-     - Окно 1: от начала рабочего дня (`workDayStart`) до первого якоря.
-     - Окна между якорями.
-     - Окно после последнего якоря.
-   - Если очередная плавающая задача не помещается целиком в текущее свободное окно перед якорем:
-     - Если доступное окно $\ge 15$ минут: задача разрезается на 2 части (первая часть заполняет доступное окно до якоря, вторая часть переносится в окно после якоря).
-     - Если доступное окно $< 15$ минут: задача не дробится на нерациональные мелкие отрезки, а целиком переносится за якорь (в окне остается технологическая пауза или сдвигается время старта).
+### 2.1 `local_logs` table
+- Add `fixed_start_time TEXT`: local `HH:mm`, e.g. `'11:00'`, or `NULL` for floating entries.
+
+### 2.2 `segments` table
+- Add `is_fixed INTEGER NOT NULL DEFAULT 0`: 1 fixes the segment at its `start_utc`; 0 means floating.
+- `source_log_id TEXT` remains a string but acts as a soft informational link (may be `NULL` or empty on manual creation/merge).
+
+### 2.3 Dart models (`lib/models.dart`)
+- `LocalLog`: `String? fixedStartTime` (HH:mm); `toMap`, `fromMap`, `copyWith`.
+- `Segment`: `bool isFixed`; `toMap`, `fromMap`, `copyWith`.
+- `DayBuilderLogInput`: `bool isFixed`, `String? fixedStartTime`.
 
 ---
 
-## 4. Пользовательский интерфейс (UI)
+## 3. Day building and rebuilding algorithm (`DayBuilder`)
 
-### 4.1 Экран «Работа» (`WorkScreen`):
-1. **Фиксированное время старта**:
-   - В диалоге добавления ручного лога и редактирования лога появляется поле выбора времени начала с чекбоксом «Фиксированное время» (например, `11:00`).
-   - В карточке лога выводится бейдж с иконкой часов/замка (например, `🔒 11:00`).
-2. **Разбиение лога (Split)**:
-   - В выпадающем меню карточки лога пункт «Разбить».
-   - Диалог: ввод времени первой части (минуты или ЧЧ:ММ), вторая часть рассчитывается автоматически. Поля ввода описания для обеих частей.
-3. **Объединение логов (Merge)**:
-   - В меню карточки лога пункт «Объединить с...».
-   - Диалог со списком других свободных логов за день.
-   - Если задача та же — слияние в 1 клик (время суммируется, описания склеиваются).
-   - Если задачи разные — выбор целевой задачи.
+1. **Anchors:**
+   - Place `isFixed == true` segments or `fixedStartTime != null` logs exactly at their fixed time (`start_utc = localDate + fixedStartTime`).
+   - Overlapping fixed segments $\to$ throw an understandable `DayBuilderException`.
+2. **User sequence order:**
+   - During rebuild or with predefined order, stop randomizing task sequence; follow the user's chain strictly.
+3. **Floating tasks around anchors:**
+   - Distribute floating tasks/breaks into free windows:
+     - Window 1: `workDayStart` to first anchor.
+     - Between anchors.
+     - After last anchor.
+   - If the next floating task does not fit before the anchor:
+     - Window $\ge 15$ minutes: split in two; first fills the available window, second moves after the anchor.
+     - Window $< 15$ minutes: avoid impractical fragments and move the whole task after the anchor, leaving a buffer break or shifting start.
 
-### 4.2 Экран «День» (`DayScreen`):
-1. **Сортировка и изменение порядка**:
-   - Список сегментов дня под таймлайном реализуется на `ReorderableListView` (перетаскивание мышью за маркер).
-   - На карточке сегмента кнопки перемещения `▲` (вверх) и `▼` (вниз).
-2. **Фиксация времени сегмента**:
-   - Кнопка-иконка замка на сегменте: быстрое переключение `isFixed` (зафиксировать время старта).
-3. **Разбиение сегмента (Split)**:
-   - Кнопка «Разбить» в карточке сегмента $\to$ диалог выбора времени разреза (например, «через 30 минут»). Сегмент делится на два последовательных сегмента.
-4. **Объединение сегментов (Merge)**:
-   - Кнопка «Объединить с...» $\to$ объединение с соседним или выбранным сегментом.
-5. **Кнопка «Пересобрать день»**:
-   - Пересчитывает временные метки и паузы, строго сохраняя текущую последовательность сегментов и фиксированные якоря.
+---
+
+## 4. User interface (UI)
+
+### 4.1 Work screen (`WorkScreen`):
+1. **Fixed start time:**
+   - Manual-entry/log-edit dialogs gain start selection with Fixed time checkbox (e.g. `11:00`).
+   - Log cards show a clock/lock badge (e.g. `🔒 11:00`).
+2. **Split log:**
+   - Split in the card menu.
+   - First-part input (minutes or HH:MM), automatic remainder, and description fields for both parts.
+3. **Merge logs:**
+   - Merge with... in the card menu.
+   - Dialog lists other free logs for the day.
+   - Same issue: one-click merge, summing time/combining descriptions.
+   - Different issues: target selection.
+
+### 4.2 Day screen (`DayScreen`):
+1. **Sorting and reordering:**
+   - `ReorderableListView` below the timeline with mouse-drag marker.
+   - Card buttons `▲` (up), `▼` (down).
+2. **Fixed segment time:**
+   - Lock icon toggles `isFixed` to fix the start.
+3. **Split segment:**
+   - Split $\to$ split-time dialog (e.g. after 30 minutes), yielding two consecutive segments.
+4. **Merge segments:**
+   - Merge with... $\to$ merge an adjacent or selected segment.
+5. **Rebuild day:**
+   - Recalculate timestamps/breaks while strictly retaining sequence and fixed anchors.
 
 ---
 
 ## 5. Agent HTTP API (`AgentApiServer`)
 
 1. `POST /api/logs`:
-   - Поддержка поля `"fixed_start_time": "11:00"`.
+   - Support `"fixed_start_time": "11:00"`.
 2. `POST /api/logs/{id}/split`:
-   - Тело: `{ "part1_minutes": 45, "part1_description": "...", "part2_description": "..." }`.
-   - Возвращает массив двух созданных логов.
+   - Body: `{ "part1_minutes": 45, "part1_description": "...", "part2_description": "..." }`.
+   - Return the two created logs.
 3. `POST /api/logs/merge`:
-   - Тело: `{ "source_log_ids": ["id1", "id2"], "target_issue_key": "PROJ-123", "description": "..." }`.
-   - Возвращает объединенный лог.
+   - Body: `{ "source_log_ids": ["id1", "id2"], "target_issue_key": "PROJ-123", "description": "..." }`.
+   - Return merged log.
 4. `POST /api/day`:
-   - Поддержка поля `"is_fixed": true` и `"fixed_start_time": "11:00"` в объектах массива `segments`.
-   - Сохраняет сегменты в переданном порядке.
-5. Обновление `GET /api/help` и `GET /api/openapi.json`.
+   - Support `"is_fixed": true` and `"fixed_start_time": "11:00"` in `segments`.
+   - Save segments in supplied order.
+5. Update `GET /api/help` and `GET /api/openapi.json`.
 
 ---
 
-## 6. Критерии приемки (Definition of Done)
-1. База данных SQLite успешно обновляется без потери существующих данных.
-2. Юнит-тесты на разбиение и слияние логов (`LocalLog`) и сегментов (`Segment`).
-3. Алгоритмические тесты `DayBuilder` на фиксацию якорей, разрезание вокруг якоря с порогом 15 мин и сохранение пользовательского порядка при пересборке.
-4. Интеграционные UI-тесты на экранах «Работа» и «День».
-5. Тесты эндпоинтов API: split, merge, fixed_start_time.
-6. `flutter analyze` — 0 предупреждений и ошибок.
+## 6. Acceptance criteria (Definition of Done)
+1. SQLite updates without losing existing data.
+2. Unit tests split/merge logs (`LocalLog`) and segments (`Segment`).
+3. `DayBuilder` tests cover anchors, splitting around anchors with a 15-minute threshold, and user-order preservation on rebuild.
+4. Work/Day UI integration tests.
+5. API tests: split, merge, fixed_start_time.
+6. `flutter analyze`: zero warnings/errors.

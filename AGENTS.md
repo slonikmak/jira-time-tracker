@@ -1,40 +1,40 @@
-# Работа с Jira Time Tracker
+# Working on Jira Time Tracker
 
-Это локальное Flutter-приложение для Windows и macOS. Интерфейс поддерживает русский и английский по правилам [MVP](docs/specs/jira-time-tracker-mvp.md#82-язык-интерфейса). Пользовательская документация — на русском, идентификаторы в Dart — на английском. Сборки и публикация описаны в [правилах выпуска](docs/releases.md).
+This is a local Flutter application for Windows and macOS. The interface supports Russian and English under the [MVP language rules](docs/specs/jira-time-tracker-mvp.md#82-interface-language). Project documentation and Dart identifiers use English. Builds and publication are described in the [release guide](docs/releases.md).
 
-## Источники по типу задачи
+## Sources by task type
 
-Читай относящиеся к задаче разделы, прежде чем менять поведение:
+Read the relevant sections before changing behavior:
 
-| Задача | Источник правил |
+| Task | Source of rules |
 |---|---|
-| Ценность для пользователя, карта user stories и агентские сценарии | [Пользовательские истории](docs/specs/user-stories.md); точные правила остаются в MVP и API-контрактах, на которые она ссылается |
-| Пользовательский сценарий, время, критерии готовности | [Спецификация MVP](docs/specs/jira-time-tracker-mvp.md), включая связанные сценарии A01–A24 |
-| Ошибки сохранения, Jira-запросы, неполная загрузка, отправка и восстановление | [Спецификация MVP](docs/specs/jira-time-tracker-mvp.md), разделы 10–11 |
-| Границы модулей, данные, транзакции, тестовые зависимости | [ARCHITECTURE.md](ARCHITECTURE.md) |
-| Экраны, формы, навигация, внешний вид | [UX/UI](docs/design/UX.md) и текущий макет [astra.pen](astra.pen) |
-| Установка, запуск, использование | [README.md](README.md) |
-| Доменные термины и архитектурные решения | [CONTEXT.md](CONTEXT.md) и применимые ADR по [правилам доменной документации](docs/agents/domain.md) |
+| User value, story map, and agent workflows | [User stories](docs/specs/user-stories.md); exact rules remain in the linked MVP and API contracts |
+| User workflows, time rules, acceptance criteria | [MVP specification](docs/specs/jira-time-tracker-mvp.md), including scenarios A01–A24 |
+| Persistence errors, Jira requests, incomplete loading, submission, recovery | [MVP specification](docs/specs/jira-time-tracker-mvp.md), sections 10–11 |
+| Module boundaries, data, transactions, test dependencies | [ARCHITECTURE.md](ARCHITECTURE.md) |
+| Screens, forms, navigation, appearance | [UX/UI](docs/design/UX.md) and the current [astra.pen](astra.pen) design |
+| Installation, running, usage | [README.md](README.md) |
+| Domain terms and architectural decisions | [CONTEXT.md](CONTEXT.md) and applicable ADRs under the [domain documentation rules](docs/agents/domain.md) |
 
-Указания пользователя имеют приоритет. Если они меняют согласованное правило, обнови документ, которому оно принадлежит. Проверяй фактическое состояние по коду и результатам запуска: описание целевого поведения само по себе не доказывает, что оно реализовано. Выявленное расхождение опиши конкретно.
+User instructions take precedence. If they change an agreed rule, update its owning document. Verify actual behavior against code and execution results: a description of intended behavior does not prove implementation. Describe any discrepancy concretely.
 
-## Внесение изменений
+## Making changes
 
-1. Проверь рабочее дерево и затронутый код. Сохраняй несвязанные изменения.
-2. Исправь правило в модуле, который им владеет, затем нужные вызовы. Держи SQL, Jira-протокол и сборку дня за интерфейсами соответствующих модулей.
-3. При изменении контракта, компоновки, ответственности модулей или способа запуска обнови документ-владелец из таблицы выше. В других документах оставь ссылку вместо второго описания правила.
+1. Inspect the working tree and affected code. Preserve unrelated changes.
+2. Fix the rule in its owning module, then update callers as needed. Keep SQL, the Jira protocol, and day building behind their respective module interfaces.
+3. When changing a contract, layout, module responsibility, or startup method, update the owning document from the table above. Link to it from other documents instead of duplicating the rule.
 
-Для локальных задач в `.scratch/` используй [правила issue tracker](docs/agents/issue-tracker.md). При триаже входящих задач используй [словарь меток](docs/agents/triage-labels.md).
+For local tasks in `.scratch/`, use the [issue tracker rules](docs/agents/issue-tracker.md). For incoming task triage, use the [label vocabulary](docs/agents/triage-labels.md).
 
-## Скиллы Matt
+## Matt skills
 
-Используй подходящие скиллы из [`.agents/skills/`](.agents/skills/), допускающие автоматический вызов, когда задача совпадает с их описанием. Например: сложный баг — `diagnosing-bugs`, проектирование границы модуля — `codebase-design`, ревью изменений — `code-review`, изменение `AGENTS.md` или скилла — `writing-for-agents`. Перед работой прочитай выбранный `SKILL.md` и нужные ему материалы.
+Use suitable automatically invocable skills from [`.agents/skills/`](.agents/skills/) when the task matches their description. Examples: `diagnosing-bugs` for a difficult bug, `codebase-design` for a module boundary, `code-review` for reviewing changes, and `writing-for-agents` for editing `AGENTS.md` or a skill. Read the chosen `SKILL.md` and its required materials before working.
 
-`ask-matt` и скиллы, помеченные для явного вызова, применяй, когда пользователь их назвал. Для обычной узкой задачи полный маршрут Matt не нужен.
+Use `ask-matt` and skills marked for explicit invocation when the user names them. A routine narrow task does not require the complete Matt flow.
 
-## Проверка результата
+## Verification
 
-- Для изменённой логики проверь связанные сценарии из раздела 12 спецификации. Используй `flutter_test`, подставной HTTP-клиент и временную SQLite-базу; часы и случайность передавай явно.
-- Разработческие проверки не создают worklogs в рабочей Jira. Различай тестовый запуск и пользовательскую отправку. Секреты храни вне исходников, тестов, логов и отчётов.
-- Для узкой правки запускай проверки по её влиянию. При полной проверке приложения выполни команды и Windows release-сборку из раздела 13 спецификации.
-- В отчёте укажи изменения, реально выполненные проверки и оставшиеся ограничения; путь к сборке — если она создана.
+- For changed logic, verify the related scenarios in specification section 12. Use `flutter_test`, a fake HTTP client, and temporary SQLite databases; pass clocks and randomness explicitly.
+- Development checks do not create worklogs in production Jira. Distinguish test execution from user submission. Keep secrets out of source files, tests, logs, and reports.
+- For a narrow change, run checks matching its impact. For full application verification, run the commands and Windows release build from specification section 13.
+- Report changes, checks actually performed, remaining limitations, and the build path if a build was produced.

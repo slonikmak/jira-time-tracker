@@ -188,8 +188,8 @@
 }
 @media(pointer:coarse){#jt-ux button{min-height:44px}#jt-ux .jt-icon{min-width:44px}#jt-ux input:not([type=checkbox]),#jt-ux select,#jt-ux textarea{font-size:16px}}
 </style>
-<div id="jt-ux" aria-label="Jira Time Tracker — концепция экранов">
-  <div class="jt-titlebar">Jira Time Tracker · Макет</div>
+<div id="jt-ux" aria-label="Jira Time Tracker — screen concept">
+  <div class="jt-titlebar">Jira Time Tracker · Mockup</div>
 </div>
 <script>
 (function(){
@@ -197,21 +197,21 @@
   const design={layout:'split',density:'comfortable',delivery:'success'};
   const ui={screen:'work',tab:'queue',date:'2026-09-14',modal:null,toast:'',batch:false,taskChecks:new Set(),edit:null,sending:false,settingsStatus:''};
   const tasks=[
-    {id:'ESP-248',title:'Авторизация через SSO'},
-    {id:'ESP-251',title:'Экспорт отчёта в CSV'},
-    {id:'ESP-239',title:'Ускорить поиск по журналу'},
-    {id:'ESP-233',title:'Обработка ошибок API'},
-    {id:'ESP-227',title:'Инструкции по запуску'}
+    {id:'ESP-248',title:'SSO authentication'},
+    {id:'ESP-251',title:'Export report to CSV'},
+    {id:'ESP-239',title:'Speed up journal search'},
+    {id:'ESP-233',title:'API error handling'},
+    {id:'ESP-227',title:'Startup instructions'}
   ];
   let nextId=20, revision=0, day=null, renderedScreen='work';
   const now=Date.now();
   const logs=[
-    {id:1,task:'ESP-248',seconds:4680,started:now,description:'Настраиваю вход через провайдера',date:'Сегодня',source:'Таймер'},
-    {id:2,task:'ESP-251',seconds:2520,started:now,description:'Проверяю выгрузку больших отчётов',date:'Сегодня',source:'Таймер'},
-    {id:3,task:'ESP-239',seconds:10800,started:null,description:'Упростил запросы и добавил индекс',date:'Сегодня',source:'Вручную'},
-    {id:4,task:'ESP-233',seconds:4800,started:null,description:'Проверил таймауты и ответы сервера',date:'Вчера',source:'Таймер'},
-    {id:5,task:'ESP-248',seconds:3000,started:null,description:'Разобрал текущий поток входа',date:'Вчера',source:'Таймер'},
-    {id:6,task:'ESP-227',seconds:1800,started:null,description:'',date:'11 сентября',source:'Вручную'}
+    {id:1,task:'ESP-248',seconds:4680,started:now,description:'Configuring identity-provider login',date:'Today',source:'Timer'},
+    {id:2,task:'ESP-251',seconds:2520,started:now,description:'Testing large report exports',date:'Today',source:'Timer'},
+    {id:3,task:'ESP-239',seconds:10800,started:null,description:'Simplified queries and added an index',date:'Today',source:'Manual'},
+    {id:4,task:'ESP-233',seconds:4800,started:null,description:'Checked timeouts and server responses',date:'Yesterday',source:'Timer'},
+    {id:5,task:'ESP-248',seconds:3000,started:null,description:'Investigated the current login flow',date:'Yesterday',source:'Timer'},
+    {id:6,task:'ESP-227',seconds:1800,started:null,description:'',date:'11 September',source:'Manual'}
   ];
   const selected=new Set([3,4]), locks=new Set();
   const config={url:'https://esprowteam.atlassian.net',email:'you@company.com',token:''};
@@ -230,85 +230,85 @@
   const chosen=()=>logs.filter(l=>selected.has(l.id)&&!l.used&&!l.started);
   function tell(s){ui.toast=s}
   function titlebar(){
-    return '<div class="jt-titlebar"><span class="jt-logo">'+icon('timer')+'</span><strong>Jira Time Tracker</strong><span class="jt-demo">Макет</span><span class="jt-window-marks" aria-hidden="true">− &nbsp; □ &nbsp; ×</span></div>'+
-    '<nav class="jt-nav" aria-label="Основные экраны"><button type="button" class="jt-tab" data-act="work" aria-selected="'+(ui.screen==='work')+'">'+icon('layers')+'Работа <span class="jt-count">'+logs.filter(l=>!l.used).length+'</span></button>'+
-    '<button type="button" class="jt-tab" data-act="day" aria-selected="'+(ui.screen==='day')+'">'+icon('calendar-days')+'День'+(day?' <span class="jt-count">1</span>':'')+'</button>'+
-    '<button type="button" class="jt-tab jt-right" data-act="settings" aria-selected="'+(ui.screen==='settings')+'">'+icon('settings-2')+'Настройки</button></nav>'+
+    return '<div class="jt-titlebar"><span class="jt-logo">'+icon('timer')+'</span><strong>Jira Time Tracker</strong><span class="jt-demo">Mockup</span><span class="jt-window-marks" aria-hidden="true">− &nbsp; □ &nbsp; ×</span></div>'+
+    '<nav class="jt-nav" aria-label="Main screens"><button type="button" class="jt-tab" data-act="work" aria-selected="'+(ui.screen==='work')+'">'+icon('layers')+'Work <span class="jt-count">'+logs.filter(l=>!l.used).length+'</span></button>'+
+    '<button type="button" class="jt-tab" data-act="day" aria-selected="'+(ui.screen==='day')+'">'+icon('calendar-days')+'Day'+(day?' <span class="jt-count">1</span>':'')+'</button>'+
+    '<button type="button" class="jt-tab jt-right" data-act="settings" aria-selected="'+(ui.screen==='settings')+'">'+icon('settings-2')+'Settings</button></nav>'+
     (ui.toast?'<div class="jt-toast" role="status">'+esc(ui.toast)+'</div>':'');
   }
   function taskTools(t){
     const running=logs.find(l=>l.task===t.id&&l.started&&!l.used);
-    return '<div class="jt-task-tools">'+action(running?'pause':'play',running?'Пауза '+t.id:'Запустить '+t.id,'timer','data-task="'+t.id+'"',running?'jt-pause':'jt-play')+
-    button('+ Время','manual','data-task="'+t.id+'"','jt-quiet')+
-    action('square-pen','Новый лог '+t.id,'newlog','data-task="'+t.id+'"')+'</div>';
+    return '<div class="jt-task-tools">'+action(running?'pause':'play',running?'Pause '+t.id:'Start '+t.id,'timer','data-task="'+t.id+'"',running?'jt-pause':'jt-play')+
+    button('+ Time','manual','data-task="'+t.id+'"','jt-quiet')+
+    action('square-pen','New log '+t.id,'newlog','data-task="'+t.id+'"')+'</div>';
   }
   function recent(chips){
     return tasks.slice(0,chips?3:5).map(t=>'<div class="'+(chips?'jt-task-chip':'jt-task')+'">'+
-    '<div class="jt-row"><span class="jt-key">'+t.id+'</span>'+(ui.batch?'<input type="checkbox" class="jt-right" data-change="taskcheck" data-task="'+t.id+'" aria-label="Выбрать задачу '+t.id+'" '+(ui.taskChecks.has(t.id)?'checked':'')+'>':'')+'</div>'+
+    '<div class="jt-row"><span class="jt-key">'+t.id+'</span>'+(ui.batch?'<input type="checkbox" class="jt-right" data-change="taskcheck" data-task="'+t.id+'" aria-label="Select issue '+t.id+'" '+(ui.taskChecks.has(t.id)?'checked':'')+'>':'')+'</div>'+
     '<div class="jt-task-name">'+esc(t.title)+'</div>'+taskTools(t)+'</div>').join('');
   }
   function logRow(l,grouped){
     const t=task(l.task);
     const state=l.started?'jt-running':selected.has(l.id)?'jt-chosen':'';
     return '<div class="jt-log '+state+'">'+
-    (l.used?'<span style="color:var(--jt-green)">'+icon('check')+'</span>':'<input type="checkbox" data-change="select" data-id="'+l.id+'" aria-label="Выбрать лог '+l.task+' '+esc(l.description||'без описания')+'" '+(selected.has(l.id)?'checked ':'')+(l.started||l.reserved?'disabled':'')+'>')+
-    '<div class="jt-stack"><div class="jt-log-meta"><span>'+l.task+'</span><span>·</span><span>'+l.date+'</span>'+(l.source==='Вручную'?'<span>· вручную</span>':'')+'</div>'+
-    '<div class="jt-log-name">'+esc(grouped?(l.description||'Без описания'):t.title)+'</div>'+
+    (l.used?'<span style="color:var(--jt-green)">'+icon('check')+'</span>':'<input type="checkbox" data-change="select" data-id="'+l.id+'" aria-label="Select log '+l.task+' '+esc(l.description||'no description')+'" '+(selected.has(l.id)?'checked ':'')+(l.started||l.reserved?'disabled':'')+'>')+
+    '<div class="jt-stack"><div class="jt-log-meta"><span>'+l.task+'</span><span>·</span><span>'+l.date+'</span>'+(l.source==='Manual'?'<span>· manually</span>':'')+'</div>'+
+    '<div class="jt-log-name">'+esc(grouped?(l.description||'No description'):t.title)+'</div>'+
     (!grouped&&l.description?'<div class="jt-log-desc">'+esc(l.description)+'</div>':'')+
-    (l.started?'<div class="jt-status"><span class="jt-running-dot"></span>Таймер идёт</div>':l.reserved?'<div class="jt-status">В черновике дня</div>':l.used?'<div class="jt-status sent">Отправлено · '+ui.date+'</div>':'')+'</div>'+
+    (l.started?'<div class="jt-status"><span class="jt-running-dot"></span>Timer running</div>':l.reserved?'<div class="jt-status">In day draft</div>':l.used?'<div class="jt-status sent">Submitted · '+ui.date+'</div>':'')+'</div>'+
     '<div class="jt-log-end"><span class="jt-time" '+(l.started?'data-live="'+l.id+'"':'')+'>'+(l.started?live(l):dur(mins(l)))+'</span>'+
-    (!l.used?(l.started?action('pause','Поставить лог на паузу','pause','data-id="'+l.id+'"','jt-pause'):l.reserved?'':action('pencil','Изменить лог','editlog','data-id="'+l.id+'"')):'')+'</div></div>';
+    (!l.used?(l.started?action('pause','Pause log','pause','data-id="'+l.id+'"','jt-pause'):l.reserved?'':action('pencil','Edit log','editlog','data-id="'+l.id+'"')):'')+'</div></div>';
   }
   function queueTabs(){
-    return '<div class="jt-tabs-small" role="tablist" aria-label="Логи"><button type="button" class="jt-small-tab" role="tab" aria-selected="'+(ui.tab==='queue')+'" data-act="queue">Не отправлены <span class="jt-count">'+logs.filter(l=>!l.used).length+'</span></button><button type="button" class="jt-small-tab" role="tab" aria-selected="'+(ui.tab==='history')+'" data-act="history">История</button></div>';
+    return '<div class="jt-tabs-small" role="tablist" aria-label="Logs"><button type="button" class="jt-small-tab" role="tab" aria-selected="'+(ui.tab==='queue')+'" data-act="queue">Not sent <span class="jt-count">'+logs.filter(l=>!l.used).length+'</span></button><button type="button" class="jt-small-tab" role="tab" aria-selected="'+(ui.tab==='history')+'" data-act="history">History</button></div>';
   }
   function logContent(grouped){
     const entries=logs.filter(l=>ui.tab==='history'?l.used:!l.used);
-    if(!entries.length)return '<div class="jt-empty"><span>'+icon('check-check')+'</span><strong>'+(ui.tab==='history'?'Здесь будут отправленные логи':'Всё отправлено')+'</strong><span class="jt-sub">Новые записи можно добавить вручную или таймером.</span></div>';
+    if(!entries.length)return '<div class="jt-empty"><span>'+icon('check-check')+'</span><strong>'+(ui.tab==='history'?'Submitted logs will appear here':'All submitted')+'</strong><span class="jt-sub">Add new records manually or with a timer.</span></div>';
     if(grouped)return tasks.filter(t=>entries.some(l=>l.task===t.id)).map(t=>'<section class="jt-group"><div class="jt-group-head"><div class="jt-stack"><span class="jt-key">'+t.id+'</span><strong>'+esc(t.title)+'</strong></div><div class="jt-right">'+taskTools(t)+'</div></div><div class="jt-group-body">'+entries.filter(l=>l.task===t.id).map(l=>logRow(l,true)).join('')+'</div></section>').join('');
     return entries.map(l=>logRow(l,false)).join('');
   }
   function work(){
     const running=logs.filter(l=>l.started&&!l.used);
-    const toolbar='<div class="jt-section-head"><h3>Логи</h3>'+button('Выбрать доступные','all','','jt-quiet jt-mini')+'</div>'+
-    (running.length?'<div class="jt-band"><span><span class="jt-running-dot"></span>Работают '+running.length+' таймера</span>'+button('Пауза всем','pauseall','','jt-quiet jt-mini')+'</div>':'')+queueTabs();
+    const toolbar='<div class="jt-section-head"><h3>Logs</h3>'+button('Select available','all','','jt-quiet jt-mini')+'</div>'+
+    (running.length?'<div class="jt-band"><span><span class="jt-running-dot"></span>Running '+running.length+' timers</span>'+button('Pause all','pauseall','','jt-quiet jt-mini')+'</div>':'')+queueTabs();
     let body='';
     if(design.layout==='split'){
-      body='<div class="jt-work-grid"><aside><div class="jt-section-head"><h3>Недавние задачи</h3>'+button(ui.batch?'Готово':'Выбрать','batch','','jt-quiet jt-mini')+'</div><div class="jt-task-list">'+recent(false)+'</div>'+
-      (ui.batch?'<div class="jt-row" style="margin-top:10px">'+button('Запустить выбранные','batchstart',ui.taskChecks.size?'':'disabled','jt-primary')+'</div>':'')+'</aside><section>'+toolbar+logContent(false)+'</section></div>';
+      body='<div class="jt-work-grid"><aside><div class="jt-section-head"><h3>Recent issues</h3>'+button(ui.batch?'Done':'Select','batch','','jt-quiet jt-mini')+'</div><div class="jt-task-list">'+recent(false)+'</div>'+
+      (ui.batch?'<div class="jt-row" style="margin-top:10px">'+button('Start selected','batchstart',ui.taskChecks.size?'':'disabled','jt-primary')+'</div>':'')+'</aside><section>'+toolbar+logContent(false)+'</section></div>';
     } else if(design.layout==='list'){
-      body='<div class="jt-section-head"><h3>Быстрые действия</h3>'+button('+ Записать время','manual','','jt-primary')+'</div><div class="jt-task-chips">'+recent(true)+'</div>'+toolbar+logContent(false);
+      body='<div class="jt-section-head"><h3>Quick actions</h3>'+button('+ Record time','manual','','jt-primary')+'</div><div class="jt-task-chips">'+recent(true)+'</div>'+toolbar+logContent(false);
     } else {
-      body='<div class="jt-section-head"><h3>Задачи и их логи</h3>'+button('+ Записать время','manual','','jt-primary')+'</div>'+toolbar+logContent(true);
+      body='<div class="jt-section-head"><h3>Issues and their logs</h3>'+button('+ Record time','manual','','jt-primary')+'</div>'+toolbar+logContent(true);
     }
     const total=chosen().reduce((s,l)=>s+mins(l),0);
-    return '<main class="jt-main"><div class="jt-heading"><div><h2>Работа</h2><div class="jt-subline">Записывайте время сейчас. Распределяйте по дням позже.</div></div></div>'+
-    '<form class="jt-add" data-form="add"><input name="issue" aria-label="ID или ссылка на задачу Jira" placeholder="Ключ, ID или ссылка на задачу Jira" autocomplete="off" required><button type="button" data-submit class="jt-button">'+icon('plus')+'Добавить</button></form>'+body+'</main>'+
-    '<footer class="jt-footer"><div class="jt-footer-summary"><strong>'+chosen().length+' лога · '+dur(total)+'</strong><div class="jt-sub">Выбрано для сборки · исходное время</div></div><input type="date" data-change="date" aria-label="Дата для сборки дня" value="'+ui.date+'">'+button('Собрать день '+icon('arrow-right'),'build',chosen().length?'':'disabled','jt-primary')+'</footer>';
+    return '<main class="jt-main"><div class="jt-heading"><div><h2>Work</h2><div class="jt-subline">Record time now. Allocate it to days later.</div></div></div>'+
+    '<form class="jt-add" data-form="add"><input name="issue" aria-label="ID or Jira issue link" placeholder="Jira issue key, ID, or link" autocomplete="off" required><button type="button" data-submit class="jt-button">'+icon('plus')+'Add</button></form>'+body+'</main>'+
+    '<footer class="jt-footer"><div class="jt-footer-summary"><strong>'+chosen().length+' logs · '+dur(total)+'</strong><div class="jt-sub">Selected for building · source time</div></div><input type="date" data-change="date" aria-label="Day build date" value="'+ui.date+'">'+button('Build day '+icon('arrow-right'),'build',chosen().length?'':'disabled','jt-primary')+'</footer>';
   }
   const fill=s=>s.existing?'var(--jt-existing)':day.sources.findIndex(l=>l.id===s.source)%2?'var(--jt-two)':'var(--jt-one)';
   function validate(){
     if(!day)return '';
-    if(day.end<=day.start||day.end-day.start>480)return 'Весь день вместе с паузами должен укладываться в 8 часов.';
+    if(day.end<=day.start||day.end-day.start>480)return 'The full day, including breaks, must fit within eight hours.';
     const items=day.segments.concat(day.breaks).slice().sort((a,b)=>a.start-b.start);
     for(let i=0;i<items.length;i++){
-      if(items[i].duration<=0||items[i].start<day.start||items[i].start+items[i].duration>day.end)return 'Один из интервалов выходит за границы дня.';
-      if(i&&items[i].start<items[i-1].start+items[i-1].duration)return 'Есть пересечение интервалов. Исправьте начало или длительность.';
+      if(items[i].duration<=0||items[i].start<day.start||items[i].start+items[i].duration>day.end)return 'An interval extends beyond day boundaries.';
+      if(i&&items[i].start<items[i-1].start+items[i-1].duration)return 'Intervals overlap. Correct their starts or durations.';
     }
     return '';
   }
   function build(){
-    if(day&&day.frozen){tell('Сначала завершите отправку текущего дня.');render();return}
+    if(day&&day.frozen){tell('Finish submitting the current day first.');render();return}
     const input=chosen();
-    if(!input.length){tell('Выберите хотя бы один остановленный лог.');render();return}
+    if(!input.length){tell('Select at least one stopped log.');render();return}
     const shift=(revision++%3)*3;
     const start=514,end=982-shift;
-    const breaks=[{start:606+shift,duration:8,label:'Короткая пауза'},{start:746+shift,duration:35,label:'Обед'},{start:867+shift,duration:8,label:'Короткая пауза'}];
-    const existing={id:'existing',task:'ESP-201',title:'Ежедневная встреча',description:'Уже в Jira',start:514,duration:60,existing:true};
+    const breaks=[{start:606+shift,duration:8,label:'Short break'},{start:746+shift,duration:35,label:'Lunch'},{start:867+shift,duration:8,label:'Short break'}];
+    const existing={id:'existing',task:'ESP-201',title:'Daily meeting',description:'Already in Jira',start:514,duration:60,existing:true};
     const budget=end-start-51-60;
     const flexible=input.filter(l=>!locks.has(l.id)),locked=input.filter(l=>locks.has(l.id));
     const remainder=budget-locked.reduce((n,l)=>n+mins(l),0);
-    if(remainder<0||(!flexible.length&&remainder!==0)||remainder<flexible.length){tell('Зафиксированные длительности не заполняют доступное время. Измените фиксацию.');render();return}
+    if(remainder<0||(!flexible.length&&remainder!==0)||remainder<flexible.length){tell('Locked durations do not fill the available time. Change the locks.');render();return}
     const amounts={}; locked.forEach(l=>amounts[l.id]=mins(l));
     let allocated=0,weight=flexible.reduce((n,l)=>n+mins(l),0);
     flexible.forEach((l,i)=>{amounts[l.id]=i===flexible.length-1?remainder-allocated:Math.round(remainder*mins(l)/weight);allocated+=amounts[l.id]});
@@ -327,49 +327,49 @@
     ui.screen='day';ui.edit=null;ui.toast='';render();
   }
   function sourceList(){
-    return '<aside class="jt-sources"><h3>Из выбранных логов</h3>'+day.sources.map(l=>{
+    return '<aside class="jt-sources"><h3>From selected logs</h3>'+day.sources.map(l=>{
       const result=day.segments.filter(s=>s.source===l.id).reduce((n,s)=>n+s.duration,0);
-      return '<div class="jt-source"><span class="jt-key">'+l.task+'</span><div class="jt-task-name" style="font-size:13px;margin-bottom:0">'+esc(task(l.task).title)+'</div><div class="jt-source-durations"><span>'+dur(l.original)+'</span>'+icon('arrow-right')+'<strong>'+dur(result)+'</strong></div><label class="jt-checkbox-label"><input type="checkbox" data-change="lock" data-id="'+l.id+'" '+(locks.has(l.id)?'checked ':'')+(day.frozen?'disabled':'')+'>Сохранить исходную длительность</label></div>';
-    }).join('')+'<div class="jt-notice">Исходные логи сохраняются. Меняется время в этом дне.</div></aside>';
+      return '<div class="jt-source"><span class="jt-key">'+l.task+'</span><div class="jt-task-name" style="font-size:13px;margin-bottom:0">'+esc(task(l.task).title)+'</div><div class="jt-source-durations"><span>'+dur(l.original)+'</span>'+icon('arrow-right')+'<strong>'+dur(result)+'</strong></div><label class="jt-checkbox-label"><input type="checkbox" data-change="lock" data-id="'+l.id+'" '+(locks.has(l.id)?'checked ':'')+(day.frozen?'disabled':'')+'>Preserve original duration</label></div>';
+    }).join('')+'<div class="jt-notice">Source logs are preserved. Only time in this day changes.</div></aside>';
   }
   function segmentRow(s){
-    const status={pending:'',sent:'Отправлено',failed:'Не отправлено · ошибка соединения',unknown:'Результат нужно проверить'}[s.status]||'';
+    const status={pending:'',sent:'Submitted',failed:'Not sent · connection error',unknown:'Result needs checking'}[s.status]||'';
     const canEdit=!s.existing&&!day.frozen;
     const content='<div class="jt-segment-time">'+hhmm(s.start)+'<span>'+hhmm(s.start+s.duration)+'</span></div><div><div class="jt-key">'+s.task+'</div><div class="jt-segment-title">'+esc(s.title||task(s.task).title)+'</div><div class="jt-log-desc">'+esc(s.description)+'</div>'+(status?'<div class="jt-status '+s.status+'">'+status+'</div>':'')+'</div><span class="jt-segment-duration">'+dur(s.duration)+'</span><span style="color:'+(s.status==='sent'?'var(--jt-green)':'var(--jt-muted)')+'">'+icon(s.existing?'lock-keyhole':s.status==='sent'?'check':canEdit?'pencil':'circle-alert')+'</span>';
-    let row='<div class="jt-segment">'+(canEdit?'<button type="button" class="jt-segment-button" data-act="editsegment" data-id="'+s.id+'" aria-label="Изменить '+s.task+' в '+hhmm(s.start)+'">'+content+'</button>':'<div class="jt-segment-button">'+content+'</div>');
+    let row='<div class="jt-segment">'+(canEdit?'<button type="button" class="jt-segment-button" data-act="editsegment" data-id="'+s.id+'" aria-label="Edit '+s.task+' at '+hhmm(s.start)+'">'+content+'</button>':'<div class="jt-segment-button">'+content+'</div>');
     if(ui.edit===s.id&&canEdit){
-      row+='<form class="jt-edit" data-form="segment" data-id="'+s.id+'"><div class="jt-form-grid"><label class="jt-field"><span>Начало</span><input name="start" type="time" value="'+hhmm(s.start)+'" required></label><label class="jt-field"><span>Длительность, ч:мин</span><input name="duration" value="'+dur(s.duration)+'" inputmode="numeric" required></label></div><label class="jt-field"><span>Что сделано</span><textarea name="description">'+esc(s.description)+'</textarea></label><div class="jt-row" style="margin-top:12px">'+button('Удалить','removesegment','data-id="'+s.id+'"','jt-quiet jt-danger')+'<span class="jt-right"></span>'+button('Отмена','canceledit','','jt-quiet')+'<button type="button" data-submit class="jt-button jt-primary">Сохранить</button></div></form>';
+      row+='<form class="jt-edit" data-form="segment" data-id="'+s.id+'"><div class="jt-form-grid"><label class="jt-field"><span>Start</span><input name="start" type="time" value="'+hhmm(s.start)+'" required></label><label class="jt-field"><span>Duration, h:min</span><input name="duration" value="'+dur(s.duration)+'" inputmode="numeric" required></label></div><label class="jt-field"><span>What was done</span><textarea name="description">'+esc(s.description)+'</textarea></label><div class="jt-row" style="margin-top:12px">'+button('Delete','removesegment','data-id="'+s.id+'"','jt-quiet jt-danger')+'<span class="jt-right"></span>'+button('Cancel','canceledit','','jt-quiet')+'<button type="button" data-submit class="jt-button jt-primary">Save</button></div></form>';
     }
-    if(s.status==='unknown')row+='<div style="padding:0 12px 12px">'+button('Проверить результат','reconcile','data-id="'+s.id+'"','jt-mini')+'</div>';
+    if(s.status==='unknown')row+='<div style="padding:0 12px 12px">'+button('Check result','reconcile','data-id="'+s.id+'"','jt-mini')+'</div>';
     return row+'</div>';
   }
   function dayScreen(){
-    if(!day)return '<main class="jt-main"><h2>День</h2><div class="jt-empty">'+icon('calendar-days')+'<strong>Соберите день из своих логов</strong><span>На «Работе» выберите записи и нужную дату.</span>'+button('Выбрать логи','work','','jt-primary')+'</div></main>';
+    if(!day)return '<main class="jt-main"><h2>Day</h2><div class="jt-empty">'+icon('calendar-days')+'<strong>Build a day from your logs</strong><span>Select records and the required date on Work.</span>'+button('Select logs','work','','jt-primary')+'</div></main>';
     const newSegments=day.segments.filter(s=>!s.existing),newTotal=newSegments.reduce((n,s)=>n+s.duration,0),total=day.segments.reduce((n,s)=>n+s.duration,0),gaps=day.end-day.start-total;
     const ordered=day.segments.concat(day.breaks.map(b=>({...b,isBreak:true}))).sort((a,b)=>a.start-b.start);
     const error=validate(),sent=newSegments.filter(s=>s.status==='sent').length,allSent=sent===newSegments.length&&sent>0;
     const retry=newSegments.filter(s=>s.status==='failed'||s.status==='pending').length;
     const unknown=newSegments.filter(s=>s.status==='unknown').length;
     const track=ordered.map(s=>'<'+(s.isBreak||s.existing?'span':'button type="button" data-act="editsegment" data-id="'+s.id+'"')+' class="jt-track-part '+(s.isBreak?'jt-break-fill':'')+'" style="flex:'+s.duration+';'+(!s.isBreak?'background:'+fill(s):'')+'" data-tooltip="'+esc((s.label||s.task)+' · '+hhmm(s.start)+'–'+hhmm(s.start+s.duration))+'" aria-label="'+esc((s.label||s.task)+' '+dur(s.duration))+'"></'+(s.isBreak||s.existing?'span':'button')+'>').join('');
-    return '<main class="jt-main"><div class="jt-heading"><div><h2>День</h2><div class="jt-subline">'+(allSent?'Все записи отправлены':day.frozen?'Результат отправки':'Черновик · можно редактировать')+'</div></div><div class="jt-row"><input type="date" aria-label="Дата дня" data-change="date" value="'+ui.date+'" '+(day.frozen?'disabled':'')+' style="width:148px">'+button(icon('shuffle')+'Пересобрать','build',day.frozen?'disabled':'','')+'</div></div>'+
-    (allSent?'<div class="jt-success" role="status" style="margin-bottom:16px">'+icon('check-check')+' Отправлено '+sent+' записей · '+dur(newTotal)+' нового времени</div>':'')+
-    '<div class="jt-day-top"><label class="jt-metric"><span>Границы дня</span><div class="jt-day-bound"><input type="time" data-change="startbound" value="'+hhmm(day.start)+'" aria-label="Начало дня" '+(day.frozen?'disabled':'')+'><span>—</span><input type="time" data-change="endbound" value="'+hhmm(day.end)+'" aria-label="Конец дня" '+(day.frozen?'disabled':'')+'></div></label><div class="jt-metric"><span>Весь день</span><strong>'+dur(day.end-day.start)+'</strong></div><div class="jt-metric"><span>Паузы</span><strong>'+dur(Math.max(0,gaps))+'</strong></div><div class="jt-metric"><span>В Jira за день</span><strong>'+dur(total)+'</strong></div></div>'+
-    '<div class="jt-track-wrap"><div class="jt-track" aria-label="Распределение времени по дню">'+track+'</div><div class="jt-track-labels"><span>'+hhmm(day.start)+'</span><span>12:00</span><span>'+hhmm(day.end)+'</span></div><div class="jt-legend"><span><i class="jt-swatch" style="background:var(--jt-one)"></i>Выбранные логи</span><span><i class="jt-swatch" style="background:var(--jt-existing)"></i>Уже в Jira · 1:00</span><span><i class="jt-swatch" style="background:var(--jt-break)"></i>Паузы</span></div></div>'+
-    '<div class="jt-day-grid"><section><div class="jt-section-head"><h3>Расписание</h3><span class="jt-sub">'+newSegments.length+' новых записей</span></div><div class="jt-day-list">'+ordered.map(s=>s.isBreak?'<div class="jt-break-row"><span>'+hhmm(s.start)+'</span>'+icon(s.label==='Обед'?'utensils':'coffee')+'<span>'+s.label+'</span><span class="jt-right">'+s.duration+' мин</span></div>':segmentRow(s)).join('')+'</div></section>'+sourceList()+'</div>'+
-    (error?'<div class="jt-error" role="alert">'+error+'</div>':'')+'</main><footer class="jt-footer"><div class="jt-footer-summary"><strong>'+(allSent?'День готов':day.frozen?'Отправлено '+sent+' из '+newSegments.length:newSegments.length+' записей · '+dur(newTotal))+'</strong><div class="jt-sub">'+(unknown?'Есть '+unknown+' запись с неизвестным результатом':allSent?'Логи перемещены в историю':day.frozen?'Подтверждённые записи повторно не отправляются':'Будет добавлено к существующему часу в Jira')+'</div></div>'+
-    (allSent?button('Вернуться к работе','work','','jt-primary'):button(ui.sending?'Отправка…':day.frozen?'Повторить '+retry+' записей':'Отправить в Jira','send',error||ui.sending||(!retry&&day.frozen)?'disabled':'','jt-primary'))+'</footer>';
+    return '<main class="jt-main"><div class="jt-heading"><div><h2>Day</h2><div class="jt-subline">'+(allSent?'All records submitted':day.frozen?'Submission result':'Draft · editable')+'</div></div><div class="jt-row"><input type="date" aria-label="Day date" data-change="date" value="'+ui.date+'" '+(day.frozen?'disabled':'')+' style="width:148px">'+button(icon('shuffle')+'Rebuild','build',day.frozen?'disabled':'','')+'</div></div>'+
+    (allSent?'<div class="jt-success" role="status" style="margin-bottom:16px">'+icon('check-check')+' Submitted '+sent+' records · '+dur(newTotal)+' new time</div>':'')+
+    '<div class="jt-day-top"><label class="jt-metric"><span>Day boundaries</span><div class="jt-day-bound"><input type="time" data-change="startbound" value="'+hhmm(day.start)+'" aria-label="Day start" '+(day.frozen?'disabled':'')+'><span>—</span><input type="time" data-change="endbound" value="'+hhmm(day.end)+'" aria-label="Day end" '+(day.frozen?'disabled':'')+'></div></label><div class="jt-metric"><span>Full day</span><strong>'+dur(day.end-day.start)+'</strong></div><div class="jt-metric"><span>Breaks</span><strong>'+dur(Math.max(0,gaps))+'</strong></div><div class="jt-metric"><span>Jira time for the day</span><strong>'+dur(total)+'</strong></div></div>'+
+    '<div class="jt-track-wrap"><div class="jt-track" aria-label="Time distribution throughout the day">'+track+'</div><div class="jt-track-labels"><span>'+hhmm(day.start)+'</span><span>12:00</span><span>'+hhmm(day.end)+'</span></div><div class="jt-legend"><span><i class="jt-swatch" style="background:var(--jt-one)"></i>Selected logs</span><span><i class="jt-swatch" style="background:var(--jt-existing)"></i>Already in Jira · 1:00</span><span><i class="jt-swatch" style="background:var(--jt-break)"></i>Breaks</span></div></div>'+
+    '<div class="jt-day-grid"><section><div class="jt-section-head"><h3>Schedule</h3><span class="jt-sub">'+newSegments.length+' new records</span></div><div class="jt-day-list">'+ordered.map(s=>s.isBreak?'<div class="jt-break-row"><span>'+hhmm(s.start)+'</span>'+icon(s.label==='Lunch'?'utensils':'coffee')+'<span>'+s.label+'</span><span class="jt-right">'+s.duration+' min</span></div>':segmentRow(s)).join('')+'</div></section>'+sourceList()+'</div>'+
+    (error?'<div class="jt-error" role="alert">'+error+'</div>':'')+'</main><footer class="jt-footer"><div class="jt-footer-summary"><strong>'+(allSent?'Day ready':day.frozen?'Submitted '+sent+' of '+newSegments.length:newSegments.length+' records · '+dur(newTotal))+'</strong><div class="jt-sub">'+(unknown?'There are '+unknown+' record with an unknown result':allSent?'Logs moved to history':day.frozen?'Confirmed records are never submitted again':'Will be added to the existing Jira hour')+'</div></div>'+
+    (allSent?button('Return to Work','work','','jt-primary'):button(ui.sending?'Submitting…':day.frozen?'Retry '+retry+' records':'Submit to Jira','send',error||ui.sending||(!retry&&day.frozen)?'disabled':'','jt-primary'))+'</footer>';
   }
   function settings(){
-    const range=(label,a,b,type)=>'<div class="jt-range"><h3 style="margin:0">'+label+'</h3><div class="jt-range-inputs"><input type="'+(type||'time')+'" value="'+a+'" aria-label="'+label+' минимум"><span class="jt-sub">—</span><input type="'+(type||'time')+'" value="'+b+'" aria-label="'+label+' максимум"></div></div>';
-    return '<main class="jt-main"><div class="jt-heading"><div><h2>Настройки</h2><div class="jt-subline">Подключение и привычный рабочий день</div></div></div><form data-form="settings"><div class="jt-settings"><section class="jt-settings-section"><h3>'+icon('plug')+' Подключение к Jira</h3><label class="jt-field"><span>Адрес Jira</span><input name="url" type="url" value="'+esc(config.url)+'" required></label><label class="jt-field"><span>Email</span><input name="email" type="email" value="'+esc(config.email)+'" required></label><label class="jt-field"><span>API token</span><input name="token" type="password" value="'+esc(config.token)+'" placeholder="Введите токен" autocomplete="off"></label><div class="jt-sub" style="margin-bottom:14px">Значения из окружения подставляются в поля. Сохранённые изменения имеют приоритет.</div>'+button('Проверить подключение','checkconnection','','')+'<div class="jt-status" role="status">'+esc(ui.settingsStatus)+'</div></section><section class="jt-settings-section"><h3>'+icon('calendar-clock')+' Сборка дня</h3>'+range('Начало работы','08:00','09:00')+range('День вместе с паузами','07:30','08:00')+range('Начало обеда','12:00','14:00')+range('Обед, минут','30','45','number')+range('Коротких пауз','2','4','number')+range('Пауза, минут','5','10','number')+'</section></div><div class="jt-row" style="margin-top:18px;justify-content:flex-end">'+button('Назад','work','','jt-quiet')+'<button type="button" data-submit class="jt-button jt-primary">Сохранить настройки</button></div></form></main>';
+    const range=(label,a,b,type)=>'<div class="jt-range"><h3 style="margin:0">'+label+'</h3><div class="jt-range-inputs"><input type="'+(type||'time')+'" value="'+a+'" aria-label="'+label+' minimum"><span class="jt-sub">—</span><input type="'+(type||'time')+'" value="'+b+'" aria-label="'+label+' maximum"></div></div>';
+    return '<main class="jt-main"><div class="jt-heading"><div><h2>Settings</h2><div class="jt-subline">Connection and your usual working day</div></div></div><form data-form="settings"><div class="jt-settings"><section class="jt-settings-section"><h3>'+icon('plug')+' Jira connection</h3><label class="jt-field"><span>Jira address</span><input name="url" type="url" value="'+esc(config.url)+'" required></label><label class="jt-field"><span>Email</span><input name="email" type="email" value="'+esc(config.email)+'" required></label><label class="jt-field"><span>API token</span><input name="token" type="password" value="'+esc(config.token)+'" placeholder="Enter token" autocomplete="off"></label><div class="jt-sub" style="margin-bottom:14px">Environment values populate the fields. Saved changes take precedence.</div>'+button('Check connection','checkconnection','','')+'<div class="jt-status" role="status">'+esc(ui.settingsStatus)+'</div></section><section class="jt-settings-section"><h3>'+icon('calendar-clock')+' Day build</h3>'+range('Work start','08:00','09:00')+range('Day including breaks','07:30','08:00')+range('Lunch start','12:00','14:00')+range('Lunch, minutes','30','45','number')+range('Short breaks','2','4','number')+range('Break, minutes','5','10','number')+'</section></div><div class="jt-row" style="margin-top:18px;justify-content:flex-end">'+button('Back','work','','jt-quiet')+'<button type="button" data-submit class="jt-button jt-primary">Save settings</button></div></form></main>';
   }
   function modal(){
     if(!ui.modal)return '';
     const m=ui.modal,l=m.log?logs.find(x=>x.id===m.log):null,t=m.task||l?.task||tasks[0]?.id;
     const timer=m.kind==='timer';
-    return '<div class="jt-overlay"><section class="jt-dialog" role="dialog" aria-modal="true" aria-labelledby="jt-dialog-title"><div class="jt-dialog-head"><h3 id="jt-dialog-title">'+(timer?'Новый лог':l?'Изменить лог':'Добавить время')+'</h3>'+action('x','Закрыть','close')+'</div><form data-form="manual"><label class="jt-field"><span>Задача</span><select name="task" '+(l?'disabled':'')+'>'+tasks.map(x=>'<option value="'+x.id+'" '+(x.id===t?'selected':'')+'>'+x.id+' · '+esc(x.title)+'</option>').join('')+'</select></label>'+
-    (!timer?'<div class="jt-form-grid"><label class="jt-field"><span>Часы</span><input name="hours" type="number" min="0" max="99" value="'+(l?Math.floor(mins(l)/60):'')+'" placeholder="3" required></label><label class="jt-field"><span>Минуты</span><input name="minutes" type="number" min="0" max="59" value="'+(l?mins(l)%60:0)+'" required></label></div>':'<div style="height:16px"></div>')+
-    '<label class="jt-field"><span>Что сделано <span style="font-weight:400">· необязательно</span></span><textarea name="description" placeholder="Кратко опишите результат">'+esc(l?.description||'')+'</textarea></label><div class="jt-dialog-actions">'+button('Отмена','close','','jt-quiet')+'<button type="button" data-submit class="jt-button jt-primary">'+(timer?'Создать и запустить':l?'Сохранить':'Добавить лог')+'</button></div></form></section></div>';
+    return '<div class="jt-overlay"><section class="jt-dialog" role="dialog" aria-modal="true" aria-labelledby="jt-dialog-title"><div class="jt-dialog-head"><h3 id="jt-dialog-title">'+(timer?'New log':l?'Edit log':'Add time')+'</h3>'+action('x','Close','close')+'</div><form data-form="manual"><label class="jt-field"><span>Issue</span><select name="task" '+(l?'disabled':'')+'>'+tasks.map(x=>'<option value="'+x.id+'" '+(x.id===t?'selected':'')+'>'+x.id+' · '+esc(x.title)+'</option>').join('')+'</select></label>'+
+    (!timer?'<div class="jt-form-grid"><label class="jt-field"><span>Hours</span><input name="hours" type="number" min="0" max="99" value="'+(l?Math.floor(mins(l)/60):'')+'" placeholder="3" required></label><label class="jt-field"><span>Minutes</span><input name="minutes" type="number" min="0" max="59" value="'+(l?mins(l)%60:0)+'" required></label></div>':'<div style="height:16px"></div>')+
+    '<label class="jt-field"><span>What was done <span style="font-weight:400">· optional</span></span><textarea name="description" placeholder="Briefly describe the result">'+esc(l?.description||'')+'</textarea></label><div class="jt-dialog-actions">'+button('Cancel','close','','jt-quiet')+'<button type="button" data-submit class="jt-button jt-primary">'+(timer?'Create and start':l?'Save':'Add log')+'</button></div></form></section></div>';
   }
   function render(){
     root.style.setProperty('--jt-pad',design.density==='compact'?'10px':'14px');
@@ -382,7 +382,7 @@
     let l=logs.find(l=>l.task===id&&l.started&&!l.used);
     if(l){pause(l);return}
     l=logs.find(l=>l.task===id&&!l.used&&!l.reserved);
-    if(!l){l={id:nextId++,task:id,seconds:0,description:'',date:'Сегодня',source:'Таймер'};logs.unshift(l)}
+    if(!l){l={id:nextId++,task:id,seconds:0,description:'',date:'Today',source:'Timer'};logs.unshift(l)}
     l.started=Date.now();selected.delete(l.id);
   }
   function consume(){
@@ -412,8 +412,8 @@
       if(!day.segments.some(s=>s.source===segment.source)){const log=logs.find(l=>l.id===segment.source);log.reserved=false;selected.delete(log.id);day.sources=day.sources.filter(l=>l.id!==log.id)}
       ui.edit=null;
     }
-    if(act==='checkconnection'){ui.settingsStatus='В макете: подключение успешно. Реальный запрос не выполняется.';tell('Показан пример успешной проверки подключения.')}
-    if(act==='reconcile'){const s=day.segments.find(s=>s.id===el.dataset.id);s.status='sent';consume();tell('Запись найдена. Повторная отправка не нужна.')}
+    if(act==='checkconnection'){ui.settingsStatus='Mockup: connection successful. No real request is made.';tell('An example successful connection check is shown.')}
+    if(act==='reconcile'){const s=day.segments.find(s=>s.id===el.dataset.id);s.status='sent';consume();tell('Record found. No repeated submission is needed.')}
     if(act==='send'&&day&&!validate()){
       ui.sending=true;day.frozen=true;render();
       setTimeout(()=>{
@@ -430,7 +430,7 @@
     if(type==='select'){el.checked?selected.add(id):selected.delete(id)}
     if(type==='taskcheck'){el.checked?ui.taskChecks.add(el.dataset.task):ui.taskChecks.delete(el.dataset.task)}
     if(type==='date'){ui.date=el.value;if(day)day.date=el.value}
-    if(type==='lock'){el.checked?locks.add(id):locks.delete(id);tell('Фиксация применяется при пересборке дня.')}
+    if(type==='lock'){el.checked?locks.add(id):locks.delete(id);tell('Locks apply when rebuilding the day.')}
     if(type==='startbound')day.start=readTime(el.value);
     if(type==='endbound')day.end=readTime(el.value);
     if(type)render();
@@ -440,29 +440,29 @@
     const data=new FormData(form),kind=form.dataset.form;
     if(kind==='add'){
       const raw=String(data.get('issue')).trim(),key=(raw.match(/[a-z][a-z0-9_]*-\d+/i)||[])[0]?.toUpperCase()||(/^\d+$/.test(raw)?'ESP-'+raw:null);
-      if(!key){tell('Введите ключ вроде ESP-248 или ссылку на задачу.');render();return}
-      if(tasks.some(t=>t.id===key))tell(key+' уже есть в недавних задачах.');
-      else{tasks.unshift({id:key,title:'Новая задача · пример'});tell(key+' добавлена в макет. Можно запустить таймер или добавить время.')}
+      if(!key){tell('Enter a key such as ESP-248 or an issue link.');render();return}
+      if(tasks.some(t=>t.id===key))tell(key+' already exists in recent issues.');
+      else{tasks.unshift({id:key,title:'New issue · example'});tell(key+' added to the mockup. You can start a timer or add time.')}
     }
     if(kind==='manual'){
       const m=ui.modal,l=m.log?logs.find(l=>l.id===m.log):null,tid=l?l.task:String(data.get('task')),description=String(data.get('description')||'');
       if(m.kind==='timer'){
-        logs.filter(l=>l.task===tid).forEach(pause);logs.unshift({id:nextId++,task:tid,seconds:0,started:Date.now(),description,date:'Сегодня',source:'Таймер'});
+        logs.filter(l=>l.task===tid).forEach(pause);logs.unshift({id:nextId++,task:tid,seconds:0,started:Date.now(),description,date:'Today',source:'Timer'});
       } else{
         const minutes=Number(data.get('hours'))*60+Number(data.get('minutes'));
-        if(minutes<=0){form.querySelector('[name=hours]').setCustomValidity('Укажите положительную длительность.');form.reportValidity();form.querySelector('[name=hours]').setCustomValidity('');return}
+        if(minutes<=0){form.querySelector('[name=hours]').setCustomValidity('Specify a positive duration.');form.reportValidity();form.querySelector('[name=hours]').setCustomValidity('');return}
         if(l){l.seconds=minutes*60;l.description=description}
-        else logs.unshift({id:nextId++,task:tid,seconds:minutes*60,started:null,description,date:'Сегодня',source:'Вручную'});
-        tell('Лог '+tid+' · '+dur(minutes)+' сохранён локально.');
+        else logs.unshift({id:nextId++,task:tid,seconds:minutes*60,started:null,description,date:'Today',source:'Manual'});
+        tell('Log '+tid+' · '+dur(minutes)+' saved locally.');
       }
       ui.modal=null;
     }
     if(kind==='segment'){
       const s=day.segments.find(s=>s.id===form.dataset.id),duration=readTime(data.get('duration'));
-      if(!Number.isFinite(duration)||duration<=0){form.querySelector('[name=duration]').setCustomValidity('Введите длительность, например 1:20.');form.reportValidity();form.querySelector('[name=duration]').setCustomValidity('');return}
+      if(!Number.isFinite(duration)||duration<=0){form.querySelector('[name=duration]').setCustomValidity('Enter a duration, for example 1:20.');form.reportValidity();form.querySelector('[name=duration]').setCustomValidity('');return}
       s.start=readTime(data.get('start'));s.duration=duration;s.description=String(data.get('description'));ui.edit=null;
     }
-    if(kind==='settings'){config.url=String(data.get('url'));config.email=String(data.get('email'));config.token=String(data.get('token'));tell('Настройки изменены в макете.');ui.screen='work'}
+    if(kind==='settings'){config.url=String(data.get('url'));config.email=String(data.get('email'));config.token=String(data.get('token'));tell('Settings changed in the mockup.');ui.screen='work'}
     render();
   }
   root.addEventListener('submit',e=>{e.preventDefault();submitForm(e.target)});
@@ -474,9 +474,9 @@
   setInterval(()=>{root.querySelectorAll('[data-live]').forEach(el=>{const l=logs.find(l=>l.id===Number(el.dataset.live));if(l&&l.started)el.textContent=live(l)})},1000);
   if(globalThis.Tweak){
     const tweak=new Tweak({container:root,onChange:render});
-    tweak.addSelect(design,'layout',{label:'Компоновка «Работы»',options:[{label:'Две колонки — рекомендую',value:'split'},{label:'Логи на первом месте',value:'list'},{label:'Группы по задачам',value:'groups'}]});
-    tweak.addSelect(design,'density',{label:'Плотность',options:[{label:'Обычная',value:'comfortable'},{label:'Компактная',value:'compact'}]});
-    tweak.addSelect(design,'delivery',{label:'Пример результата отправки',options:[{label:'Всё успешно',value:'success'},{label:'Часть записей с ошибкой',value:'partial'},{label:'Потерян ответ Jira',value:'unknown'}]});
+    tweak.addSelect(design,'layout',{label:'Work layout',options:[{label:'Two columns — recommended',value:'split'},{label:'Logs first',value:'list'},{label:'Grouped by issue',value:'groups'}]});
+    tweak.addSelect(design,'density',{label:'Density',options:[{label:'Normal',value:'comfortable'},{label:'Compact',value:'compact'}]});
+    tweak.addSelect(design,'delivery',{label:'Sample submission result',options:[{label:'All successful',value:'success'},{label:'Some records failed',value:'partial'},{label:'Jira response lost',value:'unknown'}]});
   }
 })();
 </script>

@@ -1,192 +1,218 @@
-# Jira Time Tracker (Windows и macOS)
+# Jira Time Tracker (Windows and macOS)
 
-Локальное desktop-приложение на Flutter для учёта рабочего времени, параллельных таймеров по задачам, сборки рабочего дня и надёжной отправки интервалов в Jira Cloud REST API v3. Windows и macOS собираются и проходят проверку запуска на GitHub Actions. Поддержка macOS пока экспериментальная: перед выпуском нужна ручная проверка на Mac.
+A local Flutter desktop application for tracking work time, running parallel issue timers, planning a workday, and reliably submitting worklogs to Jira Cloud REST API v3. Windows and macOS builds are tested for startup in GitHub Actions. macOS support is experimental and requires manual testing on a Mac before a release.
 
-Интерфейс поддерживает русский и английский. Документация — на русском.
+The interface supports English and Russian. Project documentation is maintained in English.
 
-Готовые версии планируется распространять через GitHub Releases. Форматы пакетов,
-workflow и порядок выпуска описаны в [инструкции публикации](docs/releases.md).
+Application packages will be distributed through GitHub Releases. Package formats, the build workflow, and the release process are described in the [release guide](docs/releases.md).
 
-Сквозные сценарии человека и локального AI-агента собраны в [пользовательских историях](docs/specs/user-stories.md). Подробные продуктовые правила и критерии A01–A24 находятся в [спецификации MVP](docs/specs/jira-time-tracker-mvp.md).
+End-to-end workflows for people and local AI agents are covered in the [user stories](docs/specs/user-stories.md). Detailed product rules and acceptance scenarios A01–A24 are defined in the [MVP specification](docs/specs/jira-time-tracker-mvp.md).
 
----
+## 1. Features
 
-## 1. Основные возможности
+- **Parallel timers and manual time entry:**
+  - Run multiple issue timers at the same time.
+  - Timers survive hibernation, sleep, and application restarts: elapsed time is calculated from persistent UTC timestamps (`LogClock`).
+  - Add time manually, such as a three-hour call without a running timer.
+  - Edit descriptions and durations in the queue of unused logs.
 
-- **Параллельные таймеры и ручной ввод времени:**
-  - Одновременный запуск нескольких таймеров без взаимной блокировки.
-  - Устойчивость к гибернации, спящему режиму Windows и перезапускам приложения: чистое вычисление затраченного времени на основе неизменяемых UTC-отметок (`LogClock`).
-  - Быстрое ручное добавление логов (например, 3 часа звонков без запуска таймера).
-  - Редактирование описаний и длительности в очереди незадействованных логов.
+- **Issue catalog and search:**
+  - Cache issues in a local SQLite database.
+  - Find and add issues by key (`PROJ-123`) or a direct issue URL.
+  - Configure quick issues separately for each Jira site and account, with Jira validation, a local note, and a shortcut to manual time entry.
+  - Filter by recent use: seven days, 30 days, or all time.
 
-- **Каталог задач и быстрый поиск:**
-  - Кэширование задач в локальной SQLite-базе.
-  - Поиск и добавление задач по ключу (`PROJ-123`) или прямой ссылке на задачу в браузере.
-  - Настраиваемые «Быстрые задачи» отдельно для каждого Jira-сайта и аккаунта: проверка задачи в Jira, локальная подсказка и быстрый переход к ручному вводу времени.
-  - Фильтрация по периодам последнего использования (7 дней, 30 дней, все).
+- **Day planning (`DayBuilder`):**
+  - Generate a deterministic schedule using a stored random `seed`.
+  - Account for existing Jira worklogs when finding available time slots.
+  - Schedule a long break and short breaks using configurable ranges.
+  - Distribute accumulated issue time proportionally, with whole-second precision.
+  - Preserve the exact duration of locked issues (`durationLocked`).
+  - Split large intervals into smaller parts while retaining their descriptions and source-log references.
+  - Automatic builds use saved ranges; manual and agent-created drafts can contain parallel work intervals.
 
-- **Интеллектуальный сборщик дня (`DayBuilder`):**
-  - Детерминированная сборка расписания на основе фиксируемого `seed`.
-  - Учёт существующих записей в Jira при автоматическом поиске свободных слотов.
-  - Автоматическое планирование обеденного перерыва (12:00–14:00, 30–45 мин) и коротких пауз (5–10 мин) с интервалом между ними не менее 5 минут.
-  - Пропорциональная раскладка накопленного времени задач с сохранением целочисленной точности до секунды.
-  - Поддержка фиксации длительности отдельных задач (`durationLocked`) с сохранением их точной длительности.
-  - Автоматическое разбиение крупных интервалов (> 120 минут) на части по 45–120 минут с наследованием описания и привязкой к исходному логу.
-  - Автоматическая сборка использует сохранённые диапазоны; ручной и агентский черновик могут содержать параллельную работу.
+- **Visual schedule editor:**
+  - Navigate between dates and see total time, issue totals, and breaks.
+  - Adjust interval start times and durations interactively.
+  - View parallel work intervals on separate tracks. Intervals outside the selected date and breaks overlapping work block submission.
+  - The draft's composition is locked once submission begins.
 
-- **Наглядный редактор расписания:**
-  - Календарная навигация по дням с отображением общего времени, сумм по задачам и пауз.
-  - Интерактивное редактирование границ начала и длительности сегментов.
-  - Параллельные рабочие интервалы показаны на отдельных дорожках; ошибки границ даты и пересечения пауз с работой блокируют отправку.
-  - Защита черновика: после начала отправки состав плана фиксируется.
+- **Reliable Jira Cloud submission and recovery:**
+  - Submit intervals individually with `adjustEstimate=leave` and comments in Atlassian Document Format (ADF).
+  - Attach the `jira-time-tracker.segment` property to each worklog, with the value `{id: <segment UUID>}`.
+  - Persist the request body and `sending` status in a SQLite transaction before making the network request.
+  - Mark a source log as `consumed` only when **all** its segments are `sent`.
+  - Preserve confirmed results after partial success; another submission sends only the remaining eligible intervals.
+  - Treat an interrupted connection or timeout as `unknown`; blind retries are blocked.
+  - Reconcile results by looking for the segment property in Jira worklogs, avoiding duplicate POST requests.
+  - Resolve an unknown result manually by verifying an existing worklog ID or explicitly confirming that the entry does not exist.
 
-- **Безопасная отправка в Jira Cloud и восстановление при сбоях:**
-  - Пошаговая отправка каждого интервала с параметром `adjustEstimate=leave` и структурой комментариев Atlassian Document Format (ADF).
-  - В каждый создаваемый worklog записывается свойство (property) `jira-time-tracker.segment` со значением `{id: <segment UUID>}`.
-  - Транзакционная фиксация тела запроса и статуса `sending` в SQLite до выполнения сетевого запроса.
-  - Исходный локальный лог помечается использованным (`consumed`) только тогда, когда **все** его сегменты перешли в статус `sent`.
-  - Защита от дублирования: при частичном успехе подтверждённые записи сохраняются, повторный клик отправляет только оставшиеся.
-  - При обрыве сети или таймауте статус переходит в `unknown`. Слепая повторная отправка запрещена.
-  - Функция «Сверить результат»: автоматический опрос свойств задачи в Jira для нахождения уже созданного worklog и перевода в `sent` без дублирующего POST.
-  - Диалог ручного разрешения `unknown`: указание ID записи с проверкой автора/длительности или явное подтверждение отсутствия записи для разрешения повтора.
+- **Multiple-instance protection and credential storage:**
+  - An interprocess file lock (`app.lock`) allows only one instance to write. Additional instances open in read-only mode.
+  - Credentials and API tokens are stored in Windows Credential Manager or macOS Keychain, outside SQLite, text files, and logs.
 
-- **Многопроцессная защита и безопасность данных:**
-  - Межпроцессная файловая блокировка (`app.lock`): только один экземпляр приложения имеет право на запись; второй экземпляр автоматически открывается в режиме только для чтения (`read-only`).
-  - Учётные данные и API токен хранятся в Windows Credential Manager или macOS Keychain. Секреты никогда не сохраняются в SQLite, текстовых файлах или логах.
+## 2. Requirements, installation, and builds
 
----
+### System requirements
 
-## 2. Требования и установка
-
-### Системные требования:
-- **ОС:** Windows 10/11 x64; macOS 10.15+ (Apple Silicon или Intel), пока экспериментальная поддержка.
-- **Для разработки и сборки:**
-  - Flutter SDK 3.41.3 (канал `stable`), как в GitHub Actions.
-  - Для Windows: Visual Studio 2022 с компонентом «Разработка классических приложений на C++».
-  - Для macOS: Mac с Xcode и CocoaPods; сборка на Windows не поддерживается.
+- **Operating system:** Windows 10/11 x64; macOS 10.15+ on Apple Silicon or Intel, with experimental support.
+- **For development and builds:**
+  - Flutter SDK 3.41.3, stable channel, matching GitHub Actions.
+  - Windows: Visual Studio 2022 with the **Desktop development with C++** workload.
+  - macOS: a Mac with Xcode and CocoaPods. macOS builds require macOS.
   - Git.
 
-### Сборка и запуск:
+### Clone and install dependencies
 
-1. **Клонирование репозитория и установка зависимостей:**
-   ```powershell
-   git clone https://github.com/slonikmak/jira-time-tracker.git
-   cd jira-time-tracker
-   flutter pub get
-   ```
+```sh
+git clone https://github.com/slonikmak/jira-time-tracker.git
+cd jira-time-tracker
+flutter pub get
+```
 
-2. **Запуск автоматических тестов:**
-   ```powershell
-   flutter test
-   ```
+### Run tests
 
-3. **Запуск приложения в режиме разработки:**
-   ```powershell
-   flutter run -d windows
-   ```
-   Для проверки интерфейса через Dart/Flutter MCP запустите отладочную сборку с Flutter Driver:
-   ```powershell
-   flutter run -d windows --dart-define=ENABLE_FLUTTER_DRIVER=true --print-dtd
-   ```
-   Для сверки с листами Pencil можно добавить `--dart-define=UI_PREVIEW_LIGHT=true` или `--dart-define=UI_PREVIEW_DARK=true`.
-   В этом режиме ввод с физической клавиатуры отключён расширением Flutter Driver; текст можно вводить через MCP. Для обычной ручной работы запускайте приложение без флага.
+```sh
+flutter test
+```
 
-4. **Сборка релизного пакета Windows Desktop:**
-   ```powershell
-   flutter build windows --release
-   ./tool/package_windows.ps1
-   ```
-   Собранный исполняемый файл и зависимые DLL будут находиться в каталоге:
-   `build\windows\x64\runner\Release\`
+### Run the application
 
-   Готовый ZIP: `dist/jira-time-tracker-windows-x64.zip`. Скрипт добавляет
-   библиотеки Visual C++ runtime из установленного Visual Studio и упаковывает
-   всю папку. Для распространения использовать этот ZIP.
+On Windows:
 
----
+```sh
+flutter run -d windows
+```
 
-## 3. Настройки приложения и подключение к Jira Cloud
+On macOS:
 
-На macOS приложение собирается командой `flutter build macos --release` на Mac
-с Xcode. Bundle находится в `build/macos/Build/Products/Release/Jira Time Tracker.app`.
-Токен сохраняется в системном Keychain; для Jira и локального API включены
-сетевые разрешения release-приложения. Готовый Mac-пакет пока не notarized;
-условия публичного выпуска описаны в [инструкции публикации](docs/releases.md).
+```sh
+flutter run -d macos
+```
 
-В верхней части страницы «Настройки / Settings» выберите «Язык / Language»: «Как в системе / System default», «Русский» или «English». Рядом находится переключатель темы. Оба выбора применяются сразу и сохраняются на этом компьютере. Подробные правила первого запуска, обновления установки и границы перевода — в [MVP, разделе 8.2](docs/specs/jira-time-tracker-mvp.md#82-язык-интерфейса). Слева выбирается один из разделов: «Подключение к Jira», «Сборка дня», «Быстрые задачи» или «Локальный API»; в узком окне вместо левой навигации используется селектор над содержимым.
+For UI testing through Dart/Flutter MCP, enable Flutter Driver in a debug build:
 
-Приложение поддерживает два способа настройки учётных данных:
+```sh
+flutter run -d windows --dart-define=ENABLE_FLUTTER_DRIVER=true --print-dtd
+```
 
-### Способ 1: Настройки в интерфейсе приложения
-Нажмите на иконку шестерёнки в верхнем правом углу окна приложения и заполните:
-- **URL Jira:** адрес вашего инстанса (например, `https://your-company.atlassian.net`).
-- **Email:** адрес электронной почты аккаунта Atlassian.
-- **API Token:** персональный токен доступа Jira Cloud (создаётся в [Atlassian Account API Tokens](https://id.atlassian.com/manage-profile/security/api-tokens)).
+Use `-d macos` when testing on a Mac. To compare the UI with the Pencil design, add `--dart-define=UI_PREVIEW_LIGHT=true` or `--dart-define=UI_PREVIEW_DARK=true`.
 
-Кнопка «Проверить подключение» проверяет доступность API через стандартный маршрут `/rest/api/3/myself` и альтернативный scoped-маршрут Atlassian Gateway (`/_edge/tenant_info` и `/ex/jira/{cloudId}/rest/api/3/myself`). Кнопка «Сохранить» записывает проверенное подключение в Windows Credential Manager или macOS Keychain.
+Flutter Driver disables physical keyboard input in this mode; enter text through MCP. For normal manual use, run without the driver flag.
 
-### Способ 2: Переменные окружения Windows
-Для автоматической инициализации без ручного ввода можно задать переменные окружения:
-- `JIRA_BASE_URL` — базовый URL Jira (по умолчанию: `https://esprowteam.atlassian.net`).
-- `JIRA_EMAIL` — рабочий email.
-- `JIRA_TOKEN` — API токен.
+### Build a Windows release package
 
-*Примечание:* Если пользователь уже сохранил подключение через интерфейс, сохранённые настройки имеют приоритет над переменными окружения. Отмена редактирования формы не сбрасывает существующее подключение.
+```powershell
+flutter build windows --release
+./tool/package_windows.ps1
+```
 
-### Быстрые задачи
+The executable and its dependencies are built in `build/windows/x64/runner/Release/`.
 
-В одноимённом разделе можно добавить существующую Jira-задачу по ключу, numeric ID или URL. Приложение сначала показывает полученные из Jira ключ и заголовок и сохраняет ссылку только после успешной проверки. Необязательная подсказка остаётся локальной. Список принадлежит текущей паре «Jira-сайт — аккаунт» и отображается в порядке добавления. Удаление ссылки не удаляет саму Jira-задачу, логи или историю.
+The distributable ZIP is `dist/jira-time-tracker-windows-x64.zip`. The packaging script adds the Visual C++ runtime libraries from the installed Visual Studio and archives the entire bundle. Use this ZIP for distribution.
 
-### Локальный API
+### Build a macOS release
 
-Основной экземпляр приложения запускает HTTP API на `127.0.0.1` (обычно порт `8765`). Фактический адрес и инструкцию для агента можно скопировать в разделе «Локальный API». По этому адресу `GET /api/help` возвращает справку, а `GET /api/openapi.json` — полный контракт. Перед сборкой дня агент читает `GET /api/day-settings`: один ответ содержит текущие числовые диапазоны и редактируемое правило сборки. `GET /api/issues/PROJ-123` читает актуальную карточку Jira со всеми доступными комментариями и списком вложений; `GET /api/issues/PROJ-123/attachments/10001` скачивает одно вложение по его ID. `GET /api/quick-issues` возвращает быстрые задачи с локальными описаниями `note`; `POST /api/quick-issues`, `PATCH` и `DELETE /api/quick-issues/{issueId}` управляют этим списком. API также позволяет читать очередь и Jira worklogs по дате или тикету, создавать локальные логи и передавать готовый черновик дня, в том числе с параллельными рабочими интервалами. Отправка worklogs в Jira доступна только через подтверждение в UI.
+```sh
+flutter build macos --release
+```
 
-### Параметры сборки дня
+The application bundle is `build/macos/Build/Products/Release/Jira Time Tracker.app`.
 
-В разделе «Сборка дня» задаются диапазоны начала и длительности дня, начала и длительности длинной паузы, количества и длительности коротких пауз. Время суток вводится как `ЧЧ:ММ`, длительность — например `7 ч 30 м` или `45 м`, количество пауз — целым числом. Значения «От» не могут превышать «До»; ошибки показываются рядом со строкой.
+Credentials are stored in the system Keychain. The release application has network permissions for Jira and the local API. Current Mac packages are not notarized; see the [release guide](docs/releases.md) for publication requirements.
 
-Нажмите «Сохранить параметры», чтобы сохранить заполненные диапазоны и текстовое правило для агента. «Сбросить» заполняет всю форму значениями по умолчанию; для их сохранения также нажмите «Сохранить параметры». Правила применения настроек при сборке и пересборке описаны в [спецификации, раздел 6.1](docs/specs/jira-time-tracker-mvp.md#61-настройки-по-умолчанию). На экране «День» кнопка «Очистить» после подтверждения удаляет неотправленный черновик и возвращает исходные логи в очередь.
+## 3. Settings and Jira Cloud connection
 
----
+At the top of **Settings**, choose **Language**: **System default**, Russian, or English. The theme selector is next to it. Both preferences apply immediately and are saved on this computer. First-launch behavior, upgrades, and translation boundaries are defined in [MVP section 8.2](docs/specs/jira-time-tracker-mvp.md#82-interface-language).
 
-## 4. Расположение локальных данных и безопасность
+Use the sidebar to select **Jira connection**, **Day build**, **Quick issues**, or **Local API**. In a narrow window, a selector above the content replaces the sidebar.
 
-Все локальные данные приложения хранятся в стандартном каталоге пользовательских данных Windows (`getApplicationSupportDirectory`):
-`%APPDATA%\com.example\jira_time_tracker\`
+### Option 1: Application settings
 
-На macOS используется `getApplicationSupportDirectory`: обычно
-`~/Library/Containers/com.slonikmak.jiraTimeTracker/Data/Library/Application Support/com.slonikmak.jiraTimeTracker/`
-для sandbox-приложения. Точный путь задаёт macOS; приложение создаёт там
-`jira_time_tracker.db` и файл межпроцессной блокировки.
+Open **Settings** in the upper-right corner and fill in:
 
-- `jira_time_tracker.db` — локальная база данных SQLite (хранит кэш задач, быстрые задачи по Jira scope, локальные логи, черновики расписания, сегменты, паузы, выбор темы и параметры сборки дня).
-- `app.lock` — файл кросс-процессной блокировки единственного пишущего экземпляра.
+- **Jira address:** your Jira site URL, such as `https://your-company.atlassian.net`.
+- **Email:** the email address of your Atlassian account.
+- **API token:** a Jira Cloud API token, created in [Atlassian Account API Tokens](https://id.atlassian.com/manage-profile/security/api-tokens).
 
-### Безопасность секретов:
-API токен пользователя сохраняется исключительно в **Windows Credential Manager** через Win32 API либо в **macOS Keychain**. Windows использует прежний префикс `JiraTimeTracker:`, macOS — Keychain service `JiraTimeTracker`. Токен не попадает в SQLite-файлы, не логируется и передаётся только выбранному Jira API для авторизации.
+**Check connection** verifies API access through the standard `/rest/api/3/myself` route and the scoped Atlassian Gateway routes (`/_edge/tenant_info` and `/ex/jira/{cloudId}/rest/api/3/myself`). **Save** stores the verified connection in Windows Credential Manager or macOS Keychain.
 
----
+### Option 2: Environment variables
 
-## 5. Особенности работы оффлайн и таймеров
+To populate the form without entering each value manually, set these environment variables for the application process:
 
-1. **Таймеры и спящий режим:**
-   Таймеры не зависят от тиков таймера пользовательского интерфейса. При запуске таймера фиксируется `runningSinceUtc`. Когда вы закрываете приложение или отправляете компьютер в спящий режим, фактическое прошедшее время вычисляется аналитически при следующем открытии приложения.
-2. **Пауза:**
-   При нажатии на паузу время фиксируется в `accumulatedSeconds`, а `runningSinceUtc` очищается.
-3. **Работа без сети:**
-   Весь функционал таймеров, накопления времени, ручного ввода и генерации черновика дня полностью автономен и доступен оффлайн. Подключение к сети требуется только для первоначального поиска задач, загрузки существующих записей дня из Jira и финальной отправки в облако.
+- `JIRA_BASE_URL`: the Jira base URL. The current fallback is `https://esprowteam.atlassian.net`; set your own site's URL.
+- `JIRA_EMAIL`: your account email address.
+- `JIRA_TOKEN`: your API token.
 
----
+If a connection has already been saved through the UI, its settings take precedence over environment variables. Cancelling edits does not clear an existing connection.
 
-## 6. Ограничения и обработка сбоев отправки
+### Quick issues
 
-### Ограничение JQL worklogDate:
-В соответствии с официальной документацией Atlassian, JQL-поле `worklogDate` ищет совпадения только среди последних 1 000 записей о затраченном времени по каждой задаче. Для актуального рабочего дня это ограничение не проявляется, но при работе с давней историей старые записи могут не попасть в результаты выборки.
+Add an existing Jira issue by key, numeric ID, or URL. The application first displays the key and title retrieved from Jira and saves the reference only after validation succeeds. An optional note stays local.
 
-### Защита от дублирования и статус `unknown`:
-- Если при отправке сегмента произошёл сетевой обрыв, таймаут шлюза (504/502) или сервер вернул 500 ошибку, сегмент переходит в статус **«Не определено» (`unknown`)**.
-- **Слепая повторная отправка запрещена:** сервер Jira мог успеть создать запись до сбоя сети.
-- **Действие «Сверить результат»:** приложение загружает записи задачи из Jira и ищет прикреплённое свойство `jira-time-tracker.segment` с ID сегмента. При нахождении запись валидируется по автору и длительности и мгновенно переводится в статус «Отправлено» без повторного POST.
-- **Ручное разрешение:**
-  1. *«Указать ID записи в Jira»* — если запись видна в веб-интерфейсе, можно ввести её ID. Приложение проверит корректность параметров и свяжет интервал.
-  2. *«Записи нет в Jira, разрешить повтор»* — если пользователь проверил задачу в Jira и убедился в отсутствии записи, интервал сбрасывается обратно в статус очереди для повторной отправки.
+The list belongs to the current Jira site and account and is shown in insertion order. Removing a quick-issue reference does not delete the Jira issue, logs, or history.
+
+### Local API
+
+The primary application instance runs an HTTP API on `127.0.0.1`, usually on port `8765`. Copy its actual address and agent instructions from **Local API** in Settings.
+
+- `GET /api/help` returns usage guidance; `GET /api/openapi.json` returns the complete API contract.
+- Before building a day, an agent reads `GET /api/day-settings`. One response contains the current numeric ranges and the editable day-build rule.
+- `GET /api/issues/PROJ-123` reads the current Jira issue, all accessible comments, and attachment metadata. `GET /api/issues/PROJ-123/attachments/10001` downloads one attachment by ID.
+- `GET /api/quick-issues` returns quick issues and local `note` values. `POST /api/quick-issues`, `PATCH /api/quick-issues/{issueId}`, and `DELETE /api/quick-issues/{issueId}` manage this list.
+- The API can read the local queue and Jira worklogs by date or issue, create local logs, and save a complete day draft, including parallel work intervals.
+
+Submitting worklogs to Jira requires confirmation in the application UI.
+
+### Day-build settings
+
+In **Day build**, configure ranges for the day's start time and duration, the long break's start time and duration, and the number and duration of short breaks. Enter times as `HH:MM`, durations such as `7 h 30 m` or `45 m`, and break counts as whole numbers. **From** values must not exceed **To** values; validation errors appear beside the affected row.
+
+**Save settings** saves the ranges and the agent's text rule. **Reset** fills the form with defaults; click **Save settings** to persist them. How these settings affect building and rebuilding a day is defined in [MVP section 6.1](docs/specs/jira-time-tracker-mvp.md#61-default-settings).
+
+On the **Day** screen, **Clear** asks for confirmation, deletes the unsubmitted draft, and returns its source logs to the queue.
+
+## 4. Local data and security
+
+On Windows, application data is stored in the standard application support directory (`getApplicationSupportDirectory`):
+
+```text
+%APPDATA%\com.example\jira_time_tracker\
+```
+
+On macOS, the sandboxed application's support directory is typically:
+
+```text
+~/Library/Containers/com.slonikmak.jiraTimeTracker/Data/Library/Application Support/com.slonikmak.jiraTimeTracker/
+```
+
+macOS determines the exact path. The application creates these files in its support directory:
+
+- `jira_time_tracker.db`: the SQLite database containing cached issues, scoped quick issues, local logs, day drafts, segments, breaks, appearance preferences, and day-build settings.
+- `app.lock`: the interprocess lock for the single writable instance.
+
+### Credentials
+
+API tokens are stored exclusively in **Windows Credential Manager** through Win32 APIs or in **macOS Keychain**. Windows retains the `JiraTimeTracker:` prefix; macOS uses the `JiraTimeTracker` Keychain service. Tokens are excluded from SQLite and logs and are sent only to the selected Jira API for authentication.
+
+## 5. Offline use and timers
+
+1. **Timers and sleep:** elapsed time does not depend on UI timer ticks. Starting a timer records `runningSinceUtc`; after closing the application or putting the computer to sleep, elapsed time is calculated from that timestamp when the application is reopened.
+2. **Pause:** pausing stores elapsed time in `accumulatedSeconds` and clears `runningSinceUtc`.
+3. **Offline use:** timers, accumulated time, manual entries, and day-draft generation work offline. Network access is required to find new issues, load existing Jira worklogs, and submit time to Jira.
+
+## 6. Limitations and submission recovery
+
+### JQL `worklogDate` limitation
+
+Atlassian's JQL `worklogDate` field searches only the most recent 1,000 worklogs per issue. Older entries may therefore be missing from historical search results.
+
+### Duplicate protection and `unknown` results
+
+- If a submission is interrupted by a network failure, a gateway timeout (504/502), or a server error such as HTTP 500, the segment moves to **Unknown** (`unknown`).
+- **Blind retries are blocked:** Jira may have created the entry before the connection failed.
+- **Reconcile result:** the application loads the issue's worklogs and looks for the `jira-time-tracker.segment` property with the segment ID. A matching entry is checked for author and duration, then marked **Sent** without another POST request.
+- **Manual resolution:**
+  1. **Enter the ID of the created Jira entry:** enter the ID of a worklog visible in Jira; the application verifies it and links it to the interval.
+  2. **No entry in Jira, allow retry:** after checking Jira and confirming that the entry does not exist, reset the interval to Pending so it can be submitted again.

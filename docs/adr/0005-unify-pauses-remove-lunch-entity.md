@@ -1,30 +1,36 @@
-# ADR-0005: Упразднение сущности «Обед» и унификация пауз
+# ADR-0005: Removing lunch as a separate entity and unifying breaks
 
-## Статус
-Принято (Accepted)
+## Status
 
-## Контекст
-В первоначальной модели дня существовало строгое разделение перерывов на два типа: «Обед» (`BreakKind.lunch`) и короткие паузы (`BreakKind.short`). Это разделение отражалось:
-- В интерфейсе: особая подсветка (`AppColors.warn`), иконка столовых приборов (`Icons.restaurant`), плашки и тултипы «Обед».
-- В диалоге действий с паузой (`GapActionsDialog`): кнопка «Сделать обедом / перерывом».
-- В пользовательском опыте: возникновение избыточной ментальной нагрузки и искусственных сущностей при формировании расписания (пользователю важно лишь видеть рабочие интервалы и свободное время между ними).
+Accepted
 
-Пользовательское требование:
-> «уберём понятие обеда. всё - обычные паузы, просто при автоматической сборке дня одна длинная».
+## Context
 
-## Принятое решение
-1. **Единая сущность паузы в интерфейсе**:
-   - В UI (на таймлайне `TimelineTrackBar`, в карточках расписания `DayScreen` и в диалоге управления зазором `GapActionsDialog`) все паузы отображаются одинаково.
-   - Единая иконка перерыва (`Icons.coffee`), нейтральный серый цвет шрифта (`AppColors.muted`), единый цвет на таймлайне (`AppColors.trackBreak`) и подпись «Перерыв».
-2. **Упрощение действий с паузой (`GapActionsDialog`)**:
-   - Удалена кнопка-переключатель «Сделать обедом / Сделать перерывом».
-   - Сохранены только реальные геометрические операции над интервалом: «Схлопнуть паузу», «Растянуть предыдущую задачу» и «Задать длительность перерыва» с выталкиванием последующих задач волной (ripple push).
-3. **Сохранение физиологичности автоматической сборки**:
-   - В алгоритме автоматической пересборки дня (`DayBuilder.buildSmartDay`) в середине дня по-прежнему планируется одна более протяженная пауза (30–45 минут) и несколько коротких пауз (5–10 минут).
-   - Технически длинная пауза создается как обычный перерыв (`BreakKind.short`), не имея привилегированного статуса или специфичных визуальных маркеров.
-4. **Обратная совместимость**:
-   - Значение `BreakKind.lunch` в enum и настройки полей SQLite сохраняются для обратной совместимости существующих локальных баз данных, однако вся UI- и бизнес-логика трактует любые зазоры как обычные паузы.
+The original day model distinguished lunch (`BreakKind.lunch`) from short breaks (`BreakKind.short`). This distinction affected:
 
-## Последствия
-- Интерфейс стал чище, понятнее и минималистичнее: устранены визуальный шум и лишние кнопки переключения типа перерыва.
-- Пользователь сохраняет полный контроль над длительностью и положением любых пауз через drag handles таймлайна и диалог действий с зазором.
+- The UI: special highlighting (`AppColors.warn`), a restaurant icon (`Icons.restaurant`), badges, and **Lunch** tooltips.
+- `GapActionsDialog`: a **Make lunch / break** toggle.
+- User experience: unnecessary mental overhead and artificial entities when users mainly needed work intervals and the free time between them.
+
+User requirement, translated:
+
+> Remove the concept of lunch. Everything is an ordinary break; automatic day building just creates one longer break.
+
+## Decision
+
+1. **A single UI break entity:**
+   - Display all breaks identically in `TimelineTrackBar`, `DayScreen` schedule cards, and `GapActionsDialog`.
+   - Use one break icon (`Icons.coffee`), neutral gray text (`AppColors.muted`), one timeline color (`AppColors.trackBreak`), and the label **Break**.
+2. **Simpler gap actions (`GapActionsDialog`):**
+   - Remove the **Make lunch / Make break** toggle.
+   - Retain only interval geometry operations: **Close gap**, **Fill gap with the previous issue**, and **Set break duration**, with ripple pushing of subsequent issues.
+3. **Retain appropriate break planning in automatic builds:**
+   - `DayBuilder.buildSmartDay` still schedules one longer mid-day break (30–45 minutes) and several short breaks (5–10 minutes).
+   - Create the long break as an ordinary `BreakKind.short`, without privileged status or special visual markers.
+4. **Backward compatibility:**
+   - Retain `BreakKind.lunch` and SQLite settings fields for existing local databases. All UI and business logic treats gaps as ordinary breaks.
+
+## Consequences
+
+- The interface is clearer and simpler, with less visual noise and fewer break-type controls.
+- Users retain control over every break's duration and position through timeline drag handles and gap actions.

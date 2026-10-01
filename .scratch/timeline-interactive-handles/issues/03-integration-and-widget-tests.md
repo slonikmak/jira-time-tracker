@@ -1,9 +1,9 @@
-# 03. Интеграция в DayScreen и сквозные тесты (Ticket 03)
+# 03. DayScreen integration and end-to-end tests (Ticket 03)
 
 Status: resolved
 
-## Описание
-1. Подключить коллбэки `onResizeSegmentRight` и `onResizeSegmentLeft` в `lib/ui/day_screen.dart` к вызовам `appState.resizeSegmentRight` и `appState.resizeSegmentLeft`.
-2. Обработка упоров в записи Jira (показ информативного SnackBar, если сдвиг упёрся в лог Jira).
-3. Интеграционные тесты перетаскивания границ мышью на таймлайне и проверки результирующего расписания.
-4. Полный прогон `flutter test` и `flutter analyze`.
+## Description
+1. Connect `onResizeSegmentRight` and `onResizeSegmentLeft` in `lib/ui/day_screen.dart` to `appState.resizeSegmentRight` and `appState.resizeSegmentLeft`.
+2. Handle Jira obstacles with an informative SnackBar when a shift hits a Jira log.
+3. Integration tests drag timeline boundaries with the mouse and verify the resulting schedule.
+4. Run full `flutter test` and `flutter analyze`.

@@ -1,21 +1,25 @@
-# 0004. Снятие искусственного 8-часового лимита на продолжительность дня
+# 0004. Removing the artificial eight-hour day-duration limit
 
-## Контекст
-Ранняя спецификация MVP содержала строгое ограничение: «полная продолжительность дня от начала до конца, включая все паузы, не превышает 8 часов (28 800 секунд)». При превышении этого порога валидатор генерировал ошибку и блокировал кнопку «Отправить в Jira».
+## Context
 
-В реальной практике разработчиков это приводило к постоянным блокировкам:
-- Обычный 8-часовой рабочий день с обедом (например, 09:00–18:00 с 45-минутным перерывом) имеет общую протяжённость от 8.75 до 9 часов.
-- Любые переработки (овертайм) или длинные перерывы между утренними и вечерними активностями приводили к блокировке отправки.
-- Протокол Jira REST API не требует, чтобы сумма записей или диапазон между ними укладывался в 8 часов.
+An early MVP rule stated that the entire day, from start to end including breaks, must not exceed eight hours (28,800 seconds). Exceeding this threshold caused validation to fail and disabled **Submit to Jira**.
 
-## Решение
-1. Полностью удалить искусственное блокирующее ограничение 8 часов на общую продолжительность дня (`plan.totalDaySeconds > 8 * 3600`) из валидатора `DayBuilder.validate`.
-2. Установить реальные физические границы:
-   - Общая продолжительность дня не может превышать 24 часа (`totalDaySeconds <= 86400`).
-   - Суммарное залогированное рабочее время не может превышать 24 часа.
-   - Минимальный размер сегмента задачи — 10 минут (600 секунд).
-3. В интерфейсе экрана «День» плашки со статистикой («Работа», «Паузы», «Всего») отображают фактическую картину времени в информационном режиме без блокировок.
+In practice, this repeatedly blocked developers:
 
-## Последствия
-- Устранён критический блокер при отправке расписания нормального рабочего дня с обедом или овертаймом.
-- Логика стала соответствовать поведению реальных пользователей и протоколу Jira.
+- A normal eight-hour workday with lunch (such as 09:00–18:00 with a 45-minute break) spans 8.75–9 hours.
+- Overtime and long gaps between morning and evening activities blocked submission.
+- Jira REST API does not require worklog totals or the span between entries to fit into eight hours.
+
+## Decision
+
+1. Remove the artificial blocking eight-hour limit (`plan.totalDaySeconds > 8 * 3600`) from `DayBuilder.validate`.
+2. Use actual physical limits:
+   - Total day duration cannot exceed 24 hours (`totalDaySeconds <= 86400`).
+   - Total logged work time cannot exceed 24 hours.
+   - The minimum working segment is 10 minutes (600 seconds).
+3. The Day screen's **Work**, **Breaks**, and **Total** statistics display actual time as information without blocking submission.
+
+## Consequences
+
+- Normal workdays with lunch and overtime can be submitted.
+- The rules match real user behavior and Jira's protocol.

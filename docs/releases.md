@@ -1,63 +1,36 @@
-# Сборка и распространение
+# Builds and distribution
 
-Имя приложения — **Jira Time Tracker**, имя репозитория — `jira-time-tracker`.
-Первый способ распространения — GitHub Releases с архивами приложения:
+The application is **Jira Time Tracker**; the repository is `jira-time-tracker`.
+The initial distribution method is GitHub Releases with application archives:
 
-| Пакет | Содержимое | Установка |
+| Package | Contents | Installation |
 |---|---|---|
-| `jira-time-tracker-windows-x64.zip` | exe, DLL, Visual C++ runtime и `data` | Распаковать всю папку и запустить `jira_time_tracker.exe` |
-| `jira-time-tracker-macos-arm64.zip` | `Jira Time Tracker.app` для Apple Silicon | Распаковать и перенести приложение в Applications |
-| `jira-time-tracker-macos-x64.zip` | `Jira Time Tracker.app` для Intel | Распаковать и перенести приложение в Applications |
+| `jira-time-tracker-windows-x64.zip` | exe, DLLs, Visual C++ runtime, and `data` | Extract the entire folder and run `jira_time_tracker.exe` |
+| `jira-time-tracker-macos-arm64.zip` | `Jira Time Tracker.app` for Apple Silicon | Extract and move the application to Applications |
+| `jira-time-tracker-macos-x64.zip` | `Jira Time Tracker.app` for Intel | Extract and move the application to Applications |
 
-Обновление заменяет приложение и его библиотеки; пользовательскую SQLite-базу
-и системное хранилище credentials удалять не нужно. Путь данных и правила
-подключения описаны в [README](../README.md).
+Updating replaces the application and its libraries. Keep the user's SQLite database and system credential storage. Data paths and connection rules are documented in the [README](../README.md).
 
-Windows-пакет создаёт [скрипт упаковки](../tool/package_windows.ps1). Он включает
-`msvcp140.dll`, `vcruntime140.dll` и `vcruntime140_1.dll` рядом с exe, поэтому
-получателю не нужно отдельно устанавливать Visual C++ Redistributable.
+The [packaging script](../tool/package_windows.ps1) creates the Windows archive. It includes `msvcp140.dll`, `vcruntime140.dll`, and `vcruntime140_1.dll` next to the exe, so recipients do not need to install Visual C++ Redistributable separately.
 
 ## GitHub Actions
 
-[Workflow](../.github/workflows/desktop-release.yml) запускается для push в `main`,
-pull request, тега `v*` или вручную. Он использует Flutter **3.41.3**,
-фиксированные зависимости из `pubspec.lock`, анализатор, тесты и release-сборку.
-После сборки запускает готовое приложение и проверяет ответ локального API
-`GET /api/day-settings`: это проверяет нативный старт, SQLite и чтение credentials
-на чистом runner. Тест не подключается к рабочей Jira.
-Каждая платформа собирается на своей ОС: Windows x64, macOS arm64, macOS x64.
-Архивы доступны как artifacts в завершённом run в течение 14 дней.
+The [workflow](../.github/workflows/desktop-release.yml) runs on pushes to `main`, pull requests, `v*` tags, and manual dispatch. It uses Flutter **3.41.3**, locked dependencies from `pubspec.lock`, the analyzer, tests, and release builds.
 
-Тег версии должен совпадать с `version` в `pubspec.yaml` без номера после `+`.
-Например, `version: 1.0.0+1` соответствует `v1.0.0`. Перед новой версией обновить
-оба номера. Workflow тега создаёт **черновик** GitHub Release только после
-успеха всех трёх сборок. Повторный запуск заменяет вложения только черновика;
-уже опубликованный релиз не меняется.
+After building, it starts the application and checks `GET /api/day-settings` through the local API. This verifies native startup, SQLite, and credential reads on a clean runner without connecting to production Jira. Each platform builds on its own OS: Windows x64, macOS arm64, and macOS x64. Archives are available as run artifacts for 14 days.
 
-1. Закоммитить подготовленные исходники и отправить их в GitHub.
-2. Дождаться успешных трёх сборок и скачать artifacts для проверки.
-3. На Windows и настоящем Mac проверить запуск, сохранение подключения после
-   перезапуска, таймер, второй экземпляр в режиме чтения и локальный API.
-   Для проверки отправки использовать тестовую Jira и явное подтверждение в UI.
-4. Создать и отправить тег, например `v1.0.0`, после проверки.
-5. Проверить вложения и описание черновика релиза, затем опубликовать его.
+A version tag must match `version` in `pubspec.yaml` without the number after `+`. For example, `version: 1.0.0+1` corresponds to `v1.0.0`. Update both numbers before a new version. The tag workflow creates a **draft** GitHub Release only after all three builds succeed. Reruns replace attachments only on drafts; published releases are left unchanged.
 
-## Подпись macOS
+1. Commit the prepared sources and push them to GitHub.
+2. Wait for all three builds to succeed and download the artifacts for testing.
+3. On Windows and a real Mac, test startup, saved connections after restart, a timer, a second instance in read-only mode, and the local API. Test submission using a test Jira instance and explicit confirmation in the UI.
+4. After testing, create and push a tag such as `v1.0.0`.
+5. Review the draft release's attachments and description, then publish it.
 
-Текущие Mac-пакеты используют ad-hoc подпись стандартного Flutter-проекта и
-**не notarized**. Это сборки для предварительной проверки; macOS может
-блокировать запуск скачанного приложения. Для удобной публичной установки
-нужны Developer ID Application certificate и notarization Apple. Эти данные
-ещё не настроены в workflow; до их настройки Mac-пакет следует обозначать как
-экспериментальный, а проверку на Mac считать обязательной перед публикацией.
+## macOS signing
 
-Для подписи сертификат, пароль и данные notarization должны передаваться через
-GitHub Actions secrets. Их нельзя помещать в исходники, репозиторий или релиз.
-Подписанный workflow будет отдельным изменением после предоставления этих
-данных владельцем. Установщики MSIX/DMG и автообновление для первого выпуска
-не требуются: архивы и GitHub Releases уже дают версионную доставку.
+Current Mac packages use the standard Flutter project's ad-hoc signature and **are not notarized**. These are preview builds; macOS may block a downloaded application. Convenient public installation requires a Developer ID Application certificate and Apple notarization. These are not configured in the workflow yet. Until they are, label Mac packages experimental and require testing on a Mac before publication.
 
-Источники: [GitHub runners](https://docs.github.com/en/actions/reference/runners/github-hosted-runners),
-[Flutter Windows: ZIP и runtime](https://docs.flutter.dev/platform-integration/windows/building#building-your-own-zip-file-for-windows),
-[Flutter macOS: entitlements и подпись](https://docs.flutter.dev/platform-integration/macos/building),
-[macOS Keychain](https://pub.dev/packages/flutter_secure_storage).
+Provide the signing certificate, its password, and notarization credentials through GitHub Actions secrets. Keep them out of sources, the repository, and releases. A signing workflow will be a separate change after the owner supplies these credentials. MSIX/DMG installers and automatic updates are unnecessary for the first release: archives and GitHub Releases provide versioned distribution.
+
+Sources: [GitHub runners](https://docs.github.com/en/actions/reference/runners/github-hosted-runners), [Flutter Windows ZIP and runtime](https://docs.flutter.dev/platform-integration/windows/building#building-your-own-zip-file-for-windows), [Flutter macOS entitlements and signing](https://docs.flutter.dev/platform-integration/macos/building), [macOS Keychain](https://pub.dev/packages/flutter_secure_storage).

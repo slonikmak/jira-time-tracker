@@ -1,16 +1,16 @@
-# 02. Визуальные ручки и перетаскивание на TimelineTrackBar (Ticket 02)
+# 02. Visual handles and dragging on TimelineTrackBar (Ticket 02)
 
 Status: resolved
 
-## Описание
-В `lib/ui/timeline_track_bar.dart`:
-1. Добавить ручки (drag handles) на левую и правую границы каждого рабочего сегмента:
-   - Ширина хитбокса ~10–12 px.
-   - Курсор: `SystemMouseCursors.resizeLeftRight` (или `resizeColumn`).
-2. Состояние `hoveredSegmentId` и `activeDragSegmentId`:
-   - При наведении курсора на ручку или во время drag сегмент визуально подсвечивается акцентной рамкой (`border: Border.all(color: AppColors.accent(isDark), width: 2)`), чтобы однозначно идентифицировать изменяемую задачу.
-3. Коллбэки:
+## Description
+In `lib/ui/timeline_track_bar.dart`:
+1. Add drag handles at both boundaries of every work segment:
+   - Hitbox width ~10–12 px.
+   - Cursor: `SystemMouseCursors.resizeLeftRight` (or `resizeColumn`).
+2. State `hoveredSegmentId` and `activeDragSegmentId`:
+   - Hovering a handle or dragging highlights the segment with an accent border (`border: Border.all(color: AppColors.accent(isDark), width: 2)`), clearly identifying the edited task.
+3. Callbacks:
    - `onResizeSegmentRight(Segment segment, int newDurationSeconds)`
    - `onResizeSegmentLeft(Segment segment, DateTime newStartUtc)`
-4. Отображение подсказки (tooltip/badge) в реальном времени при drag (например: «10:00 — 11:45 (1 ч 45 мин)»).
-5. Widget-тесты ручек и ховера.
+4. Live tooltip/badge during dragging, e.g. “10:00 — 11:45 (1 h 45 min).”
+5. Handle/hover widget tests.

@@ -1,27 +1,27 @@
-# Проверка переключения языков
+# Language switching verification
 
-Дата: 2026-10-01. Правила продукта: [MVP, раздел 8.2](../../docs/specs/jira-time-tracker-mvp.md#82-язык-интерфейса); исходное решение: [spec.md](spec.md).
+Date: 2026-10-01. Product rules: [MVP section 8.2](../../docs/specs/jira-time-tracker-mvp.md#82-interface-language); original decision: [spec.md](spec.md).
 
-Реализованы русский и английский интерфейс и выбор «Как в системе / Русский / English» рядом с темой. Изменение применяется сразу и сохраняется. Старые установки сохраняют русский; новые используют язык Windows с английским fallback. Пользовательские тексты и данные Jira остаются исходными.
+Russian and English interfaces and System default / Russian / English selection beside the theme are implemented. Changes apply immediately and persist. Existing installations retain Russian; new ones use Windows language with English fallback. User text and Jira data remain unchanged.
 
-## Выполненные проверки
+## Checks performed
 
-- `flutter analyze`: ошибок нет.
-- `flutter test`: 239 тестов прошли, включая 22 проверки языков. Проверены новая и существующая пустая установка, повторное открытие SQLite, ручной и системный выбор, отказ сохранения и read-only, открытые формы и диалог времени, даты, длительности и числительные, состояние таймера, выбранные логи и черновик, старые и новые сохранённые ошибки.
-- Widget-проверки экранов и всех четырёх разделов настроек: оба языка и темы, размеры 1152×800, 640×720 и 390×460; загружены шрифты приложения.
-- Нативный Windows debug-запуск с отдельной SQLite-базой в памяти, хранилищем credentials в памяти и подставным HTTP-клиентом: холодный английский запуск, «Работа», «День», «Настройки», оба языка и темы, окна 1280×850 и 680×800 с текущим масштабированием Windows. Сохранены и просмотрены снимки; исправлены обнаруженные переполнения. Рабочая база и Jira не использовались.
-- `git diff --check`: ошибок пробелов нет.
+- `flutter analyze`: no errors.
+- `flutter test`: 239 tests passed, including 22 language checks. Coverage includes new and existing empty installations, SQLite reopening, manual/system selection, save failure and read-only mode, open forms and time dialog, dates, durations and plurals, timer state, selected logs and draft, and old/new saved errors.
+- Widget checks for screens and all four Settings sections: both languages/themes, sizes 1152×800, 640×720, and 390×460; application fonts loaded.
+- Native Windows debug launch using a separate in-memory SQLite database, in-memory credential storage, and fake HTTP client: cold English startup, Work, Day, Settings, both languages/themes, 1280×850 and 680×800 windows with current Windows scaling. Screenshots were saved and inspected; discovered overflows were fixed. The production database and Jira were not used.
+- `git diff --check`: no whitespace errors.
 
-Команды, журналы, одноразовый нативный стенд и снимки сохранены в игнорируемой `.local/`; снимки — `.local/interface-preview/`.
+Commands, logs, the disposable native harness, and screenshots are stored in ignored `.local/`; screenshots are in `.local/interface-preview/`.
 
-## Независимое ревью
+## Independent review
 
-**Standards:** найдены два замечания: хранение переведённых ошибок настроек и зависимость типа интервала от диагностического текста. Оба исправлены; повторная проверка соответствующих участков замечаний не обнаружила.
+**Standards:** two findings: storing translated Settings errors and deriving an interval type from diagnostic text. Both were fixed; rechecking the corresponding areas found no issues.
 
-**Spec:** исправлены четыре отсутствовавших перевода сообщений отправки/сверки, переводы ошибок открытых форм и стандартных диалогов, числовые даты в подписях и ошибках. Сценарию языков присвоен свободный ID A29. Новые ошибки сохраняются структурированно; старый текст остаётся исходным.
+**Spec:** fixed four missing submission/reconciliation message translations, errors in open forms and standard dialogs, and numeric dates in labels/errors. Language coverage received the available scenario ID A29. New errors are stored structurally; old text remains unchanged.
 
-## Выпуск
+## Release
 
-`flutter build windows --release` завершилась успешно после последних исправлений. Готовый комплект: `build/windows/x64/runner/Release/`, исполняемый файл `jira_time_tracker.exe`; для переноса нужны также DLL и каталог `data` из этой папки.
+`flutter build windows --release` succeeded after the final fixes. Complete bundle: `build/windows/x64/runner/Release/`, executable `jira_time_tracker.exe`; distribution also requires the DLLs and `data` directory from that folder.
 
-Проверки относятся к актуальному рабочему дереву, включая существовавшие перед задачей правки внешнего вида. При фиксации локализации эти правки отделяются и сохраняются в рабочем дереве.
+Checks apply to the current working tree, including appearance changes that predated this task. When committing localization, those changes are separated and retained in the working tree.

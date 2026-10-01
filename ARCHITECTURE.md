@@ -1,24 +1,24 @@
-# Архитектура Jira Time Tracker
+# Jira Time Tracker architecture
 
-## Статус и назначение
+## Status and purpose
 
-Архитектура MVP. Все модули полностью реализованы в соответствии со спецификацией: Flutter Desktop каркас, межпроцессная блокировка Windows (`SingleInstanceLock`), `LocalStore` с SQLite-схемой v3, Windows Credential Manager FFI, авторизация Direct/Scoped в `JiraClient`, чистый `LogClock`, каталог задач `IssueParser`, чистый движок расписания `DayBuilder`, экраны интерфейса `WorkScreen`, `DayScreen`, диалоги добавления и редактирования, загрузка существующих worklogs Jira и модуль надежной отправки/сверки `WorklogSender`.
+MVP architecture. Modules are implemented according to the specification: Flutter Desktop shell, Windows interprocess locking (`SingleInstanceLock`), `LocalStore` with SQLite schema v3, Windows Credential Manager FFI, Direct/Scoped authentication in `JiraClient`, pure `LogClock`, `IssueParser`, pure `DayBuilder`, `WorkScreen` and `DayScreen`, add/edit dialogs, existing Jira worklog loading, and reliable submission/reconciliation through `WorklogSender`.
 
-Документ определяет, где живут логика и данные и как их проверять. Пользовательские правила, параметры сборки, Jira-протокол и критерии готовности находятся в [спецификации MVP](docs/specs/jira-time-tracker-mvp.md). Правила работы исполнителя — в [AGENTS.md](AGENTS.md).
+This document owns logic, data, and testing boundaries. User rules, build parameters, Jira protocol, and acceptance criteria belong to the [MVP specification](docs/specs/jira-time-tracker-mvp.md). Implementer rules are in [AGENTS.md](AGENTS.md).
 
-Перед реализацией UI прочитай [описание экранов и интерактивный макет](docs/design/UX.md). HTML-макет служит ориентиром для Flutter-виджетов и не является модулем приложения.
+Before implementing UI, read the [screen description and interactive design](docs/design/UX.md). The HTML design guides Flutter widgets; it is not an application module.
 
-## 1. Форма приложения
+## 1. Application shape
 
-Один Flutter Desktop-процесс для Windows или macOS, прямое подключение к Jira Cloud, локальная SQLite-база и защищённое хранилище credentials. Таймеры восстанавливаются из сохранённого времени старта; фоновый процесс для отсчёта не нужен.
+One Flutter Desktop process for Windows or macOS, a direct Jira Cloud connection, a local SQLite database, and secure credential storage. Timers recover from stored start timestamps; no background counting process is needed.
 
-Стек: Flutter stable и Dart, Material 3, встроенные ChangeNotifier/ListenableBuilder. Зависимости: http для HTTP и подстановки клиента в тестах, sqlite3 для базы, path_provider для каталога данных, win32 для Windows Credential Manager, flutter_secure_storage_darwin и его platform interface для macOS Keychain, uuid для постоянных идентификаторов. Версии определяют pubspec.yaml и pubspec.lock.
+Stack: Flutter stable and Dart, Material 3, built-in ChangeNotifier/ListenableBuilder. Dependencies: http for HTTP and fake clients, sqlite3 for persistence, path_provider for data directories, win32 for Windows Credential Manager, flutter_secure_storage_darwin and its platform interface for macOS Keychain, and uuid for persistent identifiers. pubspec.yaml and pubspec.lock define versions.
 
-Требования сборки и доставки определяет [инструкция публикации](docs/releases.md). Darwin-плагин подключён отдельно: Windows не получает дополнительный native backend и не требует C++ ATL для secure storage.
+The [release guide](docs/releases.md) owns build and delivery requirements. The Darwin plugin is separate: Windows receives no additional native backend and requires no C++ ATL for secure storage.
 
-Каждый модуль скрывает содержательную работу за небольшим интерфейсом. Для MVP достаточно конкретных классов и функций, передаваемых через конструкторы. ORM, DI-контейнер, сервер, шина событий и отдельный слой use cases не нужны.
+Each module hides meaningful work behind a small interface. Concrete classes and constructor-injected functions suffice for the MVP. No ORM, DI container, server, event bus, or separate use-case layer is needed.
 
-## 2. Модули и направление зависимостей
+## 2. Modules and dependency direction
 
 ```mermaid
 flowchart TD
@@ -37,155 +37,150 @@ flowchart TD
     Jira --> HTTP[http.Client]
 ```
 
-Стрелка означает «вызывает». main.dart собирает зависимости и передаёт их AppState. Models используют все модули; сами модели не импортируют UI, SQLite, HTTP или плагины платформы.
+Arrows mean calls. main.dart constructs dependencies and passes them to AppState. Every module uses Models; models themselves import no UI, SQLite, HTTP, or platform plugins.
 
-| Путь | Статус | Модуль и его интерфейс | Что скрывает реализация |
+| Path | Status | Module and interface | Hidden implementation |
 |---|---|---|---|
-| lib/main.dart | Реализован | Запуск и сборка зависимостей | Открытие хранилищ, блокировка второго пишущего экземпляра, восстановление состояния, запуск Flutter UI; Flutter Driver включается только явным `ENABLE_FLUTTER_DRIVER` для отладки |
-| lib/single_instance_lock.dart | Реализован | SingleInstanceLock: эксклюзивная блокировка файла | Межпроцессная блокировка Windows (`RandomAccessFile.lockSync`) |
-| lib/models.dart | Реализован | Модели, enum и результаты операций | Типизированное представление Issue, QuickIssue, исходного лога, черновика, интервала и ошибок; без сетевых JSON-форматов |
-| lib/local_store.dart | Реализован | LocalStore: операции над локальными данными | SQL, миграции, scoped-каталог QuickIssue, транзакции, привязка и атомарное исключение логов из неотправленных черновиков, журнал отправки, общие настройки приложения и единственный пишущий экземпляр |
-| lib/secure_storage.dart | Реализован | SecureStorage: защищенное хранилище | Windows Credential Manager FFI или macOS Keychain; `InMemorySecureStorage` для тестов |
-| lib/connection_store.dart | Реализован | ConnectionStore: загрузка формы из saved/env и сохранение подключения | Подстановка окружения, защищённое хранение credentials и сохранение проверенного маршрута подключения |
-| lib/issue_parser.dart | Реализован | IssueParser: разбор ввода ключа, numeric ID и URL browse задачи | Извлечение идентификатора, очистка URL, поддержка разных форматов ввода |
-| lib/jira_client.dart | Реализован | JiraClient: проверить подключение, получить задачу/день, создать интервал, сверить запись | Авторизация (прямой и scoped маршруты), ADF, properties, обработка HTTP-ответов и ошибок |
-| lib/log_clock.dart | Реализован | LogClock: чистый Dart расчёт длительности по состоянию лога и nowUtc | Вычисление прошедшего времени, переходы start/pause, обнаружение отрицательной разницы часов |
-| lib/day_builder.dart | Реализован | DayBuilder: buildAsRecorded(input), build(input, seed) и validate(plan, existingWorklogs, {requirePauses}) | Прямой перенос как записано, алгоритмическое распределение времени (Smart Rebuild), размещение пауз, деление задач > 1ч и валидация |
-| lib/worklog_sender.dart | Реализован | WorklogSender: sendDraft, reconcileUnknown, разрешение unknown по явному действию | Порядок записи журнала и POST, частичный успех, восстановление после обрыва, запрет слепого повтора |
-| lib/app_state.dart | Реализован | AppState: координация состояния экрана и пользовательские действия | Последовательность вызовов модулей, активный scope, состояние занятости, тема и язык, сохраняемые DaySettings, таймеры и очередь логов |
-| lib/app_message.dart | Реализован | AppMessage и MessageException: собственные сообщения приложения | Идентификатор, параметры и исходный диагностический текст без зависимости от Flutter; совместимое чтение старых ошибок и кодирование новых сохранённых ошибок |
-| lib/agent_instructions.dart | Реализован | Стандартное правило, инструкция и справка для агента на RU/EN | Чистые текстовые шаблоны с явным языком и URL; контракт языка определён в MVP, разделе 8.2 |
-| lib/l10n/ | Реализован | Каталоги ARB и сгенерированные AppLocalizations | Русские и английские подписи, параметры и формы количества; генерируются штатным `flutter gen-l10n` / `flutter pub get` |
-| lib/ui/message_format.dart | Реализован | Представление AppMessage и длительностей | Выбор перевода по текущему BuildContext, рекурсивное представление причины; исходные данные Jira и пользователя не переводятся |
-| lib/ui/date_localizations.dart | Реализован | Английская Material-локализация с датой день–месяц–год | Единый календарный ввод и формат числовой даты; пользовательские правила определены в MVP, разделе 8.2 |
-| lib/ui/shell_screen.dart | Реализован | ShellScreen: общая оболочка, табы «Работа» и «День», настройки | Виджеты, баннер read-only, навигация |
-| lib/ui/work_screen.dart | Реализован | WorkScreen: каталог задач, таймеры, очередь логов и история | Карточки задач, меню быстрых задач, живые таймеры, очередь неиспользованных логов, нижняя панель сборки |
-| lib/ui/day_screen.dart | Реализован | DayScreen: календарный день, расписание, шкала, отправка и сверка | Таблица расписания, визуализация пауз и конфликтов, отправка в Jira, сверка unknown |
-| lib/ui/add_time_dialog.dart | Реализован | AddTimeDialog: диалог ручного добавления времени (A01) | Быстрые задачи отдельной первой группой, ввод часов/минут, опциональное описание, фиксированное время старта, валидация |
-| lib/ui/edit_log_dialog.dart | Реализован | EditLogDialog: редактирование свободного остановленного лога | Изменение часов, минут, описания работы и фиксированного времени старта |
-| lib/ui/split_log_dialog.dart | Реализован | SplitLogDialog: разделение свободного лога на две части | Настройка смещения точки разделения, индивидуальные описания обеих частей |
-| lib/ui/merge_logs_dialog.dart | Реализован | MergeLogsDialog: объединение нескольких свободных логов | Выбор целевой задачи и объединение накопленного времени и комментариев |
-| lib/ui/edit_segment_dialog.dart | Реализован | EditSegmentDialog: редактирование отдельного интервала расписания | Изменение времени начала и длительности интервала |
-| lib/ui/split_segment_dialog.dart | Реализован | SplitSegmentDialog: разделение интервала расписания дня | Разрезание сегмента на две последовательные части с сохранением позиции в дне |
-| lib/ui/merge_segments_dialog.dart | Реализован | MergeSegmentsDialog: объединение частей одного источника | Слияние сегментов с суммированием длительности без потери обратной ссылки |
-| lib/ui/gap_actions_dialog.dart | Реализован | GapActionsDialog: быстрые целевые действия над свободным промежутком расписания | Схлопывание зазора (snap), растягивание задачи (fill) и точная длительность с выталкиванием волной (ripple push) |
-| lib/ui/settings_dialog.dart | Реализован | SettingsPage: настройки приложения | Закреплённая тема, адаптивная навигация Jira / день / быстрые задачи / API и одно активное содержимое |
-| lib/ui/quick_issue_dialog.dart | Реализован | QuickIssueDialog: проверка и настройка быстрой задачи | Строгий Jira preview без локальной записи, добавление и редактирование локальной подсказки |
-| lib/agent_api_server.dart | Реализован | AgentApiServer: встроенный HTTP REST API для AI-агентов (порт 8765) | Читает карточку Jira, комментарии, вложения и worklogs через AppState/JiraClient; меняет быстрый каталог, сохраняет локальные логи и черновики, но не отправляет их в Jira |
+| lib/main.dart | Implemented | Startup and dependency composition | Storage opening, exclusion of a second writer, recovery, Flutter UI startup; Flutter Driver requires explicit debug `ENABLE_FLUTTER_DRIVER` |
+| lib/single_instance_lock.dart | Implemented | SingleInstanceLock: exclusive file lock | Windows interprocess locking (`RandomAccessFile.lockSync`) |
+| lib/models.dart | Implemented | Models, enums, operation results | Typed Issue, QuickIssue, source log, draft, interval, and errors; no network JSON formats |
+| lib/local_store.dart | Implemented | LocalStore: local data operations | SQL, migrations, scoped QuickIssue catalog, transactions, log binding/removal from unsubmitted drafts, submission journal, application settings, single writer |
+| lib/secure_storage.dart | Implemented | SecureStorage: protected storage | Windows Credential Manager FFI or macOS Keychain; `InMemorySecureStorage` for tests |
+| lib/connection_store.dart | Implemented | ConnectionStore: saved/env form loading and connection persistence | Environment defaults, protected credentials, verified authentication route |
+| lib/issue_parser.dart | Implemented | IssueParser: key, numeric ID, browse URL parsing | Identifier extraction, URL cleanup, input formats |
+| lib/jira_client.dart | Implemented | JiraClient: test connection, read issue/day, create interval, reconcile entry | Direct/scoped authentication, ADF, properties, HTTP responses/errors |
+| lib/log_clock.dart | Implemented | LogClock: pure Dart duration from log state and nowUtc | Elapsed time, start/pause transitions, negative clock differences |
+| lib/day_builder.dart | Implemented | DayBuilder: buildAsRecorded(input), build(input, seed), validate(plan, existingWorklogs, {requirePauses}) | As-recorded placement, Smart Rebuild allocation, breaks, splitting issues > 1 h, validation |
+| lib/worklog_sender.dart | Implemented | WorklogSender: sendDraft, reconcileUnknown, explicit manual unknown resolution | Journal/POST ordering, partial success, interrupted-response recovery, no blind retries |
+| lib/app_state.dart | Implemented | AppState: screen coordination and user actions | Module call order, active scope, busy state, theme/language, saved DaySettings, timers, queue |
+| lib/app_message.dart | Implemented | AppMessage and MessageException: application-owned messages | IDs, arguments, raw diagnostics without Flutter; old-error compatibility and new-error encoding |
+| lib/agent_instructions.dart | Implemented | Standard agent rule, instruction, help in RU/EN | Pure templates with explicit language/URL; MVP section 8.2 owns language behavior |
+| lib/l10n/ | Implemented | ARB catalogs and generated AppLocalizations | Russian/English labels, arguments, plural forms; standard `flutter gen-l10n` / `flutter pub get` generation |
+| lib/ui/message_format.dart | Implemented | AppMessage and duration presentation | Current BuildContext translation, recursive cause formatting; Jira/user data stays original |
+| lib/ui/date_localizations.dart | Implemented | English Material localization with day–month–year dates | Consistent calendar input/numeric dates; MVP section 8.2 owns user rules |
+| lib/ui/shell_screen.dart | Implemented | ShellScreen: shell, Work/Day tabs, Settings | Widgets, read-only banner, navigation |
+| lib/ui/work_screen.dart | Implemented | WorkScreen: issue catalog, timers, log queue/history | Issue cards, quick-issue menu, live timers, unused queue, bottom build controls |
+| lib/ui/day_screen.dart | Implemented | DayScreen: calendar day, schedule, timeline, submission/reconciliation | Schedule table, gaps/conflicts, Jira submission, unknown reconciliation |
+| lib/ui/add_time_dialog.dart | Implemented | AddTimeDialog: manual entry (A01) | Separate first quick-issue group, hours/minutes, optional description, fixed start, validation |
+| lib/ui/edit_log_dialog.dart | Implemented | EditLogDialog: free stopped-log edits | Hours/minutes, description, fixed start |
+| lib/ui/split_log_dialog.dart | Implemented | SplitLogDialog: split a free log | Split offset and separate descriptions |
+| lib/ui/merge_logs_dialog.dart | Implemented | MergeLogsDialog: merge free logs | Target issue, combined duration/comments |
+| lib/ui/edit_segment_dialog.dart | Implemented | EditSegmentDialog: schedule interval edits | Start/duration changes |
+| lib/ui/split_segment_dialog.dart | Implemented | SplitSegmentDialog: split a day interval | Two sequential parts retaining day position |
+| lib/ui/merge_segments_dialog.dart | Implemented | MergeSegmentsDialog: merge one source's parts | Combined durations with preserved source reference |
+| lib/ui/gap_actions_dialog.dart | Implemented | GapActionsDialog: direct free-time actions | Snap, fill, exact duration with ripple push |
+| lib/ui/settings_dialog.dart | Implemented | SettingsPage: application settings | Pinned theme, adaptive Jira/day/quick-issue/API navigation, one content area |
+| lib/ui/quick_issue_dialog.dart | Implemented | QuickIssueDialog: validate/configure quick issues | Strict Jira preview without local writes, local-note creation/editing |
+| lib/agent_api_server.dart | Implemented | AgentApiServer: embedded AI-agent HTTP API (port 8765) | Reads Jira details/comments/attachments/worklogs via AppState/JiraClient; manages quick catalog, local logs/drafts, never submits to Jira |
 
-Пути — ориентир для навигации, а не требование создать пустые заготовки заранее. Начинай с нужных файлов; разделяй файл, когда в нём появляется самостоятельная ответственность. Интерфейс здесь означает доступные операции и их условия, а не обязательный Dart interface или abstract class.
+Paths guide navigation, not advance creation of empty scaffolds. Create files as needed and split when an independent responsibility emerges. Interface means available operations and their conditions, not a mandatory Dart interface or abstract class.
 
-### Правила вызовов
+### Call rules
 
-- Виджет вызывает действие AppState и отображает результат. Виджеты не содержат SQL, Jira-запросы, алгоритм распределения времени и протокол повторной отправки.
-- DayBuilder и LogClock — чистый Dart. Они получают входы явно и не читают часы, окружение, базу или сеть самостоятельно.
-- Для генерации, ручной правки и проверки перед отправкой используется один validate из DayBuilder. Обязательные проверки нельзя реализовать только в форме UI.
-- LocalStore владеет атомарностью и проверками сохранности связей. JiraClient владеет HTTP и нормализацией данных. Ни один из них не вызывает AppState или виджеты.
-- WorklogSender — единственный модуль, который координирует создание worklogs. Кнопки UI, автоматическое восстановление и обработчики HTTP-ошибок не выполняют независимые POST.
-- AppState сохраняет выбор языка через LocalStore; Flutter разрешает системный язык и обновляет локализованные виджеты. LocalStore отличает новую базу до миграций. Язык не входит в Jira scope и снимок DayDraft.
-- AppState хранит стандартное правило агента в каноническом виде и предоставляет его представление для заданного языка; пользовательское правило остаётся исходным текстом. SettingsPage переводит только неизменённый стандартный текст формы, сохраняя несохранённые правки. Local Agent API выбирает язык стандартного правила и справки по настройке приложения, с системным выбором через PlatformDispatcher.
-- Доменные ошибки несут AppMessage; исходные строковые getters остаются совместимыми для существующих Dart-клиентов и Local Agent API. UI использует структурированные сообщения. Новые собственные ошибки в `last_error` кодируются с версией, старые строки остаются исходными. Models и чистые модули не импортируют Flutter.
+- Widgets call AppState actions and display results. They own no SQL, Jira requests, allocation algorithms, or retry protocol.
+- DayBuilder and LogClock are pure Dart with explicit inputs; they do not independently read clocks, environment, storage, or network.
+- Generation, manual editing, and pre-submission checks share DayBuilder.validate. Required validation cannot live only in UI forms.
+- LocalStore owns atomicity and association integrity. JiraClient owns HTTP and normalization. Neither calls AppState or widgets.
+- WorklogSender alone coordinates worklog creation. UI, recovery, and HTTP-error handlers do not issue independent POSTs.
+- AppState persists language via LocalStore; Flutter resolves system language and updates localized widgets. LocalStore identifies a new database before migrations. Language is outside Jira scope and DayDraft snapshots.
+- AppState stores the standard agent rule canonically and exposes it for a requested language; custom rules stay original. SettingsPage translates only unchanged standard form text, preserving unsaved edits. The Local Agent API selects standard-rule/help language from application settings, resolving system mode through PlatformDispatcher.
+- Domain errors carry AppMessage. Raw string getters retain compatibility for existing Dart clients and the API; UI uses structured messages. Encode new own `last_error` values with a version; keep old strings original. Models/pure modules import no Flutter.
 
-## 3. Данные и их владельцы
+## 3. Data and ownership
 
-Платформенное secure storage выбирается в точке запуска: Windows сохраняет
-существующий WindowsCredentialStorage, macOS использует MacOsKeychainStorage
-через flutter_secure_storage_darwin без Keychain Sharing. Нативные entitlements
-разрешают исходящие Jira-запросы и входящие соединения локального API.
-SingleInstanceLock использует файл в каталоге данных приложения; конфликт
-проверяется между отдельными процессами, включая POSIX-платформы.
+Select platform storage at startup: Windows retains WindowsCredentialStorage; macOS uses MacOsKeychainStorage through flutter_secure_storage_darwin without Keychain Sharing. Native entitlements allow outbound Jira requests and inbound local API connections. SingleInstanceLock uses an application-data file; verify conflicts between separate processes, including POSIX platforms.
 
-### Сохраняемые сущности
+### Persistent entities
 
-| Сущность | Минимальные поля | Назначение |
+| Entity | Minimum fields | Purpose |
 |---|---|---|
-| Issue | scope, issueId, key, summary, status?, lastUsedAtUtc, currentLogId? | Кэш задачи, статус и ссылка на текущий локальный лог |
-| LocalLog | id, scope, issueId, titleSnapshot, description, accumulatedSeconds, runningSinceUtc?, createdAtUtc, consumedAtUtc?, isManual, fixedStartTime? | Исходная запись пользователя (таймер или ручной ввод, опциональный якорь старта); хранится независимо от результата сборки |
-| DayDraft | id, scope, date, startUtc, endUtc, seed, settingsSnapshot, importedWorklogsSnapshot, status | Сохранённый план одной даты и сведения, на которых он построен |
-| DraftLog | draftId, sourceLogId, sourceDurationSeconds, descriptionSnapshot, durationLocked | Единственная привязка источника к черновику и снимок полных исходных данных |
-| Segment | id, draftId, sourceLogId, issueId, startUtc, durationSeconds, description, sendState, jiraWorklogId?, lastError?, frozenPayload?, isFixed | Отдельная отправляемая часть одного источника (опционально зафиксированный якорь) и её устойчивое состояние доставки |
-| Break | draftId, startUtc, durationSeconds, kind | Сгенерированная пауза с видом lunch/short; прочие пробелы после ручной правки выводятся из расписания |
+| Issue | scope, issueId, key, summary, status?, lastUsedAtUtc, currentLogId? | Issue cache, status, current local-log reference |
+| LocalLog | id, scope, issueId, titleSnapshot, description, accumulatedSeconds, runningSinceUtc?, createdAtUtc, consumedAtUtc?, isManual, fixedStartTime? | Original timer/manual record with optional start anchor, independent of build results |
+| DayDraft | id, scope, date, startUtc, endUtc, seed, settingsSnapshot, importedWorklogsSnapshot, status | Saved date plan and its inputs |
+| DraftLog | draftId, sourceLogId, sourceDurationSeconds, descriptionSnapshot, durationLocked | Unique source/draft binding and full-input snapshot |
+| Segment | id, draftId, sourceLogId, issueId, startUtc, durationSeconds, description, sendState, jiraWorklogId?, lastError?, frozenPayload?, isFixed | One source's submitted part, optional fixed anchor, durable delivery state |
+| Break | draftId, startUtc, durationSeconds, kind | Generated lunch/short break; other gaps after manual edits derive from the schedule |
 
-Имена таблиц и классов можно адаптировать. Поля settingsSnapshot, importedWorklogsSnapshot и frozenPayload допустимо хранить как JSON в SQLite: их содержимое не требует самостоятельной таблицы только ради вложенности. Отдельные секунды тиков и повторно вычисляемые экранные суммы в базе не нужны.
+Table/class names may be adapted. settingsSnapshot, importedWorklogsSnapshot, and frozenPayload may be JSON in SQLite; nesting alone does not justify separate tables. Do not store per-tick seconds or recomputable screen totals.
 
-scope — нормализованный origin Jira-сайта и accountId подтверждённого подключения. Все чтения и изменения ограничены активным scope. При смене подключения открывается соответствующий локальный набор; старый сохраняется. UI работает с одним активным набором. Создавай JiraClient с неизменяемым контекстом подключения; начатая отправка не должна переключиться на другой аккаунт. Сохранение нового подключения во время отправки недоступно.
+scope is the normalized Jira site origin plus verified accountId. Restrict all reads/mutations to the active scope. Switching connections opens the corresponding local set and retains the old one. UI uses one active set. Create JiraClient with immutable connection context so an in-flight submission cannot switch accounts. Disable saving a new connection during submission.
 
-Токен и сохраняемое подключение принадлежат ConnectionStore. SQLite хранит scope и рабочие данные, но не секрет. Кэш маршрута авторизации привязан к проверенному подключению; редактирование credentials требует новой проверки.
+ConnectionStore owns tokens and saved connections. SQLite stores scope/work data, not secrets. Authentication-route cache belongs to the verified connection; edited credentials require revalidation.
 
-### Источники истины
+### Sources of truth
 
-- SQLite — источник сохранённых задач, логов, черновиков и журнала отправки. AppState хранит текущую проекцию для экрана и несохранённые поля формы.
-- QuickIssue — сохранённая по Jira scope ссылка на проверенную Issue с необязательной локальной подсказкой и порядком добавления. Она не меняет Issue и удаляется независимо от задачи, логов и истории. Встроенных QuickIssue нет.
-- Общие DaySettings и текстовое правило агента сохраняются отдельными ключами в `app_settings`; `DayDraft.settingsSnapshot` фиксирует только числовые значения последней успешной генерации этого черновика. AppState передаёт текущие DaySettings сборщику и обновляет снимок вместе с успешно сохранённым результатом. Local Agent API выдаёт текущие DaySettings и правило одним запросом `GET /api/day-settings`. Правила применения настроек к открытому черновику описаны в [спецификации, раздел 6.1](docs/specs/jira-time-tracker-mvp.md#61-настройки-по-умолчанию).
-- LocalLog — источник исходной длительности. DraftLog — единственная привязка этого источника к одному DayDraft и снимок полного входа сборки. Segment — результат many-to-one проекции LocalLog в день и источник одного Jira worklog. Изменение Segment не переписывает LocalLog; части разных LocalLog не объединяются.
-- Jira — источник идентичности аккаунта, данных задачи и подтверждения созданного worklog. Успешная локальная запись sending не доказывает создание в Jira.
-- Пауза — локальная часть расписания. Она не преобразуется в Jira worklog.
+- SQLite owns saved issues, logs, drafts, and the submission journal. AppState retains the current screen projection and unsaved form fields.
+- QuickIssue is a scoped saved reference to a verified Issue, with optional note and insertion order. It does not alter Issue and can be removed independently of issues/logs/history. No quick issues are built in.
+- Application-wide DaySettings and agent text rule use separate `app_settings` keys. `DayDraft.settingsSnapshot` stores only numeric settings from its latest successful generation. AppState passes current settings to the builder and updates the snapshot with a successfully saved result. `GET /api/day-settings` returns current settings/rule together. Open-draft application rules belong to [specification section 6.1](docs/specs/jira-time-tracker-mvp.md#61-default-settings).
+- LocalLog owns original duration. DraftLog is its unique association to one DayDraft and full build-input snapshot. Segment is a many-to-one LocalLog projection into a day and the source of one Jira worklog. Segment edits do not overwrite LocalLog; parts of different sources cannot merge.
+- Jira owns account identity, issue data, and confirmation of worklog creation. Saving sending locally does not prove creation in Jira.
+- Breaks belong only to the local schedule and never become Jira worklogs.
 
-### Транзакции и ограничения
+### Transactions and constraints
 
-LocalStore должен предоставлять законченные операции: например, сохранить старт/паузу, сохранить весь черновик, зафиксировать начало отправки, записать подтверждённый worklog. Вызывающий код не управляет отдельными SQL-строками такого изменения.
+LocalStore exposes complete operations, such as start/pause, whole-draft save, submission-start recording, and confirmed-worklog persistence. Callers do not manage individual SQL rows within these changes.
 
-Транзакционно выполняются:
+Transactions cover:
 
-1. Изменение текущего лога задачи и его timer state, включая создание нового лога.
-2. Сохранение/замена черновика, его привязок, пауз и интервалов. Ошибка оставляет предыдущую версию целой.
-3. Фиксация идентификатора, неизменяемых отправляемых полей и sending до сетевого запроса.
-4. Сохранение sent/worklogId и отметки использованного источника, если подтверждены все его оставшиеся части.
-5. Исключение исходного лога и всех его интервалов из черновика до первой попытки отправки; после начала отправки операция отклоняется без частичного изменения.
+1. Current issue-log/timer state changes, including new-log creation.
+2. Draft replacement and bindings/breaks/intervals. Failure retains the previous version.
+3. Persisting interval ID, immutable submitted fields, and sending before network access.
+4. Persisting sent/worklogId and consuming a source once all remaining parts are confirmed.
+5. Removing a source and all its intervals before first submission. After submission starts, reject without partial changes.
 
-Включи foreign_keys и версию схемы. Обеспечь один незавершённый черновик на scope/date и одну активную привязку sourceLogId к черновику. В одном DayDraft существует не более одного DraftLog для каждого LocalLog, при этом Segment того же источника может быть несколько. При записи повторно проверяй состояние источника: использованный или включённый в другой черновик лог не резервируется заново. Замена черновика агентом проверяет ожидаемую revision, доступность всех источников и все интервалы до одной транзакционной записи; частично отправленный черновик не заменяется. Длительности интервалов положительны; накопление ещё не запущенного лога может быть нулевым.
+Enable foreign_keys and schema versioning. Enforce one unfinished draft per scope/date and one active sourceLogId binding. A DayDraft has at most one DraftLog per LocalLog but may have several Segments for it. Recheck source state during writes: consumed or other-draft sources cannot be reserved again. Agent replacement validates expected revision, every source, and all intervals before one transactional write; partially submitted drafts are immutable. Interval durations are positive; an unstarted log may accumulate zero.
 
-Миграция применяется транзакционно. Ошибка чтения, миграции или записи возвращается вызывающему коду; база автоматически не заменяется пустой. Блокировка одного пишущего экземпляра должна действовать между процессами Windows, а не только через bool в памяти приложения.
+Apply migrations transactionally. Propagate read/migration/write failures rather than replacing a database with an empty one. Single-writer locking must work between Windows processes, not just through an in-memory bool.
 
-## 4. Время и расписание
+## 4. Time and schedules
 
-Абсолютные timestamps сохраняются в UTC, длительности — целыми секундами. UI использует локальный часовой пояс Windows; смещение вычисляется для выбранной даты. Сохранённые UTC-начала не меняются при повторном открытии. При смене часового пояса Windows меняется отображение локального времени, а не уже сохранённый момент отправки.
+Persist absolute timestamps in UTC and durations in whole seconds. UI uses the Windows local time zone with the selected date's offset. Stored UTC starts do not change on reopening. Changing the Windows time zone changes displayed local time, not an already-saved submission instant.
 
-LogClock вычисляет elapsed по accumulatedSeconds, runningSinceUtc и переданному nowUtc. Тик Flutter нужен только для перерисовки. При play и pause LocalStore сохраняет получившееся состояние; выход из приложения не подменяется pause. Отрицательная разница после перевода системных часов возвращается как проблема, требующая проверки лога.
+LogClock calculates elapsed from accumulatedSeconds, runningSinceUtc, and explicit nowUtc. Flutter ticks redraw only. LocalStore persists Play/Pause results; closing the application is not Pause. Negative elapsed time after a clock change is a problem requiring log review.
 
-DayBuilder получает снимки остановленных логов, признаки фиксации, дату, настройки, существующие worklogs и seed. Результат — новый план либо ошибка с причиной; входные объекты сохраняются неизменными. Алгоритм и численные настройки определены в разделах 6–7 спецификации.
+DayBuilder receives stopped-log snapshots, locks, date/settings, existing worklogs, and seed. It returns a new plan or explained failure without changing inputs. Specification sections 6–7 own algorithms and numeric settings.
 
-validate работает с тем же нормализованным представлением расписания, что build, и проверяет ограничения независимо от способа появления плана. Автоматическая сборка требует свободных слотов, а ручной и агентский черновик допускают пересечения рабочих интервалов; паузы остаются вне работы. Интервалы используют полуоткрытые границы [start, end), чтобы соприкосновение концов не считалось пересечением.
+validate uses build's normalized schedule representation and checks constraints regardless of plan origin. Automatic building requires free slots; manual/agent drafts may overlap work while keeping breaks outside work. Use half-open [start, end) intervals so touching boundaries are not overlaps.
 
-При ручном изменении границ/интервала обновляй производные промежутки и проверяй сохранённые паузы. Устаревшая строка Break не должна создавать вторую, противоречащую таблице интервалов версию расписания. Видимые суммы вычисляются из текущего валидируемого плана.
+On manual boundary/interval edits, update derived gaps and validate saved breaks. Stale Break rows must not create a competing schedule. Compute visible totals from the current validated plan.
 
-## 5. Основные потоки
+## 5. Main flows
 
-### Запуск и локальная работа
+### Startup and local work
 
-main.dart получает блокировку записи, открывает LocalStore и ConnectionStore, восстанавливает активный локальный набор и переводит оставшиеся sending в unknown. Для показа уже сохранённых данных вход в Jira и сеть не требуются. После восстановления AppState получает данные, а LogClock пересчитывает отображение активных таймеров.
+main.dart obtains the write lock, opens LocalStore/ConnectionStore, restores the active local set, and converts leftover sending to unknown. Saved data does not require Jira login or connectivity. AppState loads restored data and LogClock recalculates running timers.
 
-Ручное добавление времени и старт/пауза идут через AppState в законченную операцию LocalStore. UI показывает сохранённый результат после завершения операции. Ошибка диска оставляет возможность исправить ввод или повторить сохранение.
+Manual entry and start/pause go through AppState to complete LocalStore operations. UI displays persisted results after completion. Disk errors leave users able to correct input or retry.
 
-### Сборка и редактирование
+### Building and editing
 
-AppState проверяет выбор, вызывает JiraClient для полной загрузки доступных записей дня, затем передаёт результат в DayBuilder. Успешный план целиком сохраняется через LocalStore. При ошибке загрузки или генерации существующий черновик остаётся доступным. Изменение поля сдвигает последующие сегменты и запланированные паузы без изменения их длительности, заранее проверяет неподвижные записи Jira и сохраняет весь план одной транзакцией LocalStore; оно вызывает validate, а не build с новым seed. При пересборке AppState передаёт части одного исходного лога сборщику под уникальными идентификаторами интервалов, затем восстанавливает связь с исходным логом, сохраняя его исходную длительность. Разделение Segment оставляет прежний sourceLogId; объединение разрешено только для Segment с одинаковым sourceLogId.
+AppState validates selection, retrieves all accessible day entries through JiraClient, and passes them to DayBuilder. Save successful plans entirely through LocalStore. Loading/generation failures retain the prior draft. Field edits shift later segments and planned breaks without changing their durations, precheck fixed Jira entries, and save the whole plan transactionally. They invoke validate, not build with a fresh seed. Rebuilding passes one source's parts under unique interval identifiers, then restores their source association and original duration. Segment splits retain sourceLogId; merges require identical sourceLogId.
 
-AgentApiServer получает снимок выбранной даты через отдельную date-scoped операцию AppState: Jira worklogs загружаются для параметра запроса без переключения открытой в UI даты. По конкретной задаче AppState использует существующий постраничный `JiraClient.getIssueWorklogs`, не меняя открытый день. Чтение карточки и всех видимых комментариев, а также проверка принадлежности и потоковая загрузка вложения принадлежат JiraClient; AppState передаёт ему активное подключение и токен. Сервер принимает только loopback Host и свой Origin. Агент заменяет DayDraft целым снимком и передаёт прочитанную revision; AppState валидирует revision, состояние черновика, доступность источников и таймлайн, после чего LocalStore сохраняет замену одной транзакцией. API не создаёт LocalLog неявно из Segment и не предоставляет отправку в Jira.
+AgentApiServer retrieves dates through a date-scoped AppState operation, loading Jira worklogs for the request without changing the UI date. Issue history uses paginated `JiraClient.getIssueWorklogs` without changing the open day. JiraClient owns issue/comments reading and attachment ownership checks/streaming; AppState supplies active credentials. Accept only loopback Host and own Origin. Agents replace whole drafts with the revision read. AppState validates revision, draft state, sources, and timeline before LocalStore saves one transaction. The API neither creates LocalLogs implicitly from Segments nor exposes Jira submission.
 
-### Отправка
+### Submission
 
-AppState передаёт draftId и проверенное подключение WorklogSender после проверки плана на экране дня. Sender проверяет scope, затем выполняет сохранение sending, один POST и фиксацию результата по каждому интервалу. SQL-транзакция заканчивается до сетевого ожидания: сеть не удерживает блокировку базы.
+After Day-screen validation, AppState passes draftId and the verified connection to WorklogSender. Sender validates scope, then persists sending, POSTs one interval, and saves its result. Finish SQL transactions before network waits; networking does not hold database locks.
 
-Классификацию HTTP-ответа JiraClient возвращает явно: подтверждённое создание, подтверждённый отказ или неопределённый результат. Sender применяет устойчивый переход состояния и сохраняет результат. Полный протокол property, проверки совпадения и ручного разрешения задан в разделе 10.3 спецификации; здесь не вводится второй механизм повторов.
+JiraClient explicitly classifies confirmed creation, confirmed rejection, and unknown outcomes. Sender applies/persists durable transitions. Specification section 10.3 owns the property, matching, and manual-resolution protocol; do not add another retry mechanism here.
 
-Только Sender решает, можно ли отправлять строку повторно. Идентификатор Segment переживает перезапуск и разрешённые повторные попытки. Уже подтверждённые worklogs учитываются по jiraWorklogId при обновлении дня, а не как дополнительное внешнее время поверх своего интервала.
+Only Sender decides whether an interval can retry. Segment IDs survive restarts and allowed retries. Refreshing a day counts confirmed worklogs by jiraWorklogId rather than adding external time over their own intervals.
 
-## 6. Интерфейсы для проверок
+## 6. Testing interfaces
 
-Подставляй зависимости там, где они действительно меняются, и проверяй поведение через тот же интерфейс, что вызывает приложение.
+Substitute dependencies where they vary, testing through the same interfaces used by the application.
 
-| Что проверяется | Реальная зависимость | Подстановка в проверке |
+| Tested behavior | Real dependency | Test substitute |
 |---|---|---|
-| Таймер | Переданный текущий UTC-момент | Заранее заданные моменты без ожидания реального часа |
-| Сборка/валидация | Чистая функция с входами и seed | Наборы локальных логов, занятых интервалов и фиксированных seed |
-| LocalStore | SQLite-файл в каталоге приложения | Временная база, повторное открытие, проверка транзакций тем же кодом |
-| JiraClient | http.Client | MockClient с несколькими страницами, отказами, обрывом ответа и property |
-| ConnectionStore | Окружение и Windows secure storage | Явная map окружения и подставные операции чтения/записи секретов |
-| WorklogSender | JiraClient и LocalStore | Настоящая временная база и JiraClient с подставным HTTP-транспортом |
-| UI | AppState и модули | Те же модули с временными данными и подставными внешними зависимостями |
-| Local Agent API | AgentApiServer, AppState, JiraClient и LocalStore | Настоящий HTTP-сервер, временная база и подставной Jira-транспорт для двух дат, конфликтов revision и атомарных отказов |
+| Timer | Explicit current UTC instant | Fixed timestamps without waiting an hour |
+| Building/validation | Pure function with inputs/seed | Logs, occupied intervals, fixed seeds |
+| LocalStore | SQLite file in application directory | Temporary database, reopening, same-code transaction checks |
+| JiraClient | http.Client | MockClient with pagination, rejections, interrupted responses, properties |
+| ConnectionStore | Environment and Windows secure storage | Explicit environment map and fake secret read/write operations |
+| WorklogSender | JiraClient and LocalStore | Real temporary database and fake HTTP transport |
+| UI | AppState and modules | Same modules with temporary data and fake external dependencies |
+| Local Agent API | AgentApiServer, AppState, JiraClient, LocalStore | Real HTTP server, temporary database, fake Jira transport for two dates, revision conflicts, atomic rejection |
 
-Для каждого внешнего ресурса не нужен собственный универсальный mock framework. Используй встроенные средства flutter_test и выбранного HTTP-пакета. Не подменяй правила доставки моками самого WorklogSender: потерю ответа и восстановление нужно провести через его журнал.
+No universal mock framework is needed for each external resource. Use flutter_test and the chosen HTTP package. Do not fake WorklogSender itself when checking delivery; interrupted responses and recovery must pass through its journal.
 
-Сценарии A01–A24 и команды завершения остаются в разделах 12–13 спецификации. После появления кода поддерживай здесь карту модулей, а точные команды запуска готового приложения — в README.
+Scenarios A01–A24 and completion commands remain in specification sections 12–13. Keep the module map here as code evolves; exact application startup commands belong in README.

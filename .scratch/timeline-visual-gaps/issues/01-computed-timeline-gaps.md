@@ -1,22 +1,22 @@
-# 01. Чистая функция вычисления зазоров расписания (Timeline Gaps)
+# 01. Pure schedule gap calculation (Timeline Gaps)
 
 Status: resolved
 
-## Решение
-Реализован метод `DayBuilder.computeTimelineGaps`:
-- Собирает все рабочие интервалы (`Segment` и `ImportedWorklog`) и объединяет смежные/накладывающиеся участки.
-- Определяет свободные промежутки: перед первой задачей, между соседними задачами (`next.startUtc > prev.endUtc`), и после последней задачи до границы дня.
-- Определяет вид перерыва (`BreakKind.lunch` для зазоров $\ge 30$ мин в обеденное окно 12:00–14:00 local или из `plannedBreaks`, иначе `BreakKind.short`).
-- Протестирован набором unit-тестов в `test/timeline_gaps_test.dart`.
+## Solution
+Implemented `DayBuilder.computeTimelineGaps`:
+- Collect work intervals (`Segment`, `ImportedWorklog`), merging adjacent/overlapping areas.
+- Find free time before the first task, between tasks (`next.startUtc > prev.endUtc`), and after the last task to the day boundary.
+- Determine break kind: `BreakKind.lunch` for gaps $\ge 30$ minutes in the 12:00–14:00 local lunch window or from `plannedBreaks`; otherwise `BreakKind.short`.
+- Unit-tested in `test/timeline_gaps_test.dart`.
 
-## Описание
-Реализовать чистый алгоритм вычисления промежутков свободного времени (`TimelineGap`) между рабочими интервалами дня и границами дня.
+## Description
+Implement a pure algorithm computing free time (`TimelineGap`) between work intervals and day boundaries.
 
-## Критерии приёмки
-1. Класс/модель `TimelineGap` (или расширение `Break`) с полями: `startUtc`, `endUtc`, `durationSeconds`, `kind` (`BreakKind.short` или `BreakKind.lunch`).
-2. Метод `DayBuilder.computeTimelineGaps` (или утилита `TimelineGapComputer`):
-   - Принимает `dayStartUtc`, `dayEndUtc`, список сегментов `List<Segment>`, список существующих записей `List<ExistingWorklog>`.
-   - Корректно объединяет и упорядочивает интервалы.
-   - Находит зазоры: перед первым интервалом, между смежными интервалами (где `next.startUtc > prev.endUtc`), и после последнего интервала до `dayEndUtc`.
-   - Зазоры длительностью $\ge 30$ мин, попадающие в окно 12:00–14:00 локального времени, маркируются как `lunch`.
-3. Покрыто модульными unit-тестами.
+## Acceptance criteria
+1. `TimelineGap` model (or extended `Break`) with `startUtc`, `endUtc`, `durationSeconds`, `kind` (`BreakKind.short` / `BreakKind.lunch`).
+2. `DayBuilder.computeTimelineGaps` (or `TimelineGapComputer`):
+   - Accept `dayStartUtc`, `dayEndUtc`, `List<Segment>`, `List<ExistingWorklog>`.
+   - Correctly merge/order intervals.
+   - Find gaps before first, between adjacent intervals with `next.startUtc > prev.endUtc`, and after last up to `dayEndUtc`.
+   - Label gaps $\ge 30$ minutes in the 12:00–14:00 local window as `lunch`.
+3. Unit-test coverage.

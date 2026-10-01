@@ -1,155 +1,155 @@
-# Спецификация: настраиваемые быстрые задачи и новая структура настроек
+# Specification: Configurable quick issues and new Settings structure
 
 Status: implemented
 
 ## Problem Statement
 
-Приложение содержит встроенный каталог из 18 служебных Jira-задач одной компании. Этот каталог нельзя изменить, он одинаков для всех Jira-подключений и раскрывается в интерфейсе и Local Agent API как универсальное продуктовое правило. Пользователь другой команды видит чужие ключи и описания, а при недоступной Jira приложение может материализовать такую запись как локальную синтетическую задачу.
+The application contains a built-in catalog of 18 service Jira issues from one company. It cannot be edited, is shared by all Jira connections, and appears in the UI and Local Agent API as a universal product rule. Other teams see foreign keys/descriptions; when Jira is unavailable, the application may materialize such an entry as a synthetic local issue.
 
-Страница настроек одновременно показывает тему, подключение Jira, шесть групп параметров сборки дня и Local Agent API. На широком экране она рассчитана ровно на три колонки, а на меньшей ширине превращается в одну длинную прокручиваемую страницу. Полноценный редактор каталога в такую структуру не помещается.
+Settings simultaneously displays theme, Jira connection, six day-building parameter groups, and Local Agent API. Wide-screen layout assumes exactly three columns; narrower layout becomes one long scrolling page. A complete catalog editor does not fit this structure.
 
 ## Solution
 
-Заменить встроенные служебные тикеты на пользовательский каталог **быстрых задач**. Быстрая задача — сохранённая ссылка на существующую Jira issue для повторного выбора; это не отдельный тип Jira-задачи. Каталог принадлежит конкретной паре «Jira-сайт — аккаунт», изначально пуст и содержит только задачи, которые пользователь явно добавил после успешной проверки в Jira.
+Replace built-in service tickets with a user catalog of **quick issues**. A quick issue is a saved reference to an existing Jira issue for repeated selection, not a separate Jira issue type. The catalog belongs to a specific Jira site/account pair, starts empty, and contains only issues explicitly added by the user after successful Jira verification.
 
-Перестроить настройки в отдельную страницу с закреплённой шапкой, темой оформления и левой навигацией. Навигация содержит разделы «Подключение к Jira», «Сборка дня», «Быстрые задачи» и «Локальный API». Справа показывается только активный раздел с собственной прокруткой и локальными действиями; общей кнопки сохранения нет.
+Restructure Settings as a separate page with a fixed header, theme choice, and left navigation. Sections are Jira connection, Day building, Quick issues, and Local API. Only the active section appears on the right with its own scrolling and local actions; there is no global save button.
 
-Текущий каталог EG удаляется из продукта без автоматической миграции. Его точная копия сохраняется только как локальный игнорируемый Git архив и не становится начальными данными приложения.
+Remove the current EG catalog from the product without automatic migration. Preserve an exact copy only as a local Git-ignored archive, never as initial application data.
 
 ## User Stories
 
-1. Как пользователь приложения из любой команды, я хочу не видеть встроенные тикеты чужой компании, чтобы приложение соответствовало моей Jira.
-2. Как пользователь с подключённой Jira, я хочу добавить часто используемую задачу по ключу или URL, чтобы быстро выбирать её повторно.
-3. Как пользователь, я хочу до сохранения увидеть канонический ключ и заголовок, полученные из Jira, чтобы не добавить ошибочную задачу.
-4. Как пользователь, я хочу добавить к быстрой задаче необязательную локальную подсказку, чтобы помнить, когда её использовать.
-5. Как пользователь, я хочу, чтобы заголовок быстрой задачи оставался заголовком Jira, чтобы локальная настройка не подменяла источник истины.
-6. Как пользователь, я хочу получить понятную ошибку при недоступной или несуществующей Jira-задаче, чтобы приложение не создавало фиктивную запись.
-7. Как пользователь, я хочу видеть быстрые задачи в порядке добавления, чтобы порядок был стабильным без дополнительных настроек.
-8. Как пользователь, я хочу изменить локальную подсказку, не меняя Jira-задачу, чтобы уточнить назначение ссылки.
-9. Как пользователь, я хочу удалить задачу из быстрого каталога, не удаляя её из Jira, недавних задач, логов, черновиков или истории.
-10. Как пользователь нескольких Jira-сайтов или аккаунтов, я хочу видеть отдельный каталог для каждого подключения, чтобы задачи разных организаций не смешивались.
-11. Как пользователь, вернувшийся к прежнему Jira-подключению, я хочу снова увидеть его каталог, чтобы не настраивать его повторно.
-12. Как пользователь без действующего Jira-подключения, я хочу видеть объяснение и переход к разделу подключения, чтобы понимать, почему каталог недоступен.
-13. Как новый пользователь с пустым каталогом, я хочу найти функцию «Быстрые задачи» на экране «Работа», чтобы узнать, как её настроить.
-14. Как пользователь с настроенным каталогом, я хочу выбрать быструю задачу из компактного меню и сразу перейти к ручному вводу времени.
-15. Как пользователь, открывший общий диалог добавления времени, я хочу видеть быстрые задачи отдельной группой без дублей, чтобы быстрее выбрать нужную issue.
-16. Как пользователь, я хочу видеть ключ, заголовок и необязательную подсказку в меню быстрых задач, чтобы различать похожие назначения.
-17. Как пользователь настроек, я хочу переключаться между независимыми разделами через левую навигацию, чтобы не прокручивать одну длинную страницу.
-18. Как пользователь, я хочу всегда видеть переключатель темы в шапке настроек, чтобы он не терялся внутри отдельного раздела.
-19. Как пользователь, я хочу, чтобы тема применялась сразу, параметры дня сохранялись своей кнопкой, а операции каталога применялись поштучно, чтобы действия имели понятный результат.
-20. Как пользователь, сохранивший Jira-подключение, я хочу остаться в настройках, чтобы сразу перейти к каталогу быстрых задач.
-21. Как пользователь узкого окна, я хочу выбирать раздел настроек над содержимым, чтобы левая навигация не отнимала рабочую ширину.
-22. Как пользователь второго экземпляра приложения в режиме только чтения, я хочу просматривать каталог и настройки без возможности изменить их, чтобы блокировка была очевидной.
-23. Как локальный AI-агент, я хочу получить быстрые задачи активного Jira-подключения, чтобы выбирать согласованные пользователем повторяющиеся задачи.
-24. Как локальный AI-агент, я хочу получить ключ, заголовок, подсказку и стабильный порядок каталога, чтобы корректно объяснить выбор пользователю.
-25. Как пользователь Agent API, я хочу, чтобы удалённое старое название служебных тикетов исчезло из справки и OpenAPI, чтобы контракт не содержал терминов одной компании.
-26. Как пользователь, я хочу, чтобы агент мог логировать время и по обычной Jira-задаче, которой нет в быстрых, чтобы каталог оставался средством удобства, а не списком разрешений.
+1. As a user from any team, I want no built-in tickets from another company so the application fits my Jira.
+2. As a connected Jira user, I want to add a frequent issue by key/URL so I can quickly select it again.
+3. As a user, I want to see Jira's canonical key/title before saving so I avoid adding the wrong issue.
+4. As a user, I want an optional local hint on a quick issue so I remember when to use it.
+5. As a user, I want the quick issue title to remain Jira's title so local configuration does not replace the source of truth.
+6. As a user, I want an understandable error for inaccessible/nonexistent Jira issues so no fictitious entry is created.
+7. As a user, I want insertion order so the catalog stays stable without extra settings.
+8. As a user, I want to edit the local hint without changing Jira so I can clarify the shortcut's purpose.
+9. As a user, I want to remove a catalog entry without deleting it from Jira, recent issues, logs, drafts, or history.
+10. As a user of several Jira sites/accounts, I want a separate catalog for each connection so organizations' issues do not mix.
+11. As a user returning to a previous connection, I want its catalog restored without reconfiguration.
+12. As a user without a valid connection, I want an explanation and link to connection settings so I understand catalog unavailability.
+13. As a new user with an empty catalog, I want to find Quick issues on Work so I learn how to configure it.
+14. As a configured user, I want to select a quick issue from a compact menu and immediately enter manual time.
+15. As a user of the global Add time dialog, I want quick issues in a separate group without duplicates for faster selection.
+16. As a user, I want key/title/optional hint in the menu so I distinguish similar uses.
+17. As a Settings user, I want independent sections in left navigation so I avoid scrolling one long page.
+18. As a user, I want theme selection always visible in the header rather than buried in a section.
+19. As a user, I want theme applied immediately, day parameters saved with their own button, and catalog operations applied individually so outcomes are clear.
+20. As a user saving a Jira connection, I want to remain in Settings so I can open Quick issues next.
+21. As a narrow-window user, I want section selection above content so left navigation does not consume working width.
+22. As a second-instance read-only user, I want to view catalog/settings without changing them so the lock is clear.
+23. As a local AI agent, I want quick issues for the active connection so I select recurring issues approved by the user.
+24. As a local AI agent, I want key/title/hint/stable order so I explain my choice correctly.
+25. As an Agent API user, I want the removed service-ticket name absent from help/OpenAPI so the contract has no company-specific terminology.
+26. As a user, I want agents to log against ordinary verified Jira issues outside the catalog so quick issues are a convenience rather than an allowlist.
 
 ## Implementation Decisions
 
-- Канонический доменный термин — `QuickIssue`, пользовательская подпись — «Быстрая задача» / «Быстрые задачи». Термин `ServiceTicket` и понятие встроенного корпоративного каталога удаляются.
-- `QuickIssue` хранит ссылку на проверенную Jira issue текущего scope, необязательную локальную подсказку и момент добавления. Каноническая идентичность основывается на Jira issue ID; ключ и summary читаются из связанной кэшированной Issue.
-- Для пары scope и issue существует не более одной QuickIssue. Повторное добавление показывает, что задача уже находится в каталоге, и не меняет её позицию.
-- Порядок — момент добавления по возрастанию: самая ранняя запись сверху. Пользовательская сортировка, drag-and-drop и переключатель способа сортировки отсутствуют.
-- Новая установка и обновлённая существующая установка получают пустой каталог. Старые EG-записи не импортируются автоматически.
-- Добавление начинается с ключа, numeric ID или URL Jira. Приложение обязательно разрешает ссылку через действующее Jira-подключение и только после успеха сохраняет QuickIssue. Ошибка сети, авторизации или отсутствующая issue не создаёт локальную синтетическую задачу.
-- Диалог добавления имеет последовательные состояния: ввод ссылки; загрузка; найденная Jira issue; ошибка. После успешного поиска показываются read-only ключ и summary, поле «Подсказка» и действие «Добавить».
-- Редактирование позволяет менять только подсказку. Для замены Jira issue пользователь удаляет ссылку и добавляет другую.
-- Удаление применяется сразу и удаляет только QuickIssue. Связанная Issue, её LocalLog, DayDraft, Segment, worklog journal и история не изменяются. Дополнительное подтверждение и временное отключение записи не вводятся.
-- Каталог принадлежит scope «Jira base URL + account ID». Смена подключения немедленно переключает отображаемый каталог; возврат к прежнему scope восстанавливает его записи.
-- Без активного проверенного подключения раздел каталога недоступен для изменения, показывает объяснение и действие перехода к «Подключению к Jira».
-- На экране «Работа» действие «Быстрые задачи» присутствует всегда. Пустое меню содержит объяснение и действие «Настроить быстрые задачи». Непустое меню показывает записи в порядке добавления; выбор открывает ручной ввод времени с уже выбранной Issue.
-- В общем диалоге ручного добавления времени быстрые задачи показываются отдельной первой группой. Issue, уже представленная в этой группе, не дублируется в недавних задачах.
-- Строка быстрой задачи показывает ключ, Jira summary и необязательную подсказку. Подсказка является локальной инструкцией и не записывается в Jira summary или worklog автоматически.
-- Настройки остаются отдельной страницей внутри основной оболочки. В закреплённой шапке слева находятся заголовок и описание, справа — существующий выбор темы.
-- Под шапкой находится двухколоночная область: слева навигация по четырём разделам, справа активное содержимое. Навигация и шапка не прокручиваются; прокручивается только содержимое активного раздела.
-- Разделы: «Подключение к Jira», «Сборка дня», «Быстрые задачи», «Локальный API». Отдельного раздела «Общие» нет.
-- Сохранение Jira-подключения больше не закрывает настройки: результат показывается внутри раздела, после чего пользователь может перейти к быстрым задачам.
-- Глобальной кнопки «Сохранить всё» и глобальной отмены нет. Тема сохраняется немедленно; Jira — после проверки и явного сохранения; DaySettings — существующей локальной кнопкой; CRUD QuickIssue — поштучно; Local API остаётся read-only.
-- В режиме только чтения навигация, просмотр и копирование Local API доступны; изменение темы, подключения, DaySettings и QuickIssue отключено с пояснением.
-- При недостаточной ширине левая навигация становится полноширинным селектором раздела над содержимым. Все четыре раздела остаются доступны без горизонтальной прокрутки.
-- Local Agent API заменяет `GET /api/service-tickets` на `GET /api/quick-issues`. Старый маршрут, упоминания EG и термин service ticket удаляются из help, OpenAPI и генерируемой инструкции.
-- `GET /api/quick-issues` доступен только при активном Jira scope и возвращает записи в порядке добавления с Jira issue ID, key, summary и необязательной note. При отсутствии активного подключения возвращается явная конфликтная ошибка, а не глобальный или чужой каталог.
-- Agent API не получает CRUD каталога. Настройка быстрых задач остаётся пользовательским действием в UI. Каталог не ограничивает обычный поиск Jira-задач и создание LocalLog по проверенной issue.
-- Существующий корпоративный список сохраняется только в локальном Git-ignored архиве для ручного обращения. Это не миграционный источник и не runtime-ресурс.
+- The canonical domain term is `QuickIssue`; user labels are Quick issue / Quick issues. Remove `ServiceTicket` and the built-in corporate-catalog concept.
+- `QuickIssue` stores a verified Jira issue reference in the current scope, optional local hint, and addition timestamp. Canonical identity uses Jira issue ID; key/summary come from the linked cached Issue.
+- At most one QuickIssue exists per scope/issue pair. Re-adding reports that it already exists without changing position.
+- Order by addition time ascending, earliest first. No custom sorting, drag-and-drop, or sort selector.
+- New and upgraded installations have empty catalogs. Old EG entries are not automatically imported.
+- Addition starts from key, numeric ID, or Jira URL. Resolve through a valid connection before saving QuickIssue. Network/authentication/missing-issue errors create no synthetic local issue.
+- Addition dialog states: reference input, loading, found Jira issue, error. Successful lookup shows read-only key/summary, Hint field, and Add action.
+- Editing changes only the hint. To replace the Jira issue, remove the shortcut and add another.
+- Removal applies immediately and deletes only QuickIssue. Linked Issue, LocalLog, DayDraft, Segment, worklog journal, and history remain unchanged. No extra confirmation or temporary disabling.
+- The catalog belongs to Jira base URL + account ID scope. Changing connection immediately changes the catalog; returning restores its entries.
+- Without an active verified connection, catalog editing is unavailable; show an explanation and Jira connection action.
+- Quick issues always appears on Work. An empty menu explains and offers Configure quick issues. A populated menu follows insertion order; selection opens manual entry with Issue preselected.
+- In the global manual-entry dialog, quick issues are a separate first group. An Issue in that group is not repeated among recent issues.
+- Rows show key, Jira summary, and optional hint. The hint is a local instruction and is not automatically written to Jira summary or a worklog.
+- Settings remains a separate page inside the main shell. Fixed header: title/description left, existing theme choice right.
+- Below is a two-column area: four-section navigation left, active content right. Navigation/header do not scroll; only active content does.
+- Sections: Jira connection, Day building, Quick issues, Local API. No General section.
+- Saving Jira no longer closes Settings: show the result within its section, then allow navigation to Quick issues.
+- No Save all or global cancellation. Theme saves immediately; Jira after verification and explicit save; DaySettings with its existing local button; QuickIssue CRUD individually; Local API remains read-only.
+- Read-only mode permits navigation, viewing, and Local API copying; theme/connection/DaySettings/QuickIssue changes are disabled with explanation.
+- At insufficient width, left navigation becomes a full-width section selector above content. All four sections remain accessible without horizontal scrolling.
+- Local Agent API replaces `GET /api/service-tickets` with `GET /api/quick-issues`. Remove the old route, EG references, and service-ticket term from help, OpenAPI, and generated instruction.
+- `GET /api/quick-issues` requires active Jira scope and returns insertion-ordered entries with Jira issue ID, key, summary, and optional note. Without a connection return an explicit conflict error, never a global or foreign catalog.
+- Agent API does not gain catalog CRUD. Quick-issue configuration remains a user UI action. The catalog does not restrict ordinary Jira lookup or LocalLog creation for verified issues.
+- Preserve the corporate list only in a local Git-ignored archive for manual reference, never as a migration source or runtime resource.
 
 ## Testing Decisions
 
-- Тесты проверяют наблюдаемое поведение и доменные гарантии, а не имена таблиц, SQL-запросы, приватные методы или состав внутренних виджетов.
-- Главный тестовый шов — AppState вместе с LocalStore на временной SQLite-базе и подставным JiraClient. Через него проверяются добавление после успешного Jira lookup, отказ без синтетической Issue, уникальность в scope, порядок добавления, редактирование подсказки, переключение scope и неразрушающее удаление.
-- На главном шве отдельно доказывается, что два Jira scope с одинаковым key не разделяют QuickIssue и что возврат к прежнему scope восстанавливает его каталог.
-- UI покрывается одним сквозным widget-сценарием: открыть настройки, перейти в «Быстрые задачи», увидеть пустое состояние, добавить проверенную issue, вернуться на «Работу», выбрать её и открыть ручной ввод с выбранной задачей.
-- В UI-сценарии также проверяются отсутствие дубля в общем выборе задач, порядок отображения и недоступность CRUD в read-only режиме.
-- HTTP-шов AgentApiServer проверяет только публичный контракт: активный scope, порядок и поля `GET /api/quick-issues`, ошибку без подключения, отсутствие старого маршрута и согласованность help/OpenAPI/генерируемой инструкции.
-- Существующие тесты подключения Jira, DaySettings, темы и SettingsDialog остаются регрессионной защитой при перекомпоновке страницы.
-- Приёмка включает полный `flutter test`, `flutter analyze`, проверку форматирования изменённых Dart-файлов и `git diff --check`. Реальные worklogs в Jira не создаются.
+- Test observable behavior/domain guarantees rather than table names, SQL queries, private methods, or internal widget composition.
+- Main seam: AppState with LocalStore on temporary SQLite and fake JiraClient. Verify successful-lookup addition, failure without synthetic Issue, scope uniqueness, insertion order, hint editing, scope switching, and nondestructive removal.
+- Separately prove that two Jira scopes sharing a key do not share QuickIssue and returning restores the previous catalog.
+- One end-to-end widget scenario: open Settings, select Quick issues, see empty state, add a verified issue, return to Work, select it, and open manual entry with it preselected.
+- Also verify no duplicate in global issue selection, display order, and unavailable CRUD in read-only mode.
+- AgentApiServer HTTP seam checks public contract only: active scope, `GET /api/quick-issues` order/fields, no-connection error, removed old route, and consistent help/OpenAPI/generated instruction.
+- Existing Jira connection, DaySettings, theme, and SettingsDialog tests protect page restructuring.
+- Acceptance includes full `flutter test`, `flutter analyze`, formatting changed Dart files, and `git diff --check`. Create no real Jira worklogs.
 
 ## Out of Scope
 
-- Предустановленный или автоматически импортированный корпоративный каталог.
-- Общий каталог между разными Jira scope, компьютерами или пользователями.
-- Облачная синхронизация, экспорт или импорт быстрых задач.
-- Группы, теги, категории, закрепление, пользовательская сортировка и drag-and-drop.
-- Флаг активности, архив или временное отключение QuickIssue.
-- Массовое добавление и поиск внутри страницы каталога.
-- Пользовательское переименование Jira issue; summary всегда приходит из Jira.
-- Создание, редактирование или удаление Jira issue из приложения.
-- Удаление связанных задач, логов, дней или истории при удалении QuickIssue.
-- CRUD QuickIssue через Agent API.
-- Обратная совместимость маршрута `/api/service-tickets`.
-- Изменение существующих правил отправки worklogs и сборки дня.
-- Мобильная компоновка и отдельный дизайн для телефонов.
+- Preinstalled/automatically imported corporate catalog.
+- Shared catalog across Jira scopes, computers, or users.
+- Cloud synchronization, export, or import.
+- Groups, tags, categories, pinning, custom sorting, drag-and-drop.
+- Enabled flag, archive, or temporary QuickIssue disabling.
+- Bulk addition and catalog-page search.
+- User renaming of Jira issues; summary always comes from Jira.
+- Creating/editing/deleting Jira issues from the application.
+- Removing linked issues, logs, days, or history with QuickIssue.
+- Agent API QuickIssue CRUD.
+- Backward compatibility for `/api/service-tickets`.
+- Changes to existing worklog submission/day-building rules.
+- Mobile layout or a separate phone design.
 
 ## Further Notes
 
 ### Pencil Design Brief
 
-Основной макет сохраняет верхнюю оболочку, палитры, типографику, визуальный ритм и масштаб существующего `astra.pen`. Конкретные размеры и отступы агент выводит из действующего макета. Нужны следующие состояния.
+Retain the existing `astra.pen` shell, palettes, typography, visual rhythm, and scale. Derive exact dimensions/spacing from the current mockup. Required states follow.
 
-#### 1. Настройки — быстрые задачи, заполненный каталог
+#### 1. Settings — quick issues, populated catalog
 
-- Верхняя навигация приложения остаётся без изменений.
-- Закреплённая шапка: слева «Настройки» и короткое описание; справа существующий переключатель «Как в системе / Светлая / Тёмная».
-- Левая навигация содержит четыре строки с иконкой и подписью. Активная строка «Быстрые задачи» использует существующий акцент выделения. «Общие» отсутствует.
-- Навигация визуально отделена от активного содержимого.
-- Правая область выровнена по левому краю; строки каталога не следует бесконтрольно растягивать на всю ширину большого окна.
-- Заголовок раздела: «Быстрые задачи», пояснение «Часто используемые задачи для текущего подключения Jira» и основная кнопка «Добавить задачу» справа.
-- Под заголовком — спокойная строка контекста: Jira host и аккаунт, например `company.atlassian.net · user@example.com`.
-- Строка каталога: ключ моноширинным или акцентным текстом, рядом Jira summary; необязательная подсказка второй строкой; справа иконка редактирования и меню с действием «Удалить».
-- Строки идут в порядке добавления. Не рисовать drag handle, заголовки сортировки, checkbox активности или категории.
+- Application top navigation remains unchanged.
+- Fixed header: Settings and short description left; existing System / Light / Dark selector right.
+- Left navigation has four icon/label rows. Active Quick issues uses the existing selection accent. No General.
+- Visually separate navigation from active content.
+- Right content is left-aligned; avoid stretching catalog rows uncontrollably across large windows.
+- Section heading: Quick issues, explanation “Frequently used issues for the current Jira connection,” primary Add issue button right.
+- Below the heading, a quiet context row shows Jira host/account, e.g. `company.atlassian.net · user@example.com`.
+- Catalog row: monospaced/accented key beside Jira summary; optional hint on a second line; edit icon and Remove menu right.
+- Insertion order. No drag handle, sorting headers, enabled checkbox, or categories.
 
-#### 2. Настройки — пустой каталог
+#### 2. Settings — empty catalog
 
-- Та же геометрия раздела.
-- Вместо списка — компактное пустое состояние, не большая иллюстрация: иконка, «Быстрых задач пока нет», одно предложение и кнопка «Добавить задачу».
-- В тексте явно указано, что каталог относится к показанному Jira-аккаунту.
+- Same section geometry.
+- Compact empty state rather than a large illustration: icon, “No quick issues yet,” one sentence, and Add issue button.
+- Text explicitly associates the catalog with the displayed Jira account.
 
-#### 3. Настройки — Jira не подключена
+#### 3. Settings — Jira disconnected
 
-- Заголовок раздела сохраняется.
-- Контент сообщает «Сначала подключите Jira» и содержит кнопку «Перейти к подключению».
-- Добавление и список отсутствуют; не показывать фиктивный scope `default`.
+- Retain the section heading.
+- Content says to connect Jira first and offers Open connection settings.
+- No add action/list; do not show fictitious `default` scope.
 
-#### 4. Диалог «Добавить быструю задачу»
+#### 4. Add quick issue dialog
 
-- Компактный desktop-диалог, согласованный по ширине и отступам с существующими диалогами приложения.
-- Первый экран: поле «Ключ или URL Jira-задачи», вторичное действие «Отмена», основное «Найти».
-- После успешного поиска под полем появляется read-only карточка Jira с ключом и summary, затем многострочное необязательное поле «Подсказка» и основная кнопка «Добавить».
-- Состояния loading и ошибки не меняют размеры диалога скачком; ошибка находится рядом с полем.
-- Диалог редактирования использует ту же карточку Jira, но ссылка read-only и доступно только поле подсказки.
+- Compact desktop dialog consistent with existing widths/spacing.
+- Initial view: Jira issue key or URL field, secondary Cancel, primary Find.
+- After lookup, show read-only key/summary card below the field, optional multiline Hint, and primary Add.
+- Loading/errors do not abruptly resize the dialog; errors sit beside the field.
+- Editing uses the same Jira card but the reference is read-only and only the hint is editable.
 
-#### 5. Экран «Работа» — меню быстрых задач
+#### 5. Work — quick issues menu
 
-- Существующее действие служебного тикета переименовано в «Быстрые задачи» и не содержит EG-специфичного tooltip.
-- Заполненное меню показывает key, summary и note; выбор сразу открывает диалог ручного времени с выбранной issue.
-- Для пустого каталога меню показывает короткий текст и действие «Настроить быстрые задачи», ведущее прямо в нужный раздел настроек.
+- Rename the existing service-ticket action to Quick issues and remove EG-specific tooltip.
+- A populated menu shows key, summary, note; selection immediately opens manual time entry with the issue selected.
+- An empty menu shows short text and Configure quick issues, leading directly to that Settings section.
 
-#### 6. Узкое окно
+#### 6. Narrow window
 
-- При недостаточной ширине левая навигация исчезает и заменяется селектором текущего раздела над содержимым.
-- Шапка может перенести тему под заголовок, но тема остаётся видимой без перехода в отдельный раздел.
-- Содержимое активного раздела имеет одну вертикальную прокрутку; горизонтальной прокрутки нет.
+- At insufficient width, replace left navigation with the current-section selector above content.
+- Header may wrap theme below the title, but theme remains visible without opening another section.
+- Active content has one vertical scroll area; no horizontal scrolling.
 
 ### Acceptance Summary
 
-Фича считается спроектированной и реализованной корректно, когда в продукте больше нет встроенных EG-задач и термина ServiceTicket, каждый Jira scope имеет независимый пустой по умолчанию каталог QuickIssue, настройки не превращаются в длинную общую страницу, а UI и Agent API используют один сохранённый каталог без синтетических Jira-задач.
+Design and implementation are correct when the product contains no built-in EG issues or ServiceTicket term, each Jira scope has an independent initially empty QuickIssue catalog, Settings avoids a long combined page, and UI/Agent API use one persisted catalog without synthetic Jira issues.

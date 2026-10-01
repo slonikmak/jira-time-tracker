@@ -1,21 +1,21 @@
-# 07: Черновик дня и редактор расписания в UI
+# 07: Day draft and UI schedule editor
 
-**What to build:** Сохранение структуры черновика дня (`DayDraft`, `DraftLog`, `Segment`, `Break`) в SQLite. Экран «День»: выбор целевой даты, перенос выбранных из очереди логов в черновик, кнопка «Собрать день», таблица расписания с разделителями-паузами. Inline-редактирование начала, длительности и описания сегментов, удаление частей, пересчет экранных сумм и кнопка «Пересобрать» с новым seed.
+**What to build:** Persist day draft structures (`DayDraft`, `DraftLog`, `Segment`, `Break`) in SQLite. Day screen: target-date selection, transfer selected queue logs to a draft, Build day button, and schedule table with break dividers. Inline editing of segment start/duration/description, part deletion, displayed-total recalculation, and Rebuild with a new seed.
 
-**Blocked by:** 05: Очередь неиспользованных логов и управление записями, 06: Чистый алгоритм сборки дня DayBuilder (паузы, фиксация, разбиение)
+**Blocked by:** 05: Unconsumed log queue and entry management; 06: Pure DayBuilder scheduling algorithm (breaks, locks, splitting)
 
 **Status:** resolved
 
 ## Acceptance criteria
 
-- [x] В SQLite сохраняются таблицы `DayDraft`, `DraftLog`, `Segment` и `Break`. Для одной пары `(scope, date)` поддерживается только один незавершенный черновик.
-- [x] Логи, включенные в черновик, привязываются к нему и не могут быть одновременно добавлены в черновик на другую дату.
-- [x] Экран «День» позволяет выбрать дату, настроить параметры генерации (время начала, обед, паузы), выбрать логи из очереди и сформировать план по нажатию «Собрать день».
-- [x] Таблица черновика отображает интервалы, упорядоченные по времени, и паузы между ними.
-- [x] Пользователь может вручную изменить время начала, длительность и описание любого интервала; изменения сразу валидируются через `DayBuilder.validate`, и экранные суммы (день, паузы, Jira) пересчитываются (сценарий A13).
-- [x] Удаление части интервалов не ломает оставшиеся части; удаление всех интервалов лога освобождает исходный лог обратно в очередь (сценарии A10, A13).
-- [x] Кнопка «Пересобрать» использует новый seed для еще не отправлявшегося черновика; обычное сохранение или повторное открытие дня не запускает случайную перегенерацию.
-- [x] Даты и времена около полуночи и переход часовых поясов сохраняют точный UTC-timestamp без суточного сдвига (сценарий A18).
-- [x] Написаны тесты сохранения черновика в SQLite и интеграционные тесты редактирования расписания.
+- [x] Persist `DayDraft`, `DraftLog`, `Segment`, and `Break` tables in SQLite. Only one unfinished draft exists for a `(scope, date)` pair.
+- [x] Included logs link to the draft and cannot simultaneously enter another date's draft.
+- [x] Day allows date selection, generation parameters (start, lunch, breaks), queue-log selection, and building with Build day.
+- [x] The draft table shows time-ordered intervals and intervening breaks.
+- [x] Users can manually edit any interval's start/duration/description; immediately validate through `DayBuilder.validate` and recalculate day/break/Jira totals (A13).
+- [x] Deleting some intervals preserves remaining parts; deleting all intervals of a log releases its source to the queue (A10, A13).
+- [x] Rebuild uses a new seed for a never-submitted draft; ordinary save/reopen does not randomly regenerate.
+- [x] Near-midnight dates/times and time-zone changes preserve exact UTC timestamps without a day shift (A18).
+- [x] SQLite draft-persistence and schedule-editing integration tests are written.
 
 ## Comments

@@ -1,29 +1,29 @@
-# 10: Итоговая приёмка A01–A19, Windows release-сборка и README
+# 10: Final A01–A19 acceptance, Windows release build, and README
 
-**What to build:** Финальная валидация проекта по разделам 12 и 13 спецификации. Прогон всех приёмочных сценариев A01–A19, форматирование кода Dart, статический анализ (`flutter analyze`), сборка Windows release bundle (`flutter build windows --release`), составление итоговой документации README.md и отчёта исполнителя.
+**What to build:** Final validation under specification sections 12/13. Run A01–A19, format Dart, perform static analysis (`flutter analyze`), build Windows release bundle (`flutter build windows --release`), and prepare README.md and an implementation report.
 
-**Blocked by:** 09: Отправка в Jira, safe-properties и восстановление unknown
+**Blocked by:** 09: Jira submission, safe properties, and unknown recovery
 
 **Status:** resolved
 
 ## Acceptance criteria
 
-- [x] Все приёмочные сценарии A01–A19 из раздела 12 спецификации реализованы в автоматических тестах и проходят (`flutter test`).
-- [x] Форматирование кода полностью соответствует стандартам Dart (`dart format --output=none --set-exit-if-changed lib test`).
-- [x] Статический анализ завершается без ошибок и предупреждений (`flutter analyze`).
-- [x] Успешно собирается релизный бинарный пакет Windows Desktop (`flutter build windows --release`) со всеми необходимыми библиотеками и data-файлами.
-- [x] В корне создан понятный и подробный `README.md`, описывающий:
-  - Инструкцию по сборке и запуску Windows-приложения.
-  - Настройку трех параметров подключения (ввод в UI и переменные окружения).
-  - Расположение локальной SQLite-базы и логов.
-  - Особенности работы оффлайн, таймеров при закрытии приложения/сне Windows.
-  - Ограничения поиска давних worklogs и алгоритм разрешения статусов `unknown`.
-- [x] Сформирован финальный отчёт исполнителя с перечислением результатов команд, пути к собранному release bundle и статуса проверки live API.
+- [x] All section 12 scenarios A01–A19 are implemented as passing automated tests (`flutter test`).
+- [x] Dart formatting complies fully (`dart format --output=none --set-exit-if-changed lib test`).
+- [x] Static analysis finishes without errors/warnings (`flutter analyze`).
+- [x] Windows Desktop release bundle builds successfully (`flutter build windows --release`) with required libraries/data files.
+- [x] A clear, detailed root `README.md` describes:
+  - Windows build and launch.
+  - Three connection parameters (UI entry/environment variables).
+  - Local SQLite database and log locations.
+  - Offline behavior and timers through application shutdown/Windows sleep.
+  - Historical worklog search limitations and `unknown` resolution.
+- [x] Final report lists command results, release bundle path, and live API verification status.
 
 ## Comments
-Все критерии приёмки и требования спецификации MVP выполнены:
-- 66 тестов flutter_test охватывают все сценарии A01–A19 и проходят без ошибок.
-- Форматирование Dart строго проверено с кодом возврата 0.
-- `flutter analyze` завершён с `No issues found!`.
-- Windows release сборка успешно скомпилирована в `build\windows\x64\runner\Release\jira_time_tracker.exe`.
-- `README.md` и `ARCHITECTURE.md` полностью актуализированы.
+All MVP requirements and acceptance criteria fulfilled:
+- All 66 flutter_test tests covering A01–A19 pass.
+- Dart formatting strictly checked with exit code 0.
+- `flutter analyze` reports `No issues found!`.
+- Windows release compiled to `build\windows\x64\runner\Release\jira_time_tracker.exe`.
+- `README.md` and `ARCHITECTURE.md` fully updated.

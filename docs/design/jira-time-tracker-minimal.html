@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Jira Time Tracker — минималистичный редизайн</title>
+<title>Jira Time Tracker — minimal redesign</title>
 <style>
 :root{
   --bg:#f5f5f6; --surface:#ffffff;
@@ -21,7 +21,7 @@
 body{background:var(--bg);color:var(--ink);font:14px/1.5 "Inter","Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
 svg.ic{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
 .num{font-variant-numeric:tabular-nums}
-/* Доска */
+/* Board */
 .board{max-width:1240px;margin:0 auto;padding:52px 28px 90px}
 .kicker{font:600 11px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
 .board-head h1{font-size:27px;font-weight:650;letter-spacing:-.02em;margin-top:10px}
@@ -34,7 +34,7 @@ svg.ic{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;str
 .shot-head h2{font-size:17px;font-weight:600;letter-spacing:-.01em}
 .shot-head p{color:var(--muted);font-size:13px}
 .frame{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 1px 2px #1b1b1f08,0 16px 44px -22px #1b1b1f22}
-/* Каркас приложения */
+/* Application shell */
 .appbar{display:flex;align-items:center;gap:10px;padding:0 20px;height:58px;border-bottom:1px solid var(--line)}
 .logo{display:flex;align-items:center;gap:10px;font-weight:650;font-size:13.5px;letter-spacing:-.01em}
 .logo-mark{width:26px;height:26px;border-radius:8px;background:var(--ink);color:#fff;display:grid;place-items:center}
@@ -44,7 +44,7 @@ svg.ic{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;str
 .tab.on{color:var(--ink);background:var(--hover)}
 .tab .cnt{font:500 11px/1 var(--mono);color:var(--muted)}
 .appbar .right{margin-left:auto;display:flex;gap:4px;align-items:center;color:var(--muted)}
-/* Кнопки и поля */
+/* Buttons and fields */
 .btn{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);border-radius:var(--r-sm);padding:9px 15px;font:550 13px/1 inherit;color:var(--ink)}
 .btn svg{width:15px;height:15px}
 .btn.primary{background:var(--ink);border-color:var(--ink);color:#fff}
@@ -56,7 +56,7 @@ svg.ic{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;str
 .iconbtn.accent{color:var(--accent);background:var(--accent-soft)}
 .input{border:1px solid var(--line);border-radius:var(--r-sm);padding:10px 13px;font:inherit;color:var(--ink);background:var(--surface)}
 .input::placeholder{color:var(--muted)}
-/* Экраны — общее */
+/* Screens — common */
 .screen{padding:28px 28px 0}
 .screen-head{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;margin-bottom:20px}
 .screen-head h3{font-size:20px;font-weight:650;letter-spacing:-.02em}
@@ -66,7 +66,7 @@ svg.ic{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;str
 .footbar .sum strong{font-size:14px;font-weight:650}
 .footbar .sum div{font-size:12px;color:var(--muted);margin-top:2px}
 .footbar .spacer{flex:1}
-/* Работа */
+/* Work */
 .addrow{display:flex;gap:10px;margin-bottom:26px}
 .addrow .input{flex:1}
 .workgrid{display:grid;grid-template-columns:336px minmax(0,1fr);gap:32px;padding-bottom:30px}
@@ -127,15 +127,15 @@ svg.ic{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;str
 </svg>
 <div class="board">
   <header class="board-head">
-    <p class="kicker">Концепт · 22 сентября 2026</p>
-    <h1>Jira Time Tracker — минималистичный редизайн</h1>
-    <p class="lead">Спокойный нейтральный интерфейс: одна акцентная пара (indigo), типографика вместо украшений, моноширинные цифры времени, hairline-разделители и больше воздуха. Компоновка и правила состояний — по UX.md, изменён только визуальный язык.</p>
+    <p class="kicker">Concept · 22 September 2026</p>
+    <h1>Jira Time Tracker — minimal redesign</h1>
+    <p class="lead">A calm, neutral interface: one accent pair (indigo), typography instead of decoration, monospaced time digits, hairline dividers, and more breathing room. Layout and state rules follow UX.md; only the visual language changes.</p>
     <div class="principles">
-      <span class="principle">Нейтральная база · 1 акцент</span>
-      <span class="principle">Моноширинные длительности</span>
-      <span class="principle">Разделители 1px вместо рамок</span>
-      <span class="principle">Радиусы 9–12px, без теней в списках</span>
-      <span class="principle">Состояния = текст + иконка</span>
+      <span class="principle">Neutral base · 1 accent</span>
+      <span class="principle">Monospaced durations</span>
+      <span class="principle">1px dividers instead of borders</span>
+      <span class="principle">9–12px radii, no list shadows</span>
+      <span class="principle">States = text + icon</span>
     </div>
   </header>
   <!-- @@BODY -->

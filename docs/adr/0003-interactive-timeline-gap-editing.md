@@ -1,39 +1,45 @@
-# 0003. Неприкосновенность рабочего времени (Ripple Push) и интенты управления зазорами
+# 0003. Preserving work time (Ripple Push) and gap-management intents
 
-## Контекст
-Первоначальная реализация редактирования промежутков (`EditBreakDialog`) пыталась изменять зазор за счёт локального урезания/растягивания соседних рабочих задач: сдвиг начала перерыва сокращал левую задачу, а сдвиг окончания — правую. Это вызвало серьёзный разрыв с ментальной моделью пользователя: время рабочих логов, зафиксированное таймером или ручным вводом, священно — система никогда не должна автоматически урезать отработанные часы пользователя. Кроме того, ручной ввод времени начала/окончания на «дырке» расписания перегружал пользователя сложной арифметикой вместо решения его реальных задач.
+## Context
 
-## Решение
+The original gap editor (`EditBreakDialog`) changed gaps by trimming or stretching adjacent work issues: moving the break's start shortened the left issue, and moving its end shortened the right issue. This violated the user's mental model: time recorded by timers or manual entry must be protected; the system must never automatically cut worked hours. Entering start/end times for a schedule hole also burdened the user with arithmetic rather than addressing their actual task.
 
-### 1. Принцип неприкосновенности длительности задач (Ripple Push)
-- Длительность рабочих сегментов (`Segment.durationSeconds`) никогда не сокращается автоматически при сдвигах других элементов.
-- **Поглощение пустоты, затем выталкивание**:
-  - Если задача увеличивается по длительности — она сначала естественным образом занимает свободное окно (паузу) справа от себя. Последующие задачи остаются на своих местах.
-  - Если свободного окна недостаточно — задача выталкивает все последующие задачи вправо («волной» / ripple push), сохраняя их полные длительности.
-  - Если задача уменьшается — образуется или увеличивается свободное окно (пауза); последующие задачи не смещаются.
-- **Неизменяемые упоры Jira**: записи `ImportedWorklog` зафиксированы намертво. При каскадном выталкивании цепочка задач упирается в границу записи Jira. Если суммарной длительности недостаточно, выдаётся понятное сообщение об ошибке.
+## Decision
 
-### 2. Интенты управления промежутками (Gap Actions)
-Вместо перегруженного модального окна с арифметикой времени клик по зазору (на горизонтальном таймлайне или в расписании) предлагает быстрые целевые интенты:
-1. 🧲 **«Схлопнуть паузу» (Snap / Close Gap)**: придвигает правую цепочку задач вплотную к левой (убирает пустоту, сдвигая последующие задачи влево).
-2. ⏱️ **«Растянуть задачу» (Fill Gap)**: расширяет левую задачу вправо до начала следующей (пользователь фактически работал в это время).
-3. 🍽️ **«Сделать обедом» / «Перерыв»**: переключает вид зазора (обед с иконкой ресторана или короткий перерыв).
-4. ✏️ **«Задать паузу» (Set Duration)**: быстрый выбор (15 мин, 30 мин, 45 мин, 1 час или точное значение) — правая цепочка задач сдвигается волной под выбранную длительность.
+### 1. Preserve issue durations (Ripple Push)
 
-### 3. Интерактивные границы задач на таймлайне (Timeline Drag Handles)
-Прямое манипулирование границами задач мышью прямо на горизонтальной шкале:
-1. **Правый край задачи (Right Handle)**:
-   - Вправо: задача удлиняется, весь правый хвост (задачи и паузы) синхронно сдвигается вправо (аккордеон / жесткая сцепка).
-   - Влево: задача сжимается (до мин. 10 мин), весь правый хвост синхронно подтягивается влево. Отрезанное время отбрасывается (WYSIWYG).
-   - Стопор: жесткий упор справа в записи `ImportedWorklog` из Jira.
-2. **Левый край задачи (Left Handle)**:
-   - Влево: задача удлиняется влево, поглощая паузу перед собой. Сосед слева **не урезается**. Упор в соседа слева при паузе = 0.
-   - Вправо: задача сжимается слева (до мин. 10 мин), перед ней увеличивается/создаётся пауза. Сосед слева неподвижен.
-3. **Обратная связь (Hover & Drag Feedback)**:
-   - При наведении курсора на ручку активная задача подсвечивается контрастным контуром, курсор принимает форму `SystemMouseCursors.resizeLeftRight` / `resizeColumn`.
+- Never automatically shorten working segments (`Segment.durationSeconds`) when moving other elements.
+- **Consume empty time, then push:**
+  - When an issue grows, it first occupies the gap immediately to its right; later issues stay in place.
+  - If the gap is insufficient, ripple-push subsequent issues to the right while retaining their full durations.
+  - When an issue shrinks, a gap appears or grows; subsequent issues do not move.
+- **Immutable Jira boundaries:** `ImportedWorklog` entries stay fixed. A ripple chain stops at a Jira entry. If the available duration is insufficient, show a clear error.
 
-## Последствия
-- Полная прозрачность и предсказуемость: отработанные часы пользователя защищены от случайного урезания.
-- Интерфейс становится простым и интуитивным: большинство действий выполняются в 1 клик или быстрым drag-движением.
-- Математика сдвигов волной детерминирована и безопасна относительно записей Jira.
+### 2. Gap-management intents (Gap Actions)
 
+Clicking a gap on the horizontal timeline or schedule offers direct intents instead of an overloaded time-arithmetic dialog:
+
+1. **Close gap (Snap):** move the right-hand issue chain next to the left-hand issue, removing empty time by shifting later issues left.
+2. **Fill gap:** extend the left issue up to the next issue's start, representing work actually performed during that time.
+3. **Make lunch / Break:** switch the gap type between lunch with a restaurant icon and a short break.
+4. **Set duration:** choose 15, 30, or 45 minutes, one hour, or an exact value; ripple-shift the right-hand chain to accommodate it.
+
+### 3. Interactive issue boundaries (Timeline Drag Handles)
+
+Manipulate issue boundaries directly on the horizontal scale:
+
+1. **Right handle:**
+   - Drag right: grow the issue and shift the entire right tail (issues and gaps) right in sync (accordion / rigid coupling).
+   - Drag left: shrink the issue to a minimum of 10 minutes and move the right tail left in sync. Removed time is discarded (WYSIWYG).
+   - Stop at immutable Jira `ImportedWorklog` entries on the right.
+2. **Left handle:**
+   - Drag left: grow into the preceding gap without trimming the previous neighbor. Stop when the gap reaches zero.
+   - Drag right: shrink from the left to a minimum of 10 minutes, creating or growing the preceding gap. The left neighbor stays fixed.
+3. **Hover and drag feedback:**
+   - Highlight the active issue with a contrasting outline when hovering over a handle; use `SystemMouseCursors.resizeLeftRight` / `resizeColumn`.
+
+## Consequences
+
+- Worked hours are protected from accidental trimming, keeping edits transparent and predictable.
+- Most actions take one click or a quick drag.
+- Ripple-shift arithmetic is deterministic and safe around Jira entries.

@@ -1,31 +1,31 @@
-# Спецификация: Встроенный HTTP-сервер для взаимодействия с AI-агентами (Local Agent API)
+# Specification: Embedded HTTP server for AI agent interaction (Local Agent API)
 
-## Цель
-Предоставить локальный HTTP-интерфейс (REST/JSON), с помощью которого внешние AI-агенты, скрипты и MCP-серверы могут:
-1. Запрашивать и логировать рабочее время по номеру задачи Jira.
-2. Получать список свободных неотправленных логов для формирования расписания.
-3. Получать текущее состояние дня (включая уже зафиксированные в Jira записи).
-4. Загружать готовое построенное агентом расписание дня (`DayDraft`) в приложение с валидацией без использования встроенного алгоритма сборки.
-5. Получать машиночитаемую спецификацию OpenAPI 3.0 и текстовую справку.
-6. Легко подключаться через готовый промпт скилла, доступный для копирования в настройках приложения.
+## Goal
+Provide a local HTTP interface (REST/JSON) through which external AI agents, scripts, and MCP servers can:
+1. Query and log work time by Jira issue number.
+2. List free unsubmitted logs to prepare a schedule.
+3. Read the current day state, including records already saved in Jira.
+4. Upload a complete agent-built day schedule (`DayDraft`) with validation, without using the built-in scheduling algorithm.
+5. Retrieve machine-readable OpenAPI 3.0 documentation and text help.
+6. Connect easily using a ready-made skill prompt available to copy in Settings.
 
-## Сетевые параметры и безопасность
-- Хост: строго `127.0.0.1` (`InternetAddress.loopbackIPv4`). Запросы из локальной сети блокируются на уровне сокета.
-- Порт: по умолчанию `8765`. При занятости порта — автоматический fallback на следующий свободный (`8766`, `8767`...) с фиксацией в `AppState` и UI.
-- Аутентификация: не требуется (локальный loopback процесс разработчика).
-- Формат обмена: `application/json; charset=utf-8`.
-- CORS: разрешен для `*` с заголовками `Content-Type, Authorization`, методами `GET, POST, PATCH, DELETE, OPTIONS` (для совместимости с web/browser tooling).
+## Network parameters and security
+- Host: strictly `127.0.0.1` (`InternetAddress.loopbackIPv4`). LAN requests are blocked at the socket level.
+- Port: `8765` by default. If occupied, automatically fall back to the next free port (`8766`, `8767`...) and record it in `AppState` and the UI.
+- Authentication: none required (a developer's local loopback process).
+- Exchange format: `application/json; charset=utf-8`.
+- CORS: allow `*` with headers `Content-Type, Authorization` and methods `GET, POST, PATCH, DELETE, OPTIONS` for compatibility with web/browser tooling.
 
-## Эндпоинты
+## Endpoints
 
 ### 1. `GET /api/help`
-Текстовая / Markdown справка с описанием всех маршрутов и примерами `curl`.
+Text/Markdown help describing every route with `curl` examples.
 
 ### 2. `GET /api/openapi.json`
-Полная спецификация OpenAPI 3.0.0 для автоматического подключения агентами и MCP-серверами.
+Complete OpenAPI 3.0.0 specification for automatic connection by agents and MCP servers.
 
 ### 3. `GET /api/logs`
-Возвращает список свободных неотправленных локальных логов:
+Returns free unsubmitted local logs:
 ```json
 [
   {
@@ -43,7 +43,7 @@
 ```
 
 ### 4. `POST /api/logs`
-Добавление нового затраченного времени:
+Add newly spent time:
 ```json
 {
   "issue_key": "PROJ-123",
@@ -51,23 +51,23 @@
   "description": "Refactoring middleware"
 }
 ```
-*Поддерживается также `duration_seconds`.*
-Если задача отсутствует в локальном кэше: сервер ищет её через `JiraClient` (search/lookup), сохраняет в кэш и привязывает лог. Если задача не найдена в Jira — `404 Not Found`.
+*`duration_seconds` is also supported.*
+If the issue is absent from the local cache, the server looks it up through `JiraClient` (search/lookup), caches it, and links the log. If Jira has no such issue, return `404 Not Found`.
 
 ### 5. `PATCH /api/logs/{id}`
-Обновление свободного лога: `{ "duration_minutes": 50, "description": "Updated notes" }`.
+Update a free log: `{ "duration_minutes": 50, "description": "Updated notes" }`.
 
 ### 6. `DELETE /api/logs/{id}`
-Удаление свободного лога.
+Delete a free log.
 
 ### 7. `GET /api/day?date=YYYY-MM-DD`
-Информация о дне (по умолчанию сегодня):
+Day information (defaults to today):
 - `date`: `YYYY-MM-DD`
-- `existing_worklogs`: массив существующих записей в Jira за эту дату (`[start, end]`, `duration_minutes`, `issue_key`, `description`).
-- `draft`: текущий черновик дня (если есть), включая сегменты (`segments`), паузы (`breaks`), сумму часов и статус.
+- `existing_worklogs`: array of existing Jira records for the date (`[start, end]`, `duration_minutes`, `issue_key`, `description`).
+- `draft`: current day draft, if any, including `segments`, `breaks`, total hours, and status.
 
 ### 8. `POST /api/day`
-Загрузка готового расписания дня от агента:
+Upload a complete agent-built day schedule:
 ```json
 {
   "date": "2026-09-17",
@@ -82,8 +82,8 @@
   ]
 }
 ```
-- Поддерживает формат `start` как локальное время `"09:00"` / `"09:00:00"`, так и ISO-8601 UTC `"2026-09-17T09:00:00Z"`.
-- Проверяет расписание через `DayBuilder.validate` (отсутствие пересечений между сегментами и существующими записями Jira, лимит суток).
-- Сохраняет черновик `DayDraft` в SQLite.
-- Приложение обновляет экран «День» в реальном времени.
-- Финальная отправка в Jira выполняется человеком по кнопке «Отправить в Jira» на экране дня.
+- Supports `start` as local time `"09:00"` / `"09:00:00"` or ISO-8601 UTC `"2026-09-17T09:00:00Z"`.
+- Checks the schedule through `DayBuilder.validate` (no overlap between segments and existing Jira records, calendar-day limit).
+- Saves `DayDraft` in SQLite.
+- Updates the Day screen in real time.
+- A person performs final submission using Submit to Jira on the Day screen.

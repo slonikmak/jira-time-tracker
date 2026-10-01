@@ -1,14 +1,14 @@
-# 03. Интеграция выталкивания волной в редактирование сегментов и экран дня
+# 03. Ripple Push integration with segment editing and Day
 
 Status: resolved
 
-## Описание
+## Description
 1. `updateSegment`:
-   - Если пользователь увеличивает длительность сегмента или меняет время начала:
-   - Сегмент сначала занимает свободное пространство (паузу) справа.
-   - Если сегмент накладывается на следующий сегмент, следующий сегмент и вся последующая цепочка выталкиваются вправо (`ripple push`), сохраняя свои длительности!
-   - Защита: если на пути выталкивания встречается `ImportedWorklog`, операция блокируется с ошибкой валидации.
-2. `DayScreen` и `TimelineTrackBar`:
-   - Клик по блоку паузы на шкале времени или по карточке перерыва в расписании открывает `GapActionsDialog`.
-   - Интеграция быстрых действий со `ScaffoldMessenger` (уведомления об успехе).
-3. Интеграционные тесты и прогон полного набора тестов.
+   - When the user extends duration or changes start:
+   - First consume free space (a break) to the right.
+   - If the segment overlaps the next, push that segment and the entire following chain right (`ripple push`), preserving their durations.
+   - An `ImportedWorklog` in the path blocks the operation with a validation error.
+2. `DayScreen` and `TimelineTrackBar`:
+   - Clicking a timeline break or schedule break card opens `GapActionsDialog`.
+   - Integrate quick actions with `ScaffoldMessenger` success notifications.
+3. Integration tests and full test suite.

@@ -1,14 +1,18 @@
-# 0001. Два режима сборки дня: As-Recorded Build и Smart Rebuild
+# 0001. Two day-building modes: As-Recorded Build and Smart Rebuild
 
-## Контекст
-Первоначальная логика сборщика дня всегда масштабировала любые выбранные логи под диапазон рабочего дня (7.5–8 часов), вставляла синтетические короткие паузы и обед, а также дробила любые задачи. При небольшом количестве логов это приводило к неестественному растягиванию рабочего времени и размытию фактических интервалов работы.
+## Context
 
-## Решение
-Разделить формирование расписания на два независимых сценария:
-1. **As-Recorded Build (дефолтная сборка)**: вызывается по кнопке «Собрать день» на экране «Работа». Логи переносятся на таймлайн в исходное локальное время суток и с исходной длительностью (для ручных логов `start = createdAt - duration`). Задачи $\le 1$ часа не дробятся. Искусственные паузы не добавляются; пересечения и конфликты с существующими записями Jira разрешаются каскадным сдвигом вперед.
-2. **Smart Rebuild (умная пересборка)**: вызывается по явной кнопке «Умная пересборка» на экране «День». Выполняет алгоритмическое распределение с учетом настроек дня, коротких дней ($< 6$ часов), обеда ($\ge 4$ часов работы) и дробления задач $> 1$ часа.
+The original day builder always scaled selected logs to the working-day range (7.5–8 hours), inserted synthetic short breaks and lunch, and split every issue. With few logs, this stretched work time unnaturally and obscured the actual recorded intervals.
 
-## Последствия
-- В `DayBuilder` появились независимые методы `buildAsRecorded` и `build`.
-- Поведение по умолчанию сохраняет честный хронометраж разработчика без искажений.
-- Умная пересборка остаётся доступной как оптимизационный инструмент на экране «День».
+## Decision
+
+Separate schedule construction into two independent workflows:
+
+1. **As-Recorded Build (default):** invoked by **Build day** on the Work screen. Logs retain their original local times and durations (for manual logs, `start = createdAt - duration`). Issues lasting $\le 1$ hour are not split. No artificial breaks are added; overlaps and conflicts with existing Jira entries are resolved by cascading forward shifts.
+2. **Smart Rebuild:** invoked explicitly by **Smart rebuild** on the Day screen. Uses algorithmic distribution with day settings, short days ($< 6$ hours), lunch ($\ge 4$ hours of work), and splitting of issues lasting $> 1$ hour.
+
+## Consequences
+
+- `DayBuilder` has independent `buildAsRecorded` and `build` methods.
+- Default behavior preserves the developer's actual time records without distortion.
+- Smart rebuilding remains an optimization tool on the Day screen.

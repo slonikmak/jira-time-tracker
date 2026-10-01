@@ -1,16 +1,16 @@
-# 04: Остальные настройки и готовая Windows-версия
+# 04: Remaining Settings and a ready Windows version
 
-**What to build:** Все разделы настроек доступны на обоих языках; полное приложение проверено и собрано для Windows. Правила — в [спецификации](../spec.md).
+**What to build:** All Settings sections are available in both languages; the full application is verified and built for Windows. Rules are in the [specification](../spec.md).
 
-**Blocked by:** 02: Работа, очередь, история и формы логов; 03: День, редактор и результаты отправки.
+**Blocked by:** 02: Work, queue, history, and log forms; 03: Day, editor, and submission results.
 
 **Status:** complete
 
-- [x] Переведены Jira-подключение, DaySettings, QuickIssue и представление Local Agent API; пользовательские инструкции не изменяются.
-- [x] Обновлены документы-владельцы; оба языка проверены в широком и узком окне и обеих темах.
-- [x] Пройдены форматирование, analyze, полный test, diff-check и Windows release-сборка.
-- [x] Проведено независимое ревью по стандартам и спецификации; результат и ограничения записаны.
+- [x] Jira connection, DaySettings, QuickIssue, and Local Agent API presentation are translated; user instructions remain unchanged.
+- [x] Owning documents are updated; both languages are checked in wide/narrow windows and both themes.
+- [x] Formatting, analyze, full test, diff-check, and Windows release build pass.
+- [x] Independent standards/specification review is complete; results and limitations are recorded.
 
 ## Comments
 
-2026-10-01: Реализовано и проверено. Проверки, независимое ревью, Windows-сборка и ограничения записаны в [отчёте](../verification.md). Рабочая Jira не использовалась.
+2026-10-01: Implemented and verified. Checks, independent review, Windows build, and limitations are recorded in the [report](../verification.md). Production Jira was not used.

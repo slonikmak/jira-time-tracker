@@ -1,25 +1,25 @@
-# 08: Загрузка существующих worklogs Jira и выявление конфликтов
+# 08: Existing Jira worklog loading and conflict detection
 
-**What to build:** Загрузка уже залогированного в Jira времени на выбранную дату через API Jira Cloud. JQL-поиск с пагинацией (`nextPageToken`) и буфером в $\pm 1$ день, загрузка страниц worklogs по каждой найденной задаче (`startAt`/`maxResults`), фильтрация по `accountId` текущего пользователя. Отображение записей в черновике как read-only и передача в `DayBuilder` как занятых окон.
+**What to build:** Load time already logged in Jira for a selected date through Jira Cloud API. Paginated JQL search (`nextPageToken`) with a $\pm 1$ day buffer, per-issue worklog pages (`startAt`/`maxResults`), and current-user `accountId` filtering. Display records read-only in drafts and provide them to `DayBuilder` as occupied windows.
 
-**Blocked by:** 02: Настройки подключения к Jira (Env, SecureStore, проверка маршрутов), 07: Черновик дня и редактор расписания в UI
+**Blocked by:** 02: Jira connection settings (Env, SecureStore, route verification); 07: Day draft and UI schedule editor
 
 **Status:** resolved
 
 ## Acceptance criteria
 
-- [x] `JiraClient` находит задачи с worklogs на дату через POST `/rest/api/3/search/jql` с буфером $\pm 1$ день, корректно обрабатывая пагинацию через `nextPageToken` (сценарий A12).
-- [x] Для найденных задач загружаются все страницы записей через GET `/rest/api/3/issue/{id}/worklog` (`startAt`/`maxResults`), фильтруются по `author.accountId == currentAccountId` и локальным календарным суткам (сценарий A12).
-- [x] Сбой при загрузке любой страницы Jira возвращает ошибку и не трактуется как пустой день; существующий локальный черновик не повреждается (сценарий A12).
-- [x] Загруженные записи Jira выводятся в таблице черновика с визуальной отметкой «Jira worklog» и заблокированы от локального редактирования.
-- [x] DayBuilder учитывает внешние записи как полуоткрытые интервалы `[started, started + timeSpentSeconds)` и строит новые интервалы вокруг них без пересечений (сценарий A07).
-- [x] Если внешние записи уже занимают $> 8$ часов или имеют пересечения, UI блокирует сборку и отправку с сообщением о конфликте.
-- [x] Написаны тесты с подставным клиентом, проверяющие многостраничный JQL и пагинацию worklogs.
+- [x] `JiraClient` finds issues with date-specific worklogs through POST `/rest/api/3/search/jql`, using a $\pm 1$ day buffer and handling `nextPageToken` pagination (A12).
+- [x] Load all found issues' records through GET `/rest/api/3/issue/{id}/worklog` (`startAt`/`maxResults`), filtering `author.accountId == currentAccountId` and local calendar-day bounds (A12).
+- [x] Failure of any Jira page returns an error rather than an empty day; the existing local draft is undamaged (A12).
+- [x] Loaded Jira records show a Jira worklog marker in the draft table and cannot be edited locally.
+- [x] DayBuilder treats external records as half-open `[started, started + timeSpentSeconds)` intervals and builds around them without overlap (A07).
+- [x] If external records already exceed $> 8$ hours or overlap, the UI blocks building/submission with a conflict message.
+- [x] Fake-client tests verify multipage JQL and worklog pagination.
 
 ## Comments
-Все критерии реализованы и проверены:
-- JiraClient.fetchDayWorklogs с JQL nextPageToken и GET worklog startAt/maxResults с фильтрацией по author.accountId.
-- Fail-fast обработка ошибок без превращения в пустой день.
-- DayBuilder планирует вокруг существующих слотов.
-- DayScreen отображает прочитанные записи Jira как read-only и выявляет конфликты.
-- Тесты в `test/jira_worklog_discovery_test.dart` (4 сценария) и общий регрессионный сьют из 60 тестов успешно пройдены.
+All criteria implemented and verified:
+- JiraClient.fetchDayWorklogs uses JQL nextPageToken and GET worklog startAt/maxResults with author.accountId filtering.
+- Fail-fast errors never become an empty day.
+- DayBuilder plans around existing slots.
+- DayScreen shows Jira records read-only and detects conflicts.
+- `test/jira_worklog_discovery_test.dart` (four scenarios) and the full 60-test regression suite pass.

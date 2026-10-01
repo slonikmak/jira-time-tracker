@@ -1,35 +1,35 @@
-# Спецификация: Неприкосновенность рабочего времени (Ripple Push) и быстрые действия с зазорами (Gap Actions)
+# Specification: Preserving work duration (Ripple Push) and quick gap actions
 
-## Цель
-Устранить когнитивную сложность и риск урезания рабочего времени при редактировании расписания:
-1. Задачи пользователя никогда не сжимаются автоматически. Если задача или перерыв удлиняются, они выталкивают последующие задачи вправо («волной» / ripple push), сохраняя их полную длительность.
-2. При клике на свободный промежуток (паузу) открывается не перегруженный сложными полями диалог с временем начала/окончания, а быстрое меню понятных целевых действий:
-   - 🧲 **«Схлопнуть паузу»**: подтянуть следующие задачи вплотную к предыдущей.
-   - ⏱️ **«Растянуть задачу»**: продлить предыдущую задачу до начала следующей.
-   - 🍽️ **«Сделать обедом» / «Обычный перерыв»**: переключить вид зазора.
-   - ✏️ **«Задать длительность паузы»**: быстрый выбор (15, 30, 45, 60 мин) с выталкиванием последующих задач.
+## Goal
+Reduce cognitive complexity and the risk of cutting work time while editing:
+1. Never automatically shorten user tasks. Extending a task/break pushes subsequent tasks right (ripple push) while preserving full durations.
+2. Clicking free time opens a quick menu of clear actions:
+   - 🧲 **Collapse break:** bring subsequent tasks up to the previous task.
+   - ⏱️ **Extend task:** extend the previous task to the next start.
+   - 🍽️ **Make lunch / Regular break:** switch gap type.
+   - ✏️ **Set break duration:** choose 15, 30, 45, or 60 minutes, pushing subsequent tasks.
 
-## Архитектура сдвигов и валидации
-1. **Алгоритм Ripple Push (Выталкивание волной)**:
-   - Если сегмент $S$ удлиняется или сдвигается вперед:
-     - Если справа есть свободное окно (пауза) до следующего сегмента $S_{next}$, то $S$ сначала поглощает это окно.
-     - Если $S.endUtc > S_{next}.startUtc$, то $S_{next}$ сдвигается в $S.endUtc$ (сохраняя свою длительность $durationSeconds$).
-     - Если сдвиг $S_{next}$ вызывает наложение на $S_{next+1}$, тот также сдвигается по цепочке.
-   - **Защита от наложения на записи Jira (`ImportedWorklog`)**:
-     - Если в цепочке выталкивания встречается `ImportedWorklog`, сдвиг не может зайти за его `startUtc`.
-     - Если суммарное время превышает свободное окно перед записью Jira, операция блокируется с понятной ошибкой: «Недостаточно свободного времени перед записью Jira (доступно X мин, требуется Y мин)».
-   - Если день расширяется вправо, `DayDraft.endUtc` расширяется до окончания последнего сегмента.
-2. **Интент «Схлопнуть паузу» (`snapGap`)**:
-   - Находит правую цепочку сегментов после зазора.
-   - Сдвигает первый правый сегмент влево в стык к левому интервалу (`startUtc = leftEndUtc`).
-   - Все последующие сегменты сдвигаются влево на величину убранного зазора ($\Delta t = gap.durationSeconds$), сохраняя паузы между собой.
-3. **Интент «Растянуть задачу» (`fillGapWithLeftSegment`)**:
-   - Левый сегмент удлиняется: `durationSeconds += gap.durationSeconds`.
-   - Правые сегменты остаются на месте. Зазор закрывается работой.
-4. **Интент «Задать длительность паузы» (`setGapDuration`)**:
-   - Задаётся новая длительность зазора $D_{new}$.
-   - Смещение $\Delta t = D_{new} - D_{old}$.
-   - Если $\Delta t > 0$: правая цепочка сегментов выталкивается вправо на $\Delta t$ (с проверкой упора в Jira worklogs).
-   - Если $\Delta t < 0$: правая цепочка сегментов сдвигается влево на $|\Delta t|$ (пауза сужается, последующие задачи придвигаются).
-5. **Интент «Сделать обедом / Перерывом» (`toggleGapLunch`)**:
-   - Сохраняет предпочтение обеда в базе данных (`store.replaceBreaks`) и пересчитывает расписание.
+## Shift architecture and validation
+1. **Ripple Push algorithm:**
+   - If segment $S$ is extended or moved forward:
+     - First consume a free window (break) before $S_{next}$.
+     - If $S.endUtc > S_{next}.startUtc$, move $S_{next}$ to $S.endUtc$, preserving $durationSeconds$.
+     - If this overlaps $S_{next+1}$, move it too, cascading down the chain.
+   - **Jira record protection (`ImportedWorklog`):**
+     - The chain cannot cross an encountered `ImportedWorklog` record's `startUtc`.
+     - If required time exceeds the free window, block with an understandable error: “Not enough free time before the Jira record (X min available, Y min required).”
+   - Extending the day right extends `DayDraft.endUtc` to the last segment's end.
+2. **Collapse break intent (`snapGap`):**
+   - Find the chain right of the gap.
+   - Move its first segment left to meet the left interval (`startUtc = leftEndUtc`).
+   - Move all following segments left by the removed gap ($\Delta t = gap.durationSeconds$), preserving intervening breaks.
+3. **Extend task intent (`fillGapWithLeftSegment`):**
+   - Extend the left segment: `durationSeconds += gap.durationSeconds`.
+   - Right segments stay in place; work fills the gap.
+4. **Set break duration intent (`setGapDuration`):**
+   - Specify $D_{new}$.
+   - Shift $\Delta t = D_{new} - D_{old}$.
+   - If $\Delta t > 0$, push the right chain right by $\Delta t$, checking Jira obstacles.
+   - If $\Delta t < 0$, move it left by $|\Delta t|$, narrowing the break and bringing tasks closer.
+5. **Make lunch / Break intent (`toggleGapLunch`):**
+   - Persist lunch preference (`store.replaceBreaks`) and recompute the schedule.

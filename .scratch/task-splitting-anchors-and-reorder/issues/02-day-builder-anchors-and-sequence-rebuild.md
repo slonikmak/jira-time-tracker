@@ -1,31 +1,31 @@
-# Issue 02: Алгоритм сборщика дня: фиксированные якоря, разрезание вокруг якорей и сохранение порядка
+# Issue 02: Day builder algorithm: fixed anchors, splitting around anchors, and order preservation
 
-## Зависит от:
-- Issue 01 (Модели данных и `DayBuilderLogInput`)
+## Depends on:
+- Issue 01 (Data models and `DayBuilderLogInput`)
 
-## Блокирует:
-- Issue 04 (UI экрана «День»)
+## Blocks:
+- Issue 04 (Day UI)
 
-## Описание задачи:
-1. **Обновление `DayBuilderLogInput`**:
-   - Поля `bool isFixed` и `DateTime? fixedStartUtc`.
-2. **Логика размещения фиксированных якорей в `DayBuilder`**:
-   - Задачи с `isFixed == true` размещаются строго в указанное время `fixedStartUtc`.
-   - Проверка пересечений между несколькими фиксированными якорями: при пересечении выбрасывается `DayBuilderException` с указанием конфликтующих задач.
-3. **Размещение плавающих задач и сохранение последовательности**:
-   - Входной список задач обрабатывается строго в заданном порядке (без рандомизации последовательности при пересборке).
-   - Свободные окна дня формируются между началом дня, якорями и концом дня.
-   - Если плавающая задача не помещается целиком в свободное окно перед якорем:
-     - При размере окна $\ge 15$ минут (900 сек): задача разрезается на 2 части (часть 1 заполняет окно до якоря, часть 2 переходит в следующее окно после якоря).
-     - При размере окна $< 15$ минут: задача не дробится, а целиком сдвигается за якорь.
-4. **Реализация метода пересборки дня `rebuildDayPlan`**:
-   - Сохраняет существующую последовательность сегментов черновика дня.
-   - Учитывает закрепленные якоря.
-   - Рассчитывает оптимальные паузы.
+## Task description:
+1. **Update `DayBuilderLogInput`:**
+   - Fields `bool isFixed` and `DateTime? fixedStartUtc`.
+2. **Place fixed anchors in `DayBuilder`:**
+   - Place `isFixed == true` tasks exactly at `fixedStartUtc`.
+   - Overlapping fixed anchors throw `DayBuilderException` identifying conflicting issues.
+3. **Place floating tasks and preserve sequence:**
+   - Process the input list strictly in order, without randomizing sequence during rebuild.
+   - Free windows lie between day start, anchors, and day end.
+   - If a floating task does not fit before an anchor:
+     - Window $\ge 15$ minutes (900 seconds): split in two; part one fills the window, part two moves to the next window after the anchor.
+     - Window $< 15$ minutes: do not split; move the whole task after the anchor.
+4. **Implement `rebuildDayPlan`:**
+   - Preserve the draft's existing segment sequence.
+   - Respect pinned anchors.
+   - Calculate optimal breaks.
 
-## Критерии приемки:
-- Тест на корректное позиционирование фиксированного созвона на заданное время.
-- Тест на ошибку при пересечении двух фиксированных созвонов.
-- Тест на разрезание плавающей задачи при окне $\ge 15$ минут.
-- Тест на перенос задачи целиком при окне $< 15$ минут.
-- Тест на строгое сохранение порядка задач при вызове пересборки.
+## Acceptance criteria:
+- Correct fixed-call placement at the specified time.
+- Error for overlapping fixed calls.
+- Floating-task splitting with a window $\ge 15$ minutes.
+- Whole-task movement with a window $< 15$ minutes.
+- Strict task-order preservation on rebuild.

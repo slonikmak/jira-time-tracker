@@ -1,360 +1,362 @@
-# Jira Time Tracker — спецификация реализации MVP
+# Jira Time Tracker — MVP implementation specification
 
-Дата: 2026-09-14. Продуктовое поведение согласовано с пользователем после интервью.
-Адрес Jira задаётся пользователем. Платформы: Flutter Desktop, Windows и macOS. Правила сборки и доставки определяет [инструкция публикации](../releases.md).
+Date: 2026-09-14. Product behavior was agreed with the user after an interview.
+The Jira address is user-configurable. Platforms: Flutter Desktop, Windows and macOS. The [release guide](../releases.md) defines builds and delivery.
 
-## 1. Задание исполнителю
+## 1. Assignment for the implementer
 
-Реализуй работающее локальное приложение по этой спецификации. В ней достаточно контекста для работы без истории разговора. Выполняй этапы из раздела 13 последовательно; завершение первого этапа не означает завершение задания.
+Implement a working local application from this specification. It contains sufficient context to work without conversation history. Complete the stages in section 13 in order; finishing the first stage does not complete the assignment.
 
-Правила работы в проекте: [AGENTS.md](../../AGENTS.md). Ценность и сквозные человеческие/агентские сценарии: [пользовательские истории](user-stories.md). Структура модулей и хранения: [ARCHITECTURE.md](../../ARCHITECTURE.md). Экраны, формы и интерактивный макет: [UX/UI](../design/UX.md). Эти файлы входят в комплект задания; требования и критерии приёмки определяет эта спецификация.
+Project rules: [AGENTS.md](../../AGENTS.md). User value and end-to-end human/agent workflows: [user stories](user-stories.md). Modules and storage: [ARCHITECTURE.md](../../ARCHITECTURE.md). Screens, forms, and interactive design: [UX/UI](../design/UX.md). These files form the assignment package; this specification owns requirements and acceptance criteria.
 
-Разделы 2–3 фиксируют согласованное продуктовое ядро; разделы 4–8 раскрывают сценарии. Конкретные решения о привязке черновиков, пороге разбиения, поведении после начала отправки, часовом поясе и структуре хранения — инженерные умолчания этой спецификации, а не отдельные пожелания пользователя. Разделы 9–13 описывают реализацию и проверку. Сохраняй продуктовый контракт при адаптации технических деталей к установленному SDK.
+Sections 2–3 define the agreed product core; sections 4–8 describe workflows. Draft associations, splitting thresholds, post-submission behavior, time zones, and storage structure are engineering defaults in this specification rather than separate user requests. Sections 9–13 define implementation and verification. Preserve the product contract when adapting technical details to the installed SDK.
 
-Перед изменениями прочитай применимые AGENTS.md, проверь текущее дерево и инструменты. На момент подготовки документа в рабочем каталоге были только служебные папки и skills-lock.json; Flutter-проекта и Git-репозитория не было. Команды flutter и dart доступны. Повторно проверь фактическое состояние: оно могло измениться.
+Before changing anything, read applicable AGENTS.md files and inspect the tree and tools. When this document was prepared, the directory contained only support folders and skills-lock.json; there was no Flutter project or Git repository. Flutter and Dart commands were available. Recheck actual state, which may have changed.
 
-Итог работы: приложение, проверки из раздела 12, Windows release-сборка и README с запуском, конфигурацией и ограничениями. Существующие пользовательские файлы сохраняй. Наличие реальных credentials не требуется для реализации и проверок с подставным Jira API.
+Deliver the application, section 12 checks, a Windows release build, and a README covering startup, configuration, and limitations. Preserve existing user files. Real credentials are unnecessary for implementation or verification with a fake Jira API.
 
-## 2. Зачем нужно приложение
+## 2. Why the application exists
 
-Пользователь работает над несколькими Jira-задачами параллельно, в том числе через агентов. Ему нужны независимые локальные записи времени и возможность в конце дня выбрать, какие записи отправить в Jira.
+The user works on several Jira issues in parallel, including through agents. They need independent local time records and a way to choose which records to submit to Jira at the end of the day.
 
-Основной путь:
+Primary workflow:
 
-**Задача Jira → локальные логи → выбор логов и даты → сборка дня → ручная правка → отправка в Jira.**
+**Jira issue → local logs → select logs and date → build day → manual edits → submit to Jira.**
 
-Сборка дня может увеличивать и уменьшать исходные длительности, переносить логи на другую дату, разбивать их на интервалы. Это сознательно согласованное поведение. Исходные длительности остаются в локальной истории; результат сборки хранится отдельно.
+Day building may increase or decrease original durations, move logs to another date, and split them into intervals. This behavior was deliberately agreed. Original durations remain in local history; the build result is stored separately.
 
-### Границы MVP
+### MVP scope
 
-- Один активный Jira-аккаунт, локальные данные, Windows и macOS desktop.
-- Оформление выбирается в настройках: «Как в системе» (по умолчанию), «Светлая» или «Тёмная». Выбор применяется сразу и сохраняется локально между запусками.
-- Язык интерфейса переключается между русским и английским; точные правила выбора и обновления установки — в разделе 8.2.
-- Интеграция через стандартные Jira Cloud worklogs. Отдельная интеграция с Planim не входит в MVP; отображение записей именно в Planim пока не проверено.
-- Задачи выбирает пользователь. Ограничения «назначено на меня» в приложении нет; права Jira действуют.
-- Фильтрация задач по статусам, автоматическое скрытие закрытых задач, AI-генерация описаний, облачная синхронизация, мобильные версии, трей, автозапуск и установщик в MVP не входят.
-- Приложение создаёт новые worklogs; редактирование и удаление уже существующих Jira worklogs выполняются вне приложения.
+- One active Jira account, local data, Windows and macOS desktop.
+- Theme options in Settings: **System default** (default), **Light**, and **Dark**. Apply immediately and persist between launches.
+- Switch the interface between Russian and English; selection and upgrade rules are in section 8.2.
+- Integrate through standard Jira Cloud worklogs. Separate Planim integration is out of scope; display of entries specifically in Planim has not been verified.
+- Users select issues. There is no application-level assigned-to-me restriction; Jira permissions apply.
+- Status filtering, automatic hiding of closed issues, AI-generated descriptions, cloud sync, mobile versions, tray behavior, autostart, and an installer are outside the MVP.
+- Create new worklogs; edit and delete existing Jira worklogs outside the application.
 
-## 3. Термины и неизменяемые правила
+## 3. Terms and invariants
 
-| Термин | Значение |
+| Term | Meaning |
 |---|---|
-| Задача | Jira issue, идентифицируемая issueId и key; содержит название summary. |
-| Быстрая задача | Сохранённая пользователем в рамках конкретного Jira-сайта и аккаунта ссылка на существующую задачу для быстрого повторного выбора. Не является отдельным типом Jira issue. |
-| Локальный лог | Исходный факт работы по одной задаче с длительностью и необязательным описанием. Создаётся таймером, ручным вводом или Local Agent API. |
-| Черновик дня | Сохранённый результат размещения выбранных логов на выбранную дату; до отправки редактируется. |
-| Привязка источника | Связь одного локального лога с одним черновиком и снимок его полной исходной длительности и описания. |
-| Интервал | Представление части локального лога в черновике: обратная ссылка на источник, задача, начало, длительность и описание. После отправки соответствует одному Jira worklog. |
-| Пауза | Промежуток внутри рабочего дня, который не отправляется в Jira. Все паузы равноправны; отдельная сущность «обеда» упразднена. |
-| Использованный лог | Лог, все оставшиеся в черновике интервалы которого успешно отправлены. Повторно в сборку не предлагается. |
+| Issue | A Jira issue identified by issueId and key, with a summary. |
+| Quick issue | A user-saved reference to an existing issue within a specific Jira site/account for repeated selection; not a separate Jira issue type. |
+| Local log | An original work fact for one issue, with duration and optional description, created by a timer, manual entry, or Local Agent API. |
+| Day draft | A saved placement of selected logs on a selected date, editable before submission. |
+| Source binding | The association of one local log with one draft, including a snapshot of its full original duration and description. |
+| Interval | A representation of part of a local log in a draft: source reference, issue, start, duration, and description. After submission, corresponds to one Jira worklog. |
+| Break | Time within the working day that is not submitted to Jira. All breaks have equal status; lunch is no longer a separate entity. |
+| Consumed log | A log whose remaining draft intervals have all been successfully submitted; not offered for another build. |
 
-- Для сборки выбираются **логи, а не задачи**. Несколько логов одной задачи остаются разными логами.
-- Связь направлена от исходного лога к дню: один локальный лог может дать один или несколько интервалов одного черновика, но имеет в нём ровно одну привязку источника. Сумма интервалов может отличаться от исходной длительности, которая сохраняется в снимке.
-- Каждый интервал ссылается ровно на один исходный лог. Разделение интервала внутри дня не создаёт новый лог; объединять в один интервал можно только части одного источника.
-- Один локальный лог не бывает одновременно включён в черновики разных дат. Если части факта работы должны попасть в разные дни, свободный лог сначала разделяют на независимые LocalLog в очереди.
-- Три одновременно работающих часовых таймера дают три локальных лога по часу. Их сумма автоматически не становится продолжительностью рабочего дня.
-- Полная продолжительность дня от начала до конца, включая все паузы, не имеет искусственного ограничения в 8 часов и ограничена рамками календарных суток. Сумма длительностей параллельных worklogs может превышать продолжительность этого окна.
-- Рабочие интервалы одного дня могут пересекаться между собой и с существующими Jira worklogs; каждый остаётся самостоятельной записью. Паузы не пересекаются с работой и друг с другом. Автоматическая сборка по умолчанию по-прежнему размещает новые интервалы в свободных слотах.
-- Один лог после успешной отправки используется целиком. Уменьшение с 2:00 до 1:20 не оставляет 40 минут для следующего дня.
-- Генерация и редактирование черновика ничего не отправляют в Jira.
-- До подтверждённого результата отправки исходные логи не помечаются использованными.
+- Select **logs, not issues**, for a build. Several logs for one issue remain separate logs.
+- The association runs from a source log to a day: one local log may produce one or more intervals in one draft, with exactly one source binding. Their total may differ from the original duration retained in the snapshot.
+- Every interval references exactly one source log. Splitting an interval within a day does not create a new log; only parts of the same source may be merged into one interval.
+- A local log cannot belong to drafts on different dates simultaneously. To place parts on different days, first split a free log into independent LocalLogs in the queue.
+- Three timers running for an hour produce three one-hour local logs. Their sum does not automatically become the day duration.
+- The full day span, including breaks, has no artificial eight-hour limit and must stay within a calendar day. Parallel worklog durations may sum to more than that span.
+- Work intervals may overlap each other and existing Jira worklogs; each remains an independent entry. Breaks cannot overlap work or each other. The default automatic builder still places new intervals into free slots.
+- Successful submission consumes a whole log. Reducing 2:00 to 1:20 does not leave 40 minutes for another day.
+- Generating and editing a draft submits nothing to Jira.
+- Source logs are not consumed before submission results are confirmed.
 
-## 4. Задачи и локальные логи
+## 4. Issues and local logs
 
-### 4.1. Недавние задачи
+### 4.1. Recent issues
 
-Поле добавления принимает ключ вида PROJ-123, числовой Jira issue ID и ссылку на задачу этого Jira-сайта, например /browse/PROJ-123. Название и канонический ключ получаем из Jira. Повторное добавление той же задачи показывает существующую строку и поднимает её в списке.
+The add field accepts a key such as PROJ-123, a numeric Jira issue ID, or a URL on this Jira site, such as /browse/PROJ-123. Retrieve the summary and canonical key from Jira. Adding the same issue again shows its existing row and moves it up the list.
 
-Список сортируется по последнему взаимодействию: добавление, запуск, пауза или ручное добавление лога. В нём остаются ранее использованные задачи. Минимальная навигация: поиск по ключу/названию; при большом списке фильтр давности «7 дней / 30 дней / Все». Фильтры меняют только видимость списка, а не доступность и сохранность логов.
+Sort by last interaction: adding, starting, pausing, or manually logging time. Keep previously used issues. Minimum navigation: key/summary search and, for a large list, **7 days / 30 days / All** recency filtering. Filters affect list visibility only, not log availability or persistence.
 
-На строке задачи отображаются ключ, статус задачи (из Jira) и название. Доступны запуск/остановка таймера («Запустить таймер» / «Остановить таймер») и расположенная рядом кнопка «Добавить время вручную». Выбор нескольких строк и «Запустить выбранные» запускает их таймеры одновременно.
+Each row shows the key, Jira status, and summary. Provide **Start timer / Stop timer** and an adjacent **Add time manually** action. Selecting multiple rows and **Start selected** starts their timers together.
 
-### 4.2. Таймер (модель Старт / Стоп)
+### 4.2. Timer (Start / Stop model)
 
-- **Старт (Play)** всегда начинает отдельную новую запись с нуля (00:00:00). Отдельная кнопка «Новый лог» перенесена на саму кнопку Play за ненадобностью.
-- **Стоп (Stop)** останавливает таймер, фиксирует накопленную длительность в очереди логов и отвязывает лог от карточки задачи (счётчик на карточке сбрасывается в 00:00:00, готовый к следующему запуску).
-- На разных задачах таймеры работают независимо. На одной задаче в MVP одновременно работает один текущий таймер. Повторный запуск уже работающего таймера не создаёт второй.
-- Закрытие окна, завершение процесса, сон и перезагрузка Windows сами по себе не останавливают отсчёт активного таймера. После открытия показывается время с учётом прошедшего промежутка.
-- В сборку допускаются только остановленные логи с положительной длительностью. Для работающего лога показывается действие остановки.
+- **Start (Play)** always creates a separate new entry at zero (00:00:00). The redundant **New log** button is incorporated into Play.
+- **Stop** stops the timer, saves accumulated duration to the queue, and detaches the log from its issue card. The card's counter resets to 00:00:00, ready for another start.
+- Timers on different issues are independent. One current timer may run per issue in the MVP; starting an already-running timer does not create another.
+- Closing the window, terminating the process, sleeping, or restarting Windows does not stop an active timer. Reopening includes the elapsed period.
+- Only stopped logs with positive durations may be built into a day. Show a stop action for running logs.
 
-### 4.3. Ручной ввод — обязательный основной сценарий
+### 4.3. Manual entry — required primary workflow
 
-**Выбрать задачу → «Добавить время» → 3 часа → необязательное описание → сохранить.**
+**Select issue → Add time → three hours → optional description → save.**
 
-Создаётся отдельный остановленный локальный лог на 10 800 секунд. Таймер запускать не нужно; уже работающий таймер этой или другой задачи от ручного ввода не меняется. Форма длительности: отдельные поля часов и минут, проверка положительного итога. Описание можно оставить пустым.
+Create a separate stopped log of 10,800 seconds. No timer is needed; manual entry does not affect timers running on this or other issues. Use separate hour and minute fields and validate a positive total. Descriptions may be empty.
 
-Для ещё не включённого в черновик остановленного лога доступны исправление длительности/описания и удаление. После включения правки выполняются в черновике либо лог сначала исключается из него.
+Stopped logs not yet in a draft can have their duration/description corrected or be deleted. Once bound to a draft, edit there or exclude the log first.
 
-### 4.4. Название и описание
+### 4.4. Summary and description
 
-Заголовок лога — название Jira-задачи, полученное при его создании. Описание лога — написанный пользователем текст о сделанной работе. Это разные данные; summary задачи в Jira приложение не меняет.
+A log's title is the Jira summary retrieved when it was created. Its description is user-authored text about work done. These are different values; the application does not change Jira issue summaries.
 
-При разбиении лога описание копируется в каждый интервал. В черновике описание каждой части можно отредактировать отдельно. Пустое описание допустимо, заглушки вроде «Работал над задачей» автоматически не добавляются.
+Splitting a log copies its description into every interval. Each draft part's description can then be edited independently. Empty descriptions are allowed; do not insert placeholders such as **Worked on the issue** automatically.
 
-### 4.5. Разделение и объединение источников
+### 4.5. Splitting and merging sources
 
-Свободный остановленный локальный лог можно разделить на два положительных лога или объединить с другими свободными логами. Эти операции меняют факты-источники и нужны, в частности, чтобы части работы можно было независимо включить в разные дни. Работающие, использованные и уже привязанные к черновику логи не меняются таким способом. Разделение и объединение интервалов на экране «День» — другая операция: она меняет только представление одного источника внутри одного дня.
+A free stopped log can be split into two positive logs or merged with other free logs. These operations change source facts, allowing parts to be independently placed on different days. Running, consumed, or draft-bound logs cannot be changed this way. Splitting and merging intervals on Day is a different operation: it changes only one source's representation within one day.
 
-### 4.6. Быстрые задачи
+### 4.6. Quick issues
 
-Встроенного корпоративного списка задач нет. Пользователь формирует каталог быстрых задач отдельно для каждой пары «Jira-сайт — аккаунт». Новая установка и обновлённая существующая установка начинают с пустого каталога.
+There is no built-in company issue list. Users maintain a quick-issue catalog separately for each Jira site/account. New and upgraded installations start with empty catalogs.
 
-Быструю задачу добавляют по ключу, numeric ID или URL. Перед сохранением приложение обязательно получает канонические issueId, key и summary из Jira; сетевой сбой или неизвестная задача не подменяются локальной синтетической записью. Допускается необязательная локальная подсказка о назначении. Записи показываются в порядке добавления; ручная сортировка, категории и отключение не требуются.
+Add by key, numeric ID, or URL. Before saving, retrieve canonical issueId, key, and summary from Jira. Network failures or unknown issues must not produce synthetic local records. An optional local purpose note is allowed. Display insertion order; manual sorting, categories, and disabling are unnecessary.
 
-Удаление из быстрого каталога удаляет только ссылку. Кэшированная Jira-задача, LocalLog, DayDraft, Segment и история остаются без изменений. Без активного проверенного подключения каталог недоступен для изменения. На экране «Работа» пустое меню быстрых задач ведёт прямо в соответствующий раздел настроек; выбор настроенной задачи открывает ручной ввод времени с уже выбранной issue.
+Deleting a quick issue removes only its reference. Cached Issue, LocalLog, DayDraft, Segment, and history remain unchanged. Without an active verified connection, the catalog cannot be modified. On Work, an empty quick-issue menu opens its Settings section; selecting a configured issue opens manual time entry with that issue selected.
 
-## 5. Очередь и использование логов
+## 5. Queue and log consumption
 
-Основной список показывает неиспользованные логи с задачей, исходной длительностью, датой создания и описанием. Дата создания не ограничивает дату будущей отправки. Например, пятничный лог можно выбрать для сборки понедельника.
+The main list shows unused logs with issue, original duration, creation date, and description. Creation dates do not restrict submission dates: a Friday log can be selected for Monday.
 
-Использованные записи сохраняются в локальной истории с датой отправки и ссылками на полученные Jira worklog IDs. Они не предлагаются для повторной сборки. Невыбранные записи остаются в очереди без переноса или уменьшения длительности.
+Consumed entries remain in local history with submission date and resulting Jira worklog IDs. They are not offered for rebuilding. Unselected entries stay in the queue without being moved or reduced.
 
-Техническое правило черновиков: для одной даты хранится один незавершённый черновик; локальный лог одновременно принадлежит одному черновику. Такая привязка ещё не означает использование. До первой отправки лог можно убрать из черновика и выбрать для другой даты. После начала отправки связь сохраняется до разрешения всех результатов.
+Draft rule: keep one unfinished draft per date; a local log belongs to one draft at a time. Binding alone does not consume it. Before first submission, remove a log and select it for another date. Once submission starts, retain the association until all results are resolved.
 
-Удаление всех интервалов конкретного лога из ещё не отправлявшегося черновика возвращает его в очередь. Если удалена только часть интервалов, после отправки оставшихся лог всё равно используется целиком.
+Removing all intervals of a log from a never-submitted draft returns it to the queue. Removing only some intervals still consumes the whole source when the remaining intervals are sent.
 
-## 6. Сборка дня
+## 6. Day building
 
-### 6.1. Настройки по умолчанию
+### 6.1. Default settings
 
-| Настройка | Значение |
+| Setting | Value |
 |---|---|
-| Начало рабочего дня | Случайное время между 08:00 и 09:00 включительно |
-| Полная продолжительность | Между 7 ч 30 мин и 8 ч включительно |
-| Начало длинной паузы | Между 12:00 и 14:00 включительно |
-| Длительность длинной паузы | Между 30 и 45 минутами включительно |
-| Короткие паузы | От 2 до 4 за день |
-| Длительность короткой паузы | От 5 до 10 минут включительно |
-| Минимальный рабочий интервал | 15 минут |
+| Day start | Random time from 08:00 to 09:00 inclusive |
+| Full duration | 7 h 30 min to 8 h inclusive |
+| Long break start | 12:00 to 14:00 inclusive |
+| Long break duration | 30–45 minutes inclusive |
+| Short breaks | 2–4 per day |
+| Short break duration | 5–10 minutes inclusive |
+| Minimum work interval | 15 minutes |
 
-Настройки доступны для изменения и сохраняются. Проверяй min <= max, допустимое время суток и положительность длительностей. Значение 0–0 для длительности длинной паузы отключает её; смешанный диапазон 0–N недопустим. Диапазоны регулируют генерацию; ручные правки могут выходить за диапазоны генерации, сохраняя границы даты и паузы вне работы.
+Settings are editable and persistent. Validate min <= max, valid times of day, and positive durations. A 0–0 long-break duration disables it; mixed 0–N ranges are invalid. Ranges govern generation; manual edits may exceed them while respecting date boundaries and keeping breaks outside work.
 
-Диапазоны общие для приложения на этом компьютере и не зависят от подключения Jira. Число дополнительных коротких пауз может быть от 0 до 95 (защитная граница по 24 часам и минимальному рабочему интервалу); обязательная пауза между соседними сгенерированными рабочими интервалами остаётся и использует минимальную настроенную длительность короткой паузы. Сборщик соблюдает выбранный диапазон начала длинной паузы и выбранное число коротких пауз также в короткий день; если разместить их невозможно, возвращает ошибку и сохраняет прежний черновик. Кнопка «Сбросить» возвращает значения по умолчанию только в форму; они вступают в силу после «Сохранить параметры».
+Ranges are application-wide on this computer and independent of the Jira connection. Additional short breaks may number 0–95, a defensive bound based on 24 hours and the minimum work interval. Mandatory breaks between adjacent generated intervals remain and use the minimum configured short-break duration. The builder respects long-break start ranges and short-break counts even on short days. If placement is impossible, return an error and retain the previous draft. **Reset** changes form values only; they apply after **Save settings**.
 
-Сохранение настроек не меняет уже открытый черновик. Обе явные алгоритмические команды — «Умная пересборка» и «Пересобрать день» с сохранением порядка — используют текущие сохранённые диапазоны и обновляют снимок настроек черновика после успешной пересборки. При обычном открытии черновика его снимок не подменяет общие настройки. Дефолтная сборка «как записано» сохраняет исходное время и длительность логов согласно разделу 6.3.1.
+Saving settings does not change the open draft. Both explicit algorithmic commands, **Smart rebuild** and **Rebuild day** preserving order, use current saved ranges and update the draft's settings snapshot after a successful rebuild. Opening a draft does not replace application-wide settings with its snapshot. As-recorded building preserves original log times and durations under section 6.3.1.
 
-В разделе «Сборка дня» пользователь также редактирует текстовое правило для AI-агента о применении этих диапазонов. Правило сохраняется на этом компьютере вместе с диапазонами, не зависит от Jira scope и не меняет алгоритм встроенного сборщика. Пустое правило не сохраняется; «Сбросить» возвращает в форму как диапазоны, так и исходный текст правила. Агент загружает актуальные диапазоны и правило перед каждой сборкой через один запрос `GET /api/day-settings`.
+In Day build, users also edit a text rule telling an AI agent how to apply these ranges. Store it on this computer with the ranges, independently of Jira scope. It does not change the built-in builder. Do not save an empty rule. **Reset** restores both ranges and the original rule to the form. Before every build, the agent retrieves current ranges and rule in one `GET /api/day-settings` request.
 
-Пример базовой арифметики: начало 08:34, конец 16:22 — полный день 7:48. Длинная пауза 35 минут и две короткие паузы по 8 минут дают не менее 51 минуты пауз. Если там уже есть час, 5:57 — верхний бюджет новых интервалов до добавления обязательных пауз между соседними рабочими интервалами; фактическое новое время может быть меньше.
+Arithmetic example: 08:34–16:22 spans 7:48. A 35-minute long break and two eight-minute short breaks total at least 51 minutes. With an existing one-hour worklog, 5:57 is the maximum new-work budget before mandatory inter-interval breaks; actual new time may be lower.
 
-### 6.2. Вход и выход
+### 6.2. Inputs and outputs
 
-Вход: выбранная дата, остановленные локальные логи, признаки фиксации их длительности, настройки, существующие записи Jira, seed генератора.
+Inputs: selected date, stopped logs, duration-lock flags, settings, existing Jira entries, and random seed.
 
-Выход: границы дня, паузы, новые интервалы, исходные/получившиеся суммы по каждому логу, общая сумма. Исходные логи не перезаписываются. При одинаковых входах и seed результат одинаковый; «Пересобрать» использует новый seed. Открытие сохранённого черновика его не генерирует заново.
+Outputs: day boundaries, breaks, new intervals, original/resulting totals per log, and overall totals. Do not overwrite sources. Identical inputs and seed produce identical results; **Rebuild** uses a new seed. Opening a saved draft does not regenerate it.
 
-### 6.3. Режимы сборки дня
+### 6.3. Day-building modes
 
-Сборка дня поддерживает два режима: дефолтную прямую сборку («как записано») и умную алгоритмическую пересборку.
+Support default as-recorded building and smart algorithmic rebuilding.
 
-#### 6.3.1. Дефолтная прямая сборка («как записано»)
+#### 6.3.1. Default as-recorded build
 
-Вызывается кнопкой «Собрать день» на экране «Работа»:
-1. Все выбранные логи переносятся на таймлайн в исходное локальное время суток с сохранением исходной длительности. Задачи не дробятся на части; искусственные паузы не добавляются; естественные разрывы во времени между логами сохраняются.
-2. Для логов с таймером началом служит фактический интервал запуска (`originalStartUtc` .. `originalEndUtc`). Для ручных логов началом считается `createdAtUtc - duration`, окончанием — `createdAtUtc`.
-3. Логи с других дат проецируют локальное время суток на выбранную целевую дату сборки.
-4. Разрешение пересечений и наложений (параллельные логи или уже существующие записи Jira): логи упорядочиваются по времени начала. Если очередной интервал накладывается на занятый слот (уже размещённый интервал или существующий worklog Jira), он каскадно сдвигается вперед к первой свободной секунде без потери длительности.
-5. Интервалы не выходят за пределы суток (до 23:59:59).
+Invoked by **Build day** on Work:
 
-#### 6.3.2. Алгоритмическая сборка («Умная пересборка»)
+1. Transfer selected logs to the timeline at their original local times, preserving durations. Do not split issues or add artificial breaks; retain natural gaps.
+2. Timer logs use their actual `originalStartUtc` .. `originalEndUtc`. Manual logs start at `createdAtUtc - duration` and end at `createdAtUtc`.
+3. Project local times from other dates onto the selected build date.
+4. Resolve overlaps with parallel logs or existing Jira entries by ordering logs by start time. If an interval overlaps an occupied slot, cascade it forward to the first free second without losing duration.
+5. Stay within calendar-day boundaries, up to 23:59:59.
 
-Вызывается кнопкой «Умная пересборка» на экране «День»:
-1. Проверить входы и получить существующие записи Jira за выбранный день по разделу 10.2. Ошибка чтения не равна пустому дню.
-2. Выбрать окно дня в заданных диапазонах, которое вмещает существующие интервалы. Существующие интервалы считаются занятыми и неизменяемыми.
-3. Короткие дни: если сумма исходных логов меньше 6 часов, день не растягивается до 8 часов; верхний бюджет работы ограничивается суммой источников, границы дня стягиваются под фактически размещённую работу, а длинная пауза не размещается, если сумма работы меньше 4 часов.
-4. Разместить длинную паузу (при длительности работы $\ge 4$ часов) и короткие паузы в свободных промежутках. Паузы не пересекаются с занятой работой и друг с другом. Между соседними паузами оставлять работу.
-5. Вычесть существующие интервалы и паузы из окна дня. Получившиеся свободные промежутки — бюджет новых логов. Сначала вычесть длительности зафиксированных логов, остаток разделить между незакреплёнными пропорционально исходным длительностям (в секундах).
-6. Разбиение задач: задачи длительностью до 60 минут (1 час) включительно не дробятся. Задачи свыше 60 минут разбиваются на части по 30–60 минут. Каждый сгенерированный рабочий интервал длится не менее 15 минут; короткий остаток перераспределяется. Сумма частей точно равна выделенной логу длительности.
-7. Размещать части в свободных промежутках последовательно. Между каждыми соседними новыми рабочими интервалами обязательна короткая пауза. Относительный порядок разных логов одной задачи сохраняется.
-8. Проверить инварианты из раздела 3 и сохранить результат одной транзакцией.
+#### 6.3.2. Algorithmic build (Smart rebuild)
 
-У фиксации длительности смысл «сборщик сохраняет суммарную длительность этого лога»; делить его на интервалы можно в умной пересборке. Последующее ручное изменение длительности пользователем разрешено.
+Invoked by **Smart rebuild** on Day:
 
-Случайность нужна в расписании, паузах и разбиении; она не должна менять описание сделанной работы или выбор логов. Это обычный локальный алгоритм без LLM и платных API.
+1. Validate inputs and retrieve existing Jira entries for the selected date under section 10.2. A read failure is not an empty day.
+2. Choose a window within configured ranges that accommodates existing intervals. Treat them as occupied and immutable.
+3. Short days: if source logs total less than six hours, do not stretch to eight. Cap the work budget at the source total and tighten boundaries around placed work. Omit the long break if work totals less than four hours.
+4. Place a long break for work lasting $\ge 4$ hours and short breaks in free time. Breaks must not overlap occupied work or each other. Leave work between adjacent breaks.
+5. Subtract existing intervals and breaks from the day window. The remaining slots form the new-log budget. Subtract locked durations first, then distribute the remainder among unlocked logs proportionally to their original durations in seconds.
+6. Do not split issues lasting up to 60 minutes inclusive. Split longer issues into 30–60-minute parts. Generated work intervals must last at least 15 minutes; redistribute shorter remainders. Part totals must exactly match the log's allocated duration.
+7. Place parts sequentially in free slots. Require a short break between every pair of adjacent new work intervals. Preserve the relative order of different logs for the same issue.
+8. Validate section 3 invariants and save in one transaction.
 
-Если фиксированные длительности не помещаются, все логи зафиксированы и не заполняют бюджет, либо при заданных условиях невозможно разместить паузы, показать конкретную причину и предложить изменить выбор/фиксацию/настройки. Выбранные логи молча не исключать. Для поиска расположения допустим ограниченный перебор; после неудачи сохранить предыдущий черновик и вернуть понятную ошибку, а не зависать в бесконечном случайном цикле.
+A duration lock means the builder retains that log's total duration. Smart rebuild may split it into intervals. Subsequent manual duration changes remain allowed.
 
-## 7. Редактирование и отправка
+Randomness affects scheduling, breaks, and splitting, never work descriptions or log selection. Use an ordinary local algorithm without LLMs or paid APIs.
 
-Черновик — таблица интервалов, отсортированная по времени. Поля: задача, начало, конец (вычисляется), длительность, описание, состояние отправки. Между строками видны паузы. Существующие Jira worklogs визуально отмечены и доступны только для чтения.
+If locked durations do not fit, all logs are locked but do not fill the budget, or breaks cannot be placed, explain the specific cause and suggest adjusting selection, locks, or settings. Never silently omit selected logs. Bounded search for placement is allowed. On failure, preserve the previous draft and return a clear error rather than entering an infinite random loop.
 
-Редактируются дата и границы дня, начало/длительность/описание новых интервалов; интервалы можно удалять, делить и объединять. Объединение допустимо только для интервалов одного исходного лога, чтобы не потерять происхождение работы. После правки сразу обновляются суммы и ошибки. Перетаскивание мышью не требуется. При изменении даты существующие записи загружаются непосредственно из Jira и отображаются независимо от наличия локального черновика; удаление последнего локального интервала не скрывает их. Пользовательские правки не заменяются случайной генерацией.
+## 7. Editing and submission
 
-При изменении начала или длительности интервала все последующие новые интервалы и запланированные паузы сдвигаются на изменение времени его окончания. Их длительность и промежутки между ними сохраняются. Закреплённые интервалы и уже начатая отправка не сдвигаются: если правка этого требует, показывается ошибка и прежний черновик остаётся сохранённым. Существующие записи Jira не изменяются; новые интервалы могут их перекрывать. Изменение только описания не меняет время. Пересборка сохраняет исходную длительность каждого выбранного лога для сравнения с результатом и не удваивает части одного лога.
+A draft is a time-sorted interval table: issue, start, computed end, duration, description, and submission status. Show breaks between rows. Existing Jira worklogs are visually distinguished and read-only.
 
-Перед отправкой показываются три числа: полная продолжительность дня, паузы и сумма времени Jira (существующее + новое). Ошибки неположительной длительности, выхода за пределы суток, пересечения паузы с работой или чтения существующих записей блокируют отправку, сохраняя редактируемый черновик. Пересечения рабочих записей показываются без блокировки. Полная продолжительность дня свыше 8 часов отображается в информационном режиме и не блокирует отправку.
+Allow editing date and day boundaries, and new-interval starts, durations, and descriptions; intervals can be deleted, split, or merged. Merge only intervals of the same source to retain provenance. Update totals and errors immediately. Mouse dragging is not required. Changing the date loads existing entries directly from Jira regardless of whether a local draft exists; removing the last local interval does not hide them. Random generation must not replace manual edits.
 
-«Пересобрать» — явное действие, заменяющее ещё не отправлявшийся черновик. Обычная правка поля пересборку не запускает. После первой попытки отправки дата и состав частей зафиксированы: пользователь завершает отправку этого плана, а не генерирует поверх него другой.
+Changing an interval's start or duration shifts subsequent new intervals and planned breaks by the change in its end time, preserving their durations and gaps. Locked intervals and intervals whose submission has started cannot move; if an edit requires this, show an error and retain the previous draft. Existing Jira entries remain unchanged; new intervals may overlap them. Description-only edits do not change time. Rebuilding retains each selected source's original duration for comparison and does not double-count its parts.
 
-Кнопка «Очистить» на экране «День» после подтверждения удаляет целиком ещё не отправлявшийся черновик выбранной даты: все его интервалы, паузы и привязки исходных логов. Исходные LocalLog остаются в очереди свободными для новой сборки, существующие Jira worklogs не меняются и остаются видимыми. В режиме только чтения и после начала отправки очистка недоступна.
+Before submission, show full day duration, breaks, and Jira time (existing + new). Nonpositive durations, intervals outside the date, breaks overlapping work, or existing-entry read failures block submission while keeping an editable draft. Show work overlaps without blocking. Day spans above eight hours are informational and do not block submission.
 
-«Отправить в Jira» запускается отдельной кнопкой. Повторный клик во время отправки не начинает вторую отправку. Результат показывается для каждого интервала; источник становится использованным только после подтверждения всех его оставшихся частей. Обработка частичного успеха и неопределённого результата обязательна по разделу 10.3.
+**Rebuild** explicitly replaces a never-submitted draft. Ordinary field edits do not rebuild it. After the first submission attempt, date and part composition are fixed: finish that plan instead of generating another over it.
 
-## 8. Подключение и простота интерфейса
+**Clear** on Day asks for confirmation and deletes the selected date's entire never-submitted draft: intervals, breaks, and source bindings. Source LocalLogs return to the free queue; existing Jira worklogs stay unchanged and visible. Disable clearing in read-only mode and after submission starts.
 
-Три поля подключения: JIRA_BASE_URL, JIRA_EMAIL, JIRA_TOKEN. Для этого пользователя базовый URL — https://esprowteam.atlassian.net; это значение по умолчанию, а не зашитое ограничение HTTP-клиента.
+**Submit to Jira** is a separate action. A repeated click during submission does not start another submission. Show results per interval; consume a source only after all its remaining parts are confirmed. Partial success and unknown results must follow section 10.3.
 
-При открытии настроек ещё не сохранённые поля заполняются соответствующими переменными окружения процесса. Пользователь редактирует форму и сохраняет её: сохранённые значения имеют приоритет при следующих открытиях. Сохранение требует полного валидного набора; очистка обязательного поля не подхватывает молча старый секрет. Отмена изменений сохраняет прежнее подключение. Отдельного переключателя источника нет.
+## 8. Connection and interface simplicity
 
-Кнопка «Проверить подключение» проверяет текущие значения формы и показывает аккаунт либо понятную ошибку. Токен маскируется; сохраняемые credentials хранятся в Windows Credential Manager или macOS Keychain, не в SQLite, README, логах или исходниках.
+Connection fields: JIRA_BASE_URL, JIRA_EMAIL, JIRA_TOKEN. For this user, the default base URL is https://esprowteam.atlassian.net; this is a default, not a hardcoded HTTP-client restriction.
 
-Минимальная компоновка: вкладки «Работа» и «День», отдельная кнопка «Настройки», диалог «Добавить время». На «Работе» недавние задачи находятся слева, очередь логов справа; история доступна внутри этого экрана. Настройки используют закреплённую шапку с выбором языка и темы, левую навигацию «Подключение к Jira / Сборка дня / Быстрые задачи / Локальный API» и одну активную область содержимого. Отдельного раздела «Общие» и общей кнопки сохранения нет; каждый раздел сохраняет данные по собственному явному правилу. Компоновка и представление состояний описаны в [UX/UI](../design/UX.md). Используй стандартные Flutter Material-виджеты, локализованные подписи по правилам раздела 8.2. Технические состояния отправки переводятся в понятные сообщения.
+When opening Settings, populate unsaved fields from corresponding process environment variables. Users edit and save the form; saved values take precedence on subsequent openings. Saving requires a complete valid set. Clearing a required field must not silently reuse an old secret. Cancel preserves the previous connection. No separate source selector is needed.
 
-Без сети работают ранее загруженные задачи, таймеры, ручные логи и сохранённые черновики. Добавление незнакомой задачи, свежая сборка с учётом Jira и отправка требуют связи. Ошибка сети сохраняет локальные данные.
+**Check connection** tests the current form and shows the account or a clear error. Mask tokens and store credentials in Windows Credential Manager or macOS Keychain, outside SQLite, README, logs, and sources.
+
+Minimum layout: Work and Day tabs, a separate Settings button, and Add time dialog. Work has recent issues on the left, log queue on the right, and history within the screen. Settings has a pinned language/theme header, Jira connection / Day build / Quick issues / Local API navigation, and one active content area. There is no General section or global Save button; each section saves by its own explicit rule. [UX/UI](../design/UX.md) owns layout and state presentation. Use standard Flutter Material widgets with section 8.2 localized labels and clear messages for technical submission states.
+
+Cached issues, timers, manual logs, and saved drafts work offline. Adding unfamiliar issues, fresh Jira-aware builds, and submission require connectivity. Network failures preserve local data.
 
 ### 8.1. Local Agent API
 
-Локальный API — второй интерфейс к тем же сущностям и правилам, а не отдельное хранилище. Агент может искать известные задачи, фильтровать очередь по тексту, ключу и состоянию, а также создавать, исправлять, удалять, разделять и объединять свободные LocalLog. Для незнакомого ключа изменяющая операция должна успешно получить задачу из Jira; сетевой отказ не подменяется вымышленной локальной задачей.
+The local API is another interface to the same entities and rules, not a separate store. Agents can search known issues, filter the queue by text/key/state, and create, edit, delete, split, or merge free LocalLogs. Mutations for an unknown key must successfully retrieve the issue from Jira; network failures must not invent a local issue.
 
-`GET /api/quick-issues` возвращает быстрые задачи только активного Jira scope в порядке добавления: Jira issue ID, key, summary и необязательное локальное описание `note`. `POST /api/quick-issues` принимает `issue_key` (ключ, ID или ссылку) и необязательный `note`, проверяет задачу в Jira и добавляет её в список; повторный запрос сохраняет позицию, а переданный `note` обновляет описание. `PATCH /api/quick-issues/{issueId}` меняет или очищает `note`; `DELETE /api/quick-issues/{issueId}` удаляет только быструю ссылку, сохраняя задачу, логи и историю. Без активного подключения или в экземпляре только для чтения изменение отклоняется. Старый корпоративный маршрут `/api/service-tickets` отсутствует; быстрый каталог не ограничивает обычную работу с проверенными Jira-задачами.
+`GET /api/quick-issues` returns only the active Jira scope's references in insertion order: issue ID, key, summary, and optional local `note`. `POST /api/quick-issues` accepts `issue_key` (key, ID, or URL) and optional `note`, validates through Jira, and adds the reference. Repeated requests retain position; a supplied `note` updates the description. `PATCH /api/quick-issues/{issueId}` updates or clears `note`; `DELETE /api/quick-issues/{issueId}` removes only the reference, retaining issues, logs, and history. Reject mutations without an active connection or in read-only mode. The old `/api/service-tickets` company endpoint is absent; the quick catalog does not restrict normal use of verified issues.
 
-`GET /api/issues/{issueKey}/worklogs` читает все доступные текущему Jira-подключению worklogs указанной задачи с полной пагинацией, без ограничения выбранной датой. Ответ содержит ключ и ID задачи, список записей с автором (`author_account_id`), временем начала, длительностью, описанием и признаком `is_mine` для текущего accountId. Сетевой отказ не выдаётся за пустой список; маршрут ничего не отправляет в Jira.
+`GET /api/issues/{issueKey}/worklogs` reads all accessible worklogs under the current connection with complete pagination and no selected-date restriction. Return issue key/ID and entries with `author_account_id`, start, duration, description, and `is_mine` for the current accountId. Network failures are not empty lists; the route submits nothing to Jira.
 
-`GET /api/issues/{issueKey}` читает актуальные поля Jira-задачи: ключ и ID, заголовок, текст описания, статус, тип, приоритет, исполнителя, метки и даты. Он загружает все доступные текущему подключению комментарии с пагинацией и возвращает их автора, даты и текст; список вложений содержит ID, имя, MIME-тип, размер, дату, автора и относительный `download_path`, без содержимого файлов и Jira URL с токеном. `GET /api/issues/{issueKey}/attachments/{attachmentId}` скачивает бинарное содержимое отдельного вложения только после проверки его ID в списке вложений задачи. Ошибка Jira не превращается в пустые комментарии или файл. Оба маршрута только читают Jira; локальные файлы не создаются. [Задача](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/), [комментарии](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-comments/), [вложения](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-attachments/).
+`GET /api/issues/{issueKey}` reads current fields: key/ID, summary, plain-text description, status, type, priority, assignee, labels, and dates. Retrieve all accessible comments with pagination and return author, dates, and text. Attachment metadata includes ID, filename, MIME type, size, date, author, and relative `download_path`, without file contents or token-bearing Jira URLs. `GET /api/issues/{issueKey}/attachments/{attachmentId}` downloads binary content only after verifying the ID in that issue's attachment list. Jira errors are not empty comments or files. Both routes read Jira only and create no local files. [Issues](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/), [comments](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-comments/), [attachments](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-attachments/).
 
-Локальный HTTP-сервер принимает запросы только с loopback Host и отклоняет чужой Origin. Для агента достаточно прямого адреса `http://127.0.0.1:<порт>`; отдельная сессия не требуется.
+The server accepts only loopback Host values and rejects foreign Origins. A direct `http://127.0.0.1:<port>` address suffices for agents; no separate session is required.
 
-`GET /api/day?date=YYYY-MM-DD` загружает ExistingWorklog непосредственно для запрошенной локальной даты и возвращает их вместе с DayDraft и детерминированной `revision`. Ошибка Jira возвращается как ошибка запроса, а не как пустой день и не как данные открытой в UI даты.
+`GET /api/day?date=YYYY-MM-DD` loads ExistingWorklogs for the requested local date and returns them with its DayDraft and deterministic `revision`. Jira failures are request errors, not empty days or data for the date currently open in the UI.
 
-`GET /api/day-settings` без Jira-запроса возвращает одним JSON-ответом текущие числовые `settings` (ключи `DaySettings.toMap`) и пользовательское текстовое `rule`. Агент читает их перед каждой сборкой и использует оба при подготовке снимка дня; сохранённый ранее текст в скопированной инструкции для агента не является источником актуальных правил.
+`GET /api/day-settings` returns current numeric `settings` (`DaySettings.toMap` keys) and editable text `rule` in one JSON response, without a Jira request. Agents read both before every build and apply both to the snapshot. Text previously copied into agent instructions is not the source of current rules.
 
-`POST /api/day` атомарно сохраняет полный Agent Day Snapshot, а не выполняет команды над отдельными интервалами. Каждый Segment содержит обязательный `source_log_id` существующего остановленного неиспользованного LocalLog; задача берётся из источника. Несколько Segment могут ссылаться на один источник, но для него создаётся один DraftLog со снимком полной исходной длительности. Рабочие Segment могут перекрываться друг с другом и с worklogs Jira; паузы вычисляются вне их объединённого времени. Источник из другого активного DayDraft и частично отправленный черновик заменять нельзя. При замене существующего черновика обязателен `base_revision` из последнего чтения; несовпадение, в том числе после удаления черновика пользователем, возвращает конфликт без частичной записи. Отдельные API-команды разделения и объединения Segment не нужны: агент присылает целый снимок дня. Финальная отправка в Jira остаётся только явным действием пользователя в UI.
+`POST /api/day` atomically saves a complete Agent Day Snapshot instead of interval commands. Each Segment requires the `source_log_id` of an existing stopped, unused LocalLog; the source determines its issue. Several Segments may share a source, with one DraftLog snapshot of its full original duration. Work Segments may overlap each other and Jira worklogs; compute breaks outside their union. Do not replace a source bound to another active draft or a partially submitted draft. Replacing an existing draft requires `base_revision` from the latest read. Mismatches, including after user deletion, return conflict without partial writes. Segment split/merge API commands are unnecessary; agents send complete snapshots. Final Jira submission remains an explicit UI action.
 
-### 8.2. Язык интерфейса
+### 8.2. Interface language
 
-Настройка языка общая для приложения на этом устройстве, независимо от Jira-подключения. Доступны «Как в системе / Русский / English»; названия языков всегда остаются «Русский» и «English». Выбор применяется сразу без перезапуска и сохраняется локально. В режиме только чтения изменение языка отключено, как изменение темы.
+Language is application-wide on this device, independently of Jira connection. Options are System default, Russian, and English; language names always use their native spellings. Apply immediately without restart and persist locally. Disable language changes in read-only mode, as for theme changes.
 
-Новая установка начинает с системного выбора: русский язык ОС даёт русский UI, английский и остальные языки — английский. Регион языка не меняет правило. Существующая установка без языковой настройки после обновления закрепляет русский, включая установку без логов и задач. Ручной выбор всегда имеет приоритет над системным языком. Системный вариант учитывает изменения, о которых платформа сообщает во время работы, и новый язык при следующем запуске.
+New installations start in system mode: a Russian OS language selects Russian UI; English and all other languages select English. Locale region does not affect this rule. An existing installation without a language setting retains Russian after upgrade, including installations without logs or issues. Manual selection overrides system language. System mode responds to platform locale-change notifications and picks up the new language on the next launch.
 
-Переводятся собственные подписи всех экранов и форм, подсказки, пустые состояния, подтверждения, предупреждения, сообщения, ошибки приложения, календарь и стандартные диалоги. Названия месяцев, дней недели и единицы длительности соответствуют языку. Числовые даты сохраняют порядок день–месяц–год (`30.09.2026`), время — 24-часовой формат (`14:05`), включая календарный ввод и выбор времени. Переключение не меняет часовой пояс и значения дат или длительностей.
+Translate application-owned labels on all screens/forms, hints, empty states, confirmations, warnings, messages, errors, calendars, and standard dialogs. Month/weekday names and duration units follow the chosen language. Numeric dates keep day–month–year order (`30.09.2026`), and time stays in 24-hour format (`14:05`), including date and time pickers. Switching does not change time zones or date/duration values.
 
-Готовая инструкция для агента в разделе «Локальный API», её копия в буфере обмена и справка `GET /api/help` соответствуют текущему языку интерфейса. Стандартное правило агента в «Сборке дня» тоже меняет язык, включая ранее сохранённый неизменённый стандартный текст. «Сбросить» возвращает стандартное правило на текущем языке. Сохранение стандартного правила не закрепляет язык его текста; `GET /api/day-settings` выдаёт его на текущем языке интерфейса. Если пользователь отредактировал правило, переключение языка сохраняет его текст, включая несохранённые правки и правки после перезапуска.
+The Local API agent instruction, its clipboard copy, and `GET /api/help` follow the current UI language. The standard Day build rule also switches language, including previously saved unchanged default text. **Reset** restores the standard rule in the current language. Saving a standard rule does not pin its text language; `GET /api/day-settings` returns it in the current UI language. If the user edits the rule, switching languages preserves their text, including unsaved edits and edits retained after restart.
 
-Название Jira Time Tracker, ключи и идентификаторы, названия и статусы задач Jira, тексты worklogs, пользовательские описания, локальные подсказки и изменённые пользователем инструкции для агента не переводятся автоматически. Тексты ошибок Jira и старые сохранённые ошибки показываются в исходном виде; новые собственные ошибки приложения поддерживают оба языка, в том числе после сохранения и повторного запуска.
+Never automatically translate the Jira Time Tracker name, keys/identifiers, Jira summaries/statuses, worklog text, user descriptions, local notes, or user-edited agent instructions. Jira error text and old saved errors remain in their original form. New application-owned errors support both languages, including after persistence and restart.
 
-Переключение сохраняет навигацию, введённые поля, выбранную дату и логи, работающие таймеры, LocalLog, DayDraft и результаты отправки. Само переключение не отправляет worklogs и не меняет контракт Local Agent API. Отказ сохранения показывает ошибку и оставляет прежний выбранный язык. Внешний вид и место переключателя определяет [UX/UI](../design/UX.md).
+Switching preserves navigation, entered fields, selected date/logs, timers, LocalLogs, DayDrafts, and submission results. Switching alone submits no worklogs and does not change the Local Agent API contract. Persistence failure shows an error and retains the previous language. [UX/UI](../design/UX.md) owns the selector's appearance and placement.
 
-## 9. Минимальная техническая конструкция
+## 9. Minimal technical structure
 
-Каноническое описание находится в [ARCHITECTURE.md](../../ARCHITECTURE.md): разделы 1–2 задают стек и модули, раздел 3 — сущности и транзакции, раздел 4 — представление времени, разделы 5–6 — потоки выполнения и интерфейсы для проверок. Прочитай его перед реализацией; технические детали поддерживаются там в одном месте.
+[ARCHITECTURE.md](../../ARCHITECTURE.md) is canonical: sections 1–2 define stack/modules, section 3 entities/transactions, section 4 time representation, and sections 5–6 execution flows and testing interfaces. Read it before implementation; technical details are maintained there in one place.
 
-## 10. Jira Cloud: контракт интеграции
+## 10. Jira Cloud integration contract
 
-Публичная документация проверена 2026-09-14. Доступ к реальному аккаунту, его permissions и API token пока не проверялись. Перед использованием API сверяй формы запросов с указанными первичными источниками.
+Public documentation was checked on 2026-09-14. Real account access, permissions, and API tokens were not yet verified. Before using the API, check request formats against the primary sources below.
 
-### 10.1. Авторизация и операции
+### 10.1. Authentication and operations
 
-Email + API token используют Basic Auth. Для обычного токена API находится на Jira-сайте; для токена со scopes — на https://api.atlassian.com/ex/jira/{cloudId}. [Авторизация](https://developer.atlassian.com/cloud/jira/platform/basic-auth-for-rest-apis/), [типы токенов](https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/).
+Email + API token use Basic Auth. Ordinary tokens use the Jira site API; scoped tokens use https://api.atlassian.com/ex/jira/{cloudId}. [Authentication](https://developer.atlassian.com/cloud/jira/platform/basic-auth-for-rest-apis/), [token types](https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/).
 
-Сохрани три поля UI. Проверка подключения сначала пробует GET /rest/api/3/myself на сайте; при отказе авторизации проверяет маршрут scoped token. cloudId можно получить без credentials через /_edge/tenant_info на сайте. Рабочий маршрут сохраняется вместе с подключением. После неудачи обоих маршрутов покажи ошибку; формат или длина токена не являются надёжным признаком его типа. [Получение cloudId](https://support.atlassian.com/jira/kb/retrieve-my-atlassian-sites-cloud-id/).
+Retain the three UI fields. Connection testing first tries GET /rest/api/3/myself on the site; after authentication rejection, try the scoped-token route. Retrieve cloudId without credentials from /_edge/tenant_info. Persist the working route with the connection. If both routes fail, show an error; token format/length is not a reliable type indicator. [Retrieving cloudId](https://support.atlassian.com/jira/kb/retrieve-my-atlassian-sites-cloud-id/).
 
-Используй HTTPS, стандартную проверку сертификатов и только настроенный origin либо фиксированный шлюз Atlassian. Ссылку на задачу разбирай как данные; credentials отправляются настроенному API, а не произвольному URL из поля ввода. Редиректы с credentials на другой origin запрещены.
+Use HTTPS, standard certificate validation, and only the configured origin or fixed Atlassian gateway. Parse issue URLs as data; send credentials to the configured API, not arbitrary input URLs. Credential-bearing redirects to another origin are forbidden.
 
-| Операция | API path относительно выбранного маршрута |
+| Operation | API path relative to the chosen route |
 |---|---|
-| Аккаунт | GET /rest/api/3/myself |
-| Задача | GET /rest/api/3/issue/{idOrKey}?fields=summary |
-| Карточка и вложения | GET /rest/api/3/issue/{idOrKey}?fields=summary,description,status,issuetype,priority,assignee,labels,created,updated,attachment; GET /rest/api/3/attachment/content/{id}?redirect=false |
-| Комментарии | GET /rest/api/3/issue/{idOrKey}/comment; пагинация startAt/maxResults |
-| Поиск задач с worklogs | POST /rest/api/3/search/jql; пагинация nextPageToken |
-| Логи задачи | GET /rest/api/3/issue/{idOrKey}/worklog; пагинация startAt/maxResults |
-| Создание интервала | POST /rest/api/3/issue/{idOrKey}/worklog?adjustEstimate=leave |
+| Account | GET /rest/api/3/myself |
+| Issue | GET /rest/api/3/issue/{idOrKey}?fields=summary |
+| Details and attachments | GET /rest/api/3/issue/{idOrKey}?fields=summary,description,status,issuetype,priority,assignee,labels,created,updated,attachment; GET /rest/api/3/attachment/content/{id}?redirect=false |
+| Comments | GET /rest/api/3/issue/{idOrKey}/comment; startAt/maxResults pagination |
+| Search issues with worklogs | POST /rest/api/3/search/jql; nextPageToken pagination |
+| Issue worklogs | GET /rest/api/3/issue/{idOrKey}/worklog; startAt/maxResults pagination |
+| Create interval | POST /rest/api/3/issue/{idOrKey}/worklog?adjustEstimate=leave |
 
-Создание worklog требует прав Browse projects и Work on issues, а не назначения issue на автора. Отправляй started, timeSpentSeconds, необязательный comment в формате ADF и служебную property для сверки повторов. Отдельных title/end/pause полей у worklog нет. Заголовок остаётся локальным; комментарий содержит описание. adjustEstimate=leave сохраняет remaining estimate задачи. [Worklogs API](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-worklogs/).
+Creating worklogs requires Browse projects and Work on issues permissions, not assignment to the author. Send started, timeSpentSeconds, optional ADF comment, and a reconciliation property. Worklogs have no separate title/end/pause fields. Titles stay local; comments contain descriptions. adjustEstimate=leave preserves remaining estimate. [Worklogs API](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-worklogs/).
 
-ADF для непустого описания: doc version 1, paragraph с text-узлами; многострочный текст сохраняет переносы. Для пустого описания поле comment опускается. Секреты и служебный ID не включаются в пользовательский комментарий.
+For nonempty descriptions, use ADF doc version 1 with paragraphs/text nodes and preserve line breaks. Omit comment for empty descriptions. Exclude secrets and internal IDs from user comments.
 
-### 10.2. Уже существующий день
+### 10.2. Existing day
 
-Текущего пользователя определяет accountId, не email/displayName. При открытии выбранной даты загружай существующие worklogs непосредственно из Jira, даже если для даты нет локального черновика. Для поиска кандидатов используй worklogAuthor по accountId и worklogDate за выбранную дату с запасом по одному дню с каждой стороны, затем загружай все страницы worklogs найденных задач и фильтруй по accountId и фактическим timestamps. Условия JQL отбирают задачи, а не отдельные записи, поэтому точная фильтрация всё равно нужна. Запас компенсирует разницу часовых поясов JQL и Windows. Дополнительно проверь задачи из локального кэша и текущего выбора. Пагинация и точная фильтрация обязательны. [Поиск](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-search/).
+Identify the current user by accountId, not email/displayName. Opening a date loads existing worklogs directly from Jira even without a local draft. Search candidate issues using worklogAuthor/accountId and worklogDate with a one-day margin on each side. Then retrieve every worklog page and filter by accountId and actual timestamps. JQL selects issues, not individual entries, so exact filtering remains necessary. The margin compensates for JQL/Windows time-zone differences. Also check cached and selected issues. Complete pagination and exact filtering are mandatory. [Search](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-search/).
 
-Принятая модель занятого времени: [started, started + timeSpentSeconds). Включай записи, пересекающие выбранный локальный календарный день; обнаруженную запись, выходящую за его границы, покажи как конфликт для автоматической сборки. Это вычисленная занятость, а не подтверждение того, как Planim хранит внутренние таймеры.
+Occupied time is [started, started + timeSpentSeconds). Include entries intersecting the selected local day; show entries crossing its boundaries as automatic-build conflicts. This is computed occupancy, not a statement about Planim's internal timers.
 
-JQL worklogDate ограничен последними 1 000 worklogs каждой задачи, а API возвращает только доступные пользователю записи. Этот путь не гарантирует обнаружение всей давней истории. Укажи ограничение в README; при обнаруженной неполной загрузке или ошибке покажи её в UI. Пустой успешный результат и неуспешная загрузка — разные состояния. [Ограничение JQL](https://support.atlassian.com/jira-software-cloud/docs/jql-fields/).
+JQL worklogDate covers the latest 1,000 worklogs per issue; APIs expose only entries accessible to the user. This does not guarantee complete old history. Document the limitation in README. Show incomplete loading and errors in the UI; successful empty results and failed loading are distinct states. [JQL limitation](https://support.atlassian.com/jira-software-cloud/docs/jql-fields/).
 
-Существующие worklogs могут пересекаться друг с другом и с новым планом; автоматически менять их нельзя. Автоматическая сборка, которая ищет свободные слоты, может сообщить о невозможности размещения. Непосредственно перед отправкой обнови существующие записи и проверь доступность данных, границы даты и паузы. При изменении внешнего дня сохрани черновик и покажи конфликт. Собственные уже подтверждённые интервалы узнавай по worklogId, чтобы не посчитать их дважды.
+Existing worklogs may overlap each other and the new plan; never modify them automatically. A free-slot automatic build may report impossible placement. Immediately before submission, refresh existing entries and verify data availability, date boundaries, and breaks. If the external day changed, retain the draft and show conflict. Recognize already-confirmed own intervals by worklogId to avoid double-counting.
 
-### 10.3. Частичная отправка и защита от повторов
+### 10.3. Partial submission and duplicate protection
 
-Состояния интервала: pending → sending → sent / failed / unknown. failed означает подтверждённый отказ без создания; unknown — запрос мог быть принят, но подтверждение не получено. Это различие сохраняется в SQLite.
+Interval states: pending → sending → sent / failed / unknown. failed means confirmed rejection without creation; unknown means the request may have been accepted without a received confirmation. Persist this distinction in SQLite.
 
-1. До POST сохрани неизменяемые ID интервала и отправляемые поля, затем состояние sending. Выполняй POST последовательно, по одному интервалу.
-2. В том же POST передай property с ключом jira-time-tracker.segment и значением {id: <segment UUID>}. Она нужна для сверки после обрыва ответа. Worklog properties поддерживаются Jira; чтение значения описано в [Worklog properties API](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-worklog-properties/).
-3. После 201 и корректного worklogId сразу зафиксируй sent и ID транзакцией. Повторная попытка пропускает sent.
-4. После подтверждённого отказа сохрани failed и понятную причину. После timeout, обрыва ответа, некорректного success-ответа или неоднозначной серверной ошибки сохрани unknown. Оставшийся sending при перезапуске тоже становится unknown.
-5. Для unknown показывай «Проверить результат». Загрузи worklogs этой задачи с пагинацией и найди сохранённую property. При одном совпадении сверь автора, дату, длительность и описание: совпадение переводит интервал в sent; несоответствие или несколько совпадений — конфликт для ручной проверки.
-6. Отсутствие совпадения после одного чтения не доказывает, что POST не был принят. unknown автоматически повторно не отправляй и не предлагай собирать его источник заново. Покажи необходимость повторной сверки. Это известное ограничение MVP, а не повод обещать серверную идемпотентность.
-7. Предусмотри ручное разрешение unknown: «Указать существующий worklog ID» с проверкой задачи, автора и полей; либо «Я проверил в Jira, записи нет — разрешить повтор». Второе действие доступно после завершения сетевых попыток и явного подтверждения пользователем; возвращает строку в pending, сохраняет её ID и факт ручного решения. Приложение не выдаёт ручное подтверждение за доказанную API гарантию отсутствия записи.
-8. «Повторить отправку» отправляет только pending и исправленные failed. Исходный лог становится использованным только когда все его интервалы sent. Источник с полностью успешной отправкой не ждёт восстановления ошибок других источников.
+1. Before POST, save immutable interval ID and submitted fields, then sending. POST sequentially, one interval at a time.
+2. In that POST, send property jira-time-tracker.segment with value {id: <segment UUID>}, enabling reconciliation after response interruption. Jira supports worklog properties; see [Worklog properties API](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-worklog-properties/) for reads.
+3. After HTTP 201 and a valid worklogId, immediately persist sent and the ID transactionally. Retries skip sent intervals.
+4. After confirmed rejection, persist failed and a clear reason. Timeouts, interrupted responses, invalid success responses, and ambiguous server errors produce unknown. Leftover sending after restart also becomes unknown.
+5. For unknown, offer **Check result**. Load the issue's worklogs with pagination and find the saved property. For one match, compare author, date, duration, and description. A full match becomes sent; mismatches or multiple matches require manual conflict resolution.
+6. One read without a match does not prove POST rejection. Never automatically resend unknown or offer its source for rebuilding. Explain the need for another reconciliation. This is an MVP limitation, not server-side idempotency.
+7. Allow manual resolution: **Enter existing worklog ID**, validating issue, author, and fields, or **I checked Jira; the entry does not exist — allow retry**. The latter requires completed network attempts and explicit confirmation. Return to pending while preserving ID and recording the manual decision. Do not present manual confirmation as an API guarantee of absence.
+8. **Retry submission** sends only pending and corrected failed intervals. Consume a source only once all its intervals are sent. A fully successful source does not wait for recovery of other sources' errors.
 
-После первого POST состав черновика неизменяем. При known failure пользователь может исправить credentials/доступ и повторить тот же план. Для переноса всего частично отправленного дня или редактирования уже отправленных worklogs используй Jira вручную; отдельный workflow отката не входит в MVP.
+After the first POST, draft composition is immutable. For known failures, users may fix credentials/access and retry the same plan. Moving a partially submitted day or editing sent worklogs requires manual Jira use; a rollback workflow is outside the MVP.
 
-## 11. Обязательные ошибки и сообщения
+## 11. Required errors and messages
 
-| Ситуация | Поведение |
+| Situation | Behavior |
 |---|---|
-| Некорректный ID/URL, задача недоступна | Показать причину, не создавать фиктивную задачу. |
-| Время 0 или отрицательное | Не сохранять готовый ручной лог и не включать запись в день. Пустой новый таймер до запуска допустим. |
-| Активный таймер выбран в сборку | Предложить паузу; не снимать молча изменяющуюся длительность. |
-| Фиксированные логи не помещаются | Показать необходимые и доступные часы. |
-| Ошибка загрузки дня Jira | Сохранить локальные данные; сборку/отправку с предположением «день пустой» не выполнять. |
-| Чужой account/site для черновика | Заблокировать отправку и показать требуемое подключение. |
-| 401/403, запрет worklogs, 429 | Показать ошибку; для 429 учитывать Retry-After, не крутить бесконечный цикл. |
-| Частичный успех | Отобразить результат каждой строки; подтверждённые записи сохранить. |
-| Неопределённый результат POST | Перейти к сверке property по разделу 10.3, не делать слепой повтор. |
-| Ошибка сохранения на диск | Не сообщать об успешном сохранении/завершении; сохранить возможность восстановления. |
+| Invalid ID/URL or inaccessible issue | Explain the cause; do not create a fictitious issue. |
+| Zero or negative time | Do not save a completed manual log or include it in a day. An empty timer before starting is allowed. |
+| Running timer selected for a build | Offer pause; do not silently snapshot a changing duration. |
+| Locked logs do not fit | Show required and available hours. |
+| Jira-day loading failure | Preserve local data; do not build or submit assuming an empty day. |
+| Wrong draft account/site | Block submission and show the required connection. |
+| 401/403, forbidden worklogs, 429 | Show the error; honor Retry-After for 429 without infinite retries. |
+| Partial success | Show each row's result and retain confirmed entries. |
+| Unknown POST result | Reconcile the property under section 10.3, without blind retry. |
+| Disk persistence failure | Do not report successful saving/completion; retain a recovery path. |
 
-## 12. Приёмочные сценарии
+## 12. Acceptance scenarios
 
-Проверки бизнес-логики выполняются через flutter_test и подставной HTTP-клиент; хранилище — на временной SQLite-базе. Текущее время и seed передаются в логику явно. Не создавай отдельную тестовую платформу.
+Verify business logic through flutter_test and a fake HTTP client, using temporary SQLite databases. Pass current time and seed explicitly. Do not build a separate testing platform.
 
-| ID | Сценарий | Проверяемый результат |
+| ID | Scenario | Expected result |
 |---|---|---|
-| A01 | Ручные 3 часа без описания и play | Один остановленный лог 10 800 секунд; ни одного POST Jira. |
-| A02 | Три задачи запущены одновременно на час | Три независимых лога по 3 600 секунд. |
-| A03 | Play → pause → play; закрытие и повторное открытие | Один продолжаемый лог; время паузы исключено, закрытия/сна включено; данные переживают перезапуск. |
-| A04 | Новый лог, ручной ввод при активном таймере и play после включения лога в черновик | Правила раздела 4 соблюдены; другой таймер не перезаписан и не задвоен; снимок черновика не становится активным таймером. |
-| A05 | По ID и URL добавлена одна задача, назначенная другому | Одна строка задачи; запрета по assignee нет. |
-| A06 | Сборка на нескольких фиксированных seed | Все выбранные логи представлены, каждый новый интервал не короче 15 минут, соседние новые интервалы разделены паузой, суммы точны, исходные логи неизменны, день <= 8 ч, пересечений нет. |
-| A07 | В арифметике примера есть существующий час | Полный день 7:48, паузы 0:51, новые 5:57, Jira всего 6:57. |
-| A08 | Фиксация одного лога; нехватка бюджета | Его сумма сохраняется; при невозможности ошибка без исключения логов и повреждения прежнего черновика. |
-| A09 | Большой лог разбит | Все части ссылаются на один источник; суммы сходятся; описание скопировано, отдельная правка не меняет соседние части. |
-| A10 | Исходные 2:00 отправлены как 1:20 | Источник целиком использован; 0:40 не остаётся в очереди. |
-| A11 | Невыбранный лог прошлой недели | Доступен для другой даты; фильтр списка задач его не удаляет. |
-| A12 | Несколько страниц поиска и worklogs, разные авторы | Все страницы обработаны; выбраны только нужный accountId и день. Ошибка страницы не превращается в пустой результат. |
-| A13 | Ручные правки, удаление, смена даты | Суммы и конфликты обновляются; новая дата загружает существующие записи; случайной пересборки нет. |
-| A14 | Интервал 1 sent, интервал 2 failed; повторный клик/перезапуск | Интервал 1 повторно не отправляется. Источник используется после подтверждения всех его частей. |
-| A15 | Jira создала worklog, но ответ потерян | unknown; сверка находит property и восстанавливает sent без второго POST. При ненайденной property слепого повтора нет; ручное разрешение работает только по явному действию пользователя. |
-| A16 | Переменные окружения, ручное изменение, повторное открытие | Окружение заполняет форму; сохранённый ввод побеждает; отмена не меняет настройки; токен отсутствует в базе/логах. |
-| A17 | Обычный/scoped маршрут, смена аккаунта | Оба маршрута проверяются read-only; старый черновик не отправляется другим аккаунтом/сайтом. |
-| A18 | Дата с другим UTC offset, worklog около полуночи | Верная локальная дата, отсутствие сдвига после сохранения/открытия, корректная проверка границ. |
-| A19 | Другой процесс и авария после sending | Второй экземпляр не пишет/не отправляет; незавершённая отправка восстанавливается как unknown. |
-| A20 | Поиск задач, фильтры очереди и история Jira тикета через Local Agent API | Поиск находит локальные ключи/названия; логи имеют `free`, `running` или `in_draft` и дату черновика; история тикета загружает все доступные страницы и отмечает записи текущего аккаунта; фильтры не меняют данные. |
-| A21 | Агент прислал два интервала одного `source_log_id` и параллельные рабочие записи | Один DraftLog хранит полную исходную длительность; два Segment ссылаются на источник и будут двумя Jira worklogs; рабочие интервалы могут пересекаться без сдвига, паузы не перекрывают работу; LocalLog не изменён. |
-| A22 | Один факт работы нужно разнести на две даты | Исходный свободный LocalLog сначала разделён на два независимых источника; каждый включён только в свой DayDraft. |
-| A23 | Агент читает одну дату, UI меняет черновик, агент сохраняет старый снимок | ExistingWorklog загружены именно для запрошенной даты; устаревшая `base_revision` даёт конфликт, прежний черновик не повреждён. |
-| A24 | Невалидный источник, другая дата или объединение разных источников | Вся операция отклонена без частичной записи; интервалы разных LocalLog не объединяются; Jira POST не выполняется. |
-| A25 | Агент читает Jira-задачу с несколькими страницами комментариев и скачивает вложение | Карточка содержит все доступные комментарии как текст и метаданные вложений; файл скачивается отдельным бинарным запросом только по ID этой задачи; ошибка страницы, чужой Origin/Host или редирект с токеном не дают ложный успех. |
-| A26 | Агент добавляет быструю задачу с описанием, меняет описание и удаляет ссылку | GET показывает список активного scope в порядке добавления с summary и note; POST подтверждает задачу в Jira без offline fallback; PATCH меняет note; DELETE сохраняет Issue и LocalLog; соседний Jira scope не затронут. |
-| A27 | Пользователь очищает неотправленный день с несколькими интервалами | После подтверждения черновик и его паузы исчезают, исходные логи снова доступны в очереди, Jira worklogs не изменены; после начала отправки очистка заблокирована. |
-| A28 | Пользователь меняет диапазоны и правило агента, агент начинает сборку | `GET /api/day-settings` одним ответом возвращает новые диапазоны и правило; после перезапуска они сохраняются; инструкция агента требует читать их перед каждой сборкой. |
-| A29 | Новая/существующая установка, выбор языка, смена языка ОС и перезапуск | Работают правила раздела 8.2; переводятся все экраны и собственные сообщения, сохраняются формы, таймеры, выбор и черновик; отказ сохранения и read-only не меняют язык; даты и время однозначны; Jira POST не выполняется. |
+| A01 | Manual three hours, no description or Play | One stopped 10,800-second log; no Jira POST. |
+| A02 | Three issues run simultaneously for one hour | Three independent 3,600-second logs. |
+| A03 | Play → pause → Play; close and reopen | One resumable log; pause time excluded, closed/sleep time included; persistence survives restart. |
+| A04 | New log, manual entry with a running timer, Play after draft binding | Section 4 holds; another timer is neither overwritten nor duplicated; draft snapshot does not become a running timer. |
+| A05 | Add the same issue assigned to someone else by ID and URL | One issue row; no assignee restriction. |
+| A06 | Build with several fixed seeds | All selected logs represented; new intervals >= 15 minutes with breaks between neighbors; exact totals, unchanged sources, day <= 8 h, no overlaps. |
+| A07 | The arithmetic example includes an existing hour | Full day 7:48, breaks 0:51, new work 5:57, Jira total 6:57. |
+| A08 | Lock one log; insufficient budget | Preserve its total; impossible builds fail without omitting logs or corrupting the previous draft. |
+| A09 | Split a large log | Parts reference one source; totals match; copied descriptions can be edited independently. |
+| A10 | Original 2:00 submitted as 1:20 | Consume the whole source; no 0:40 remains in the queue. |
+| A11 | An unselected log from last week | Available for another date; issue-list filtering does not delete it. |
+| A12 | Multiple search/worklog pages and different authors | Process all pages; select only the requested accountId/day. A failed page is not an empty result. |
+| A13 | Manual edits, deletion, date change | Update totals/conflicts; load existing entries for the new date; no random rebuild. |
+| A14 | Interval 1 sent, interval 2 failed; repeat click/restart | Never resend interval 1. Consume its source after all parts are confirmed. |
+| A15 | Jira creates a worklog but its response is lost | unknown; property reconciliation restores sent without another POST. Missing property does not permit blind retry; manual resolution requires an explicit user action. |
+| A16 | Environment values, manual changes, reopening | Environment populates the form; saved input wins; Cancel retains settings; token absent from database/logs. |
+| A17 | Ordinary/scoped route and account switch | Test both routes read-only; do not send old drafts under another account/site. |
+| A18 | Different UTC offset and near-midnight worklog | Correct local date, no persistence/reopening shift, correct boundary checks. |
+| A19 | Another process and crash after sending | Second instance neither writes nor submits; unfinished sending recovers as unknown. |
+| A20 | Local Agent API issue search, queue filtering, Jira issue history | Search local keys/summaries; logs expose `free`, `running`, or `in_draft` and draft date; history reads all accessible pages and identifies current-account entries; filters preserve data. |
+| A21 | Agent sends two intervals for one `source_log_id` and parallel work | One DraftLog retains full source duration; two Segments reference it and become two worklogs; work overlaps stay unshifted, breaks exclude work; LocalLog unchanged. |
+| A22 | Place one work fact on two dates | First split its free LocalLog into independent sources, each bound only to its own DayDraft. |
+| A23 | Agent reads a date, UI edits, agent saves stale snapshot | Load ExistingWorklogs for the requested date; stale `base_revision` conflicts without damaging the prior draft. |
+| A24 | Invalid source, another date, or merge of different sources | Reject the whole operation without partial writes; do not merge different LocalLogs' intervals; no Jira POST. |
+| A25 | Agent reads paginated comments and downloads an attachment | Return all accessible plain-text comments and metadata; download separately by this issue's attachment ID only; page errors, foreign Origin/Host, or token-bearing redirects cannot yield false success. |
+| A26 | Agent adds, edits, and removes a quick issue with note | GET is active-scope insertion order with summary/note; POST verifies Jira without offline fallback; PATCH changes note; DELETE retains Issue/LocalLog; other scopes unaffected. |
+| A27 | Clear an unsubmitted day with multiple intervals | Confirmation removes draft/breaks, releases sources to the queue, and leaves Jira worklogs unchanged; clearing blocked after submission starts. |
+| A28 | Change ranges/rule, then agent starts a build | One `GET /api/day-settings` returns new ranges/rule; persist across restart; agent instructions require reading them before every build. |
+| A29 | New/existing installation, language choice, OS-language change, restart | Section 8.2 holds; translate screens/own messages, retain forms/timers/selection/draft; failed persistence/read-only retain language; unambiguous dates/time; no Jira POST. |
 
-Минимальная ручная UI-проверка в Windows: добавить задачу через подставной API, создать ручной и таймерный логи, собрать день, изменить интервал, перезапустить приложение и проверить сохранность, выполнить отправку на подставной API с частичным отказом.
+Minimum manual Windows UI check: add an issue through a fake API, create manual and timer logs, build a day, edit an interval, restart and verify persistence, then submit through a fake API with partial rejection.
 
-Для разработки и автоматических проверок используй подставной API: тестовые worklogs в рабочую Jira не создаются. Живая отправка выполняется пользователем через кнопку после просмотра черновика. Если реального подключения не было, явно укажи это в итоговом отчёте, не называй интеграцию проверенной на аккаунте пользователя.
+Use a fake API for development and automated checks; never create test worklogs in production Jira. Live submission is a user action after draft review. If no real connection was used, say so in the report rather than claiming verification on the user's account.
 
-## 13. Этапы выполнения и завершение
+## 13. Implementation stages and completion
 
-| Этап | Сделать | Критерий завершения |
+| Stage | Work | Completion criterion |
 |---|---|---|
-| 1. Основа | Проверить flutter doctor -v; создать Windows-проект в этом каталоге, сохранив служебные файлы; подготовить UI и SQLite/secure storage. | Приложение открывается; тестовая локальная запись и настройки переживают перезапуск. |
-| 2. Задачи и логи | Jira-клиент, подключение, недавние задачи, параллельные таймеры, ручные логи. | A01–A05 и A16 работают; UI позволяет выполнить ручной сценарий полностью. |
-| 3. Сборщик | Чистая функция сборки, настройки, фиксация времени, разбиение, сохранение/редактор черновика. | A06–A11 и A13 проходят; возможна сборка с известными входными worklogs. |
-| 4. Jira-день, Local Agent API и отправка | Поиск существующих записей, агентский снимок дня, пагинация, проверка границ, журнал POST и сверка unknown. | A12, A14–A24 проходят на подставном API; повтор не дублирует подтверждённые записи. |
-| 5. Доставка | Проверить UI в Windows, README и release-сборку. | Выполнены команды ниже, приложен краткий отчёт и путь к собранному приложению. |
+| 1. Foundation | Run flutter doctor -v; create the Windows project here while retaining support files; prepare UI and SQLite/secure storage. | Application opens; a test local entry and settings survive restart. |
+| 2. Issues and logs | Jira client, connection, recent issues, parallel timers, manual logs. | A01–A05 and A16 work; the complete manual-entry workflow is usable. |
+| 3. Builder | Pure build function, settings, duration locks, splitting, draft persistence/editor. | A06–A11 and A13 pass; builds accept known input worklogs. |
+| 4. Jira day, Local Agent API, submission | Existing entries, agent day snapshots, pagination, boundary validation, POST journal, unknown reconciliation. | A12 and A14–A24 pass with a fake API; retries do not duplicate confirmed entries. |
+| 5. Delivery | Verify Windows UI, README, and release build. | Run the commands below and provide a short report and build path. |
 
-Команды финальной проверки после появления исходников:
+Final verification commands once sources exist:
 
 ```powershell
 dart format --output=none --set-exit-if-changed lib test
@@ -363,8 +365,8 @@ flutter test
 flutter build windows --release
 ```
 
-Перед финальной проверкой исправь форматирование командой dart format lib test. Не заменяй desktop-сборку веб-страницей, скриншотом или одной демонстрацией интерфейса.
+Before final verification, fix formatting with dart format lib test. A web page, screenshot, or single UI demonstration does not replace a desktop build.
 
-README должен объяснять запуск Windows-приложения, ввод/подстановку трёх настроек, расположение локальных данных, поведение таймера при закрытии, ограничения поиска давних worklogs и восстановление unknown. Доставляй всю папку release bundle с необходимыми библиотеками и data, а не один exe.
+README must cover Windows startup, entering/populating the three connection fields, data paths, timer behavior while closed, older-worklog search limits, and unknown recovery. Deliver the complete release bundle, including required libraries and data, rather than just an exe.
 
-Финальный отчёт исполнителя: реализованные этапы, результаты команд, путь к сборке, был ли выполнен live read-only smoke check, какие проверки реальной Jira остались. Если среда не позволяет собрать Windows-приложение, назови конкретный отсутствующий компонент; исходники и доступные проверки всё равно доведи до готовности, а сборку явно отметь незавершённой.
+Report implemented stages, command results, build path, whether a live read-only smoke check was performed, and remaining real-Jira checks. If the environment cannot build Windows, name the missing component, finish sources and available checks, and explicitly mark the build incomplete.

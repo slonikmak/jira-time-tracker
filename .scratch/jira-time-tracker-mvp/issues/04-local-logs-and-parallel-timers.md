@@ -1,29 +1,29 @@
-# 04: Таймеры и ручной ввод времени (Play/Pause, сохранение при рестарте)
+# 04: Timers and manual time entry (Play/Pause, restart persistence)
 
-**What to build:** Управление временем работы над задачами. Создание записей в таблице `LocalLog`. Поддержка ручного ввода («Добавить время» на 3 часа без запуска таймера), независимые параллельные таймеры на разных задачах, чистый модуль `LogClock` для вычисления прошедшего времени по сохранённым UTC-отметкам, сохранение состояния при закрытии процесса и сне Windows.
+**What to build:** Track issue work time with `LocalLog` records. Support manual Add time for three hours without a timer, independent parallel timers on different issues, pure `LogClock` calculations from saved UTC timestamps, and persistence through process shutdown and Windows sleep.
 
-**Blocked by:** 03: Добавление и кэш задач (по ключу, ID, URL)
+**Blocked by:** 03: Issue addition and caching (key, ID, URL)
 
 **Status:** resolved
 
 ## Acceptance criteria
 
-- [x] Ручной ввод времени («Добавить время»): создание остановленного локального лога на произвольное время (например, 3 часа = 10 800 секунд) с опциональным описанием без запуска таймера и без запросов к Jira (сценарий A01).
-- [x] Параллельные таймеры: одновременный запуск таймеров на нескольких разных задачах создает независимые записи одинаковой длительности (сценарий A02).
-- [x] Модуль `LogClock` вычисляет прошедшее время по `accumulatedSeconds + (nowUtc - runningSinceUtc)`. Закрытие приложения, выключение процесса или сон Windows корректно учитывают прошедшее время при повторном запуске (сценарий A03).
-- [x] Действие Play продолжает текущий лог задачи, Pause останавливает и фиксирует прошедшее время; время паузы исключается из подсчёта (сценарий A03).
-- [x] Действие «Новый лог» останавливает предыдущий таймер задачи (если он был запущен) и создает отдельную запись; ручной ввод при активном таймере не перезаписывает и не удваивает другие таймеры (сценарий A04).
-- [x] Отрицательная разница времени при откате системных часов Windows распознается как ошибка и требует проверки лога.
-- [x] Написаны тесты таймеров и ручного логгирования, покрывающие сценарии A01, A02, A03, A04.
+- [x] Manual Add time creates a stopped local log for an arbitrary duration (e.g. three hours = 10,800 seconds), optional description, no timer start, and no Jira requests (A01).
+- [x] Simultaneous timers on different issues create independent records with equal durations (A02).
+- [x] `LogClock` computes elapsed time as `accumulatedSeconds + (nowUtc - runningSinceUtc)`. Application closure, process shutdown, or Windows sleep correctly count elapsed time after restart (A03).
+- [x] Play resumes the issue's current log; Pause stops and records elapsed time, excluding the paused period (A03).
+- [x] New log stops the issue's previous timer if running and creates a separate record; manual entry with an active timer neither overwrites nor doubles other timers (A04).
+- [x] A negative time difference from Windows clock rollback is recognized as an error requiring log review.
+- [x] Timer/manual-entry tests cover A01, A02, A03, A04.
 
 ## Comments
 
-Реализовано:
-- `lib/log_clock.dart`: чистый Dart модуль расчёта времени `LogClock` без прямого чтения `DateTime.now()`, детекция отката часов Windows (`hasClockRollback`), функции форматирования `formatHoursMinutes` и `formatDigital`.
-- `lib/local_store.dart`: транзакционные операции `saveLogAndIssue`, `saveLogsAndIssue`, безопасное удаление лога с очисткой `issues.current_log_id`.
-- `lib/app_state.dart`: методы `addManualLog`, `playTimer`, `pauseTimer`, `pauseLog`, `pauseAllTimers`, `createNewLogForIssue`, `startSelectedIssues`, `editLog`, `deleteLog`, live ticker (обновление каждую секунду только при наличии активных таймеров).
-- `lib/ui/add_time_dialog.dart`: диалог ручного ввода времени с полями часов, минут, опционального описания и выбором задачи.
-- `lib/ui/edit_log_dialog.dart`: диалог редактирования длительности и описания остановленного лога.
-- `lib/ui/work_screen.dart`: адаптивные карточки задач с индикаторами активности, живыми таймерами и кнопками Play/Pause/Новый лог/Добавить время; правая колонка очереди неиспользованных логов и истории с выбором для сборки дня.
-- `test/timer_and_logs_test.dart`: 11 тестов сценариев A01, A02, A03, A04, отката времени и сна Windows.
-- `test/work_screen_test.dart`: виджет-тесты интерфейса для A01 и A03. Всего в проекте 40 тестов, все проходят успешно. Windows binary собирается без ошибок.
+Implemented:
+- `lib/log_clock.dart`: pure Dart `LogClock` without direct `DateTime.now()` reading, Windows clock rollback detection (`hasClockRollback`), `formatHoursMinutes` and `formatDigital`.
+- `lib/local_store.dart`: transactional `saveLogAndIssue`, `saveLogsAndIssue`, and safe log deletion clearing `issues.current_log_id`.
+- `lib/app_state.dart`: `addManualLog`, `playTimer`, `pauseTimer`, `pauseLog`, `pauseAllTimers`, `createNewLogForIssue`, `startSelectedIssues`, `editLog`, `deleteLog`, and a live ticker (once per second only with active timers).
+- `lib/ui/add_time_dialog.dart`: manual-entry dialog with hours, minutes, optional description, and issue selection.
+- `lib/ui/edit_log_dialog.dart`: stopped-log duration/description editing.
+- `lib/ui/work_screen.dart`: adaptive issue cards with activity indicators, live timers, Play/Pause/New log/Add time; right-side queue of unconsumed logs and history with day-build selection.
+- `test/timer_and_logs_test.dart`: 11 tests covering A01–A04, clock rollback, and Windows sleep.
+- `test/work_screen_test.dart`: A01/A03 widget tests. All 40 project tests pass. Windows binary builds without errors.

@@ -1,28 +1,28 @@
-# 09: Отправка в Jira, safe-properties и восстановление unknown
+# 09: Jira submission, safe properties, and unknown recovery
 
-**What to build:** Модуль `WorklogSender` для надежной, идемпотентной отправки интервалов в Jira Cloud. Пошаговая отправка каждого сегмента с комментарием ADF и property `jira-time-tracker.segment: {id: uuid}`. Сохранение состояний в SQLite (`pending` -> `sending` -> `sent` / `failed` / `unknown`), автоматическая сверка `unknown` через properties задачи без слепых повторных POST, диалог ручного разрешения, пометка исходных логов использованными только после подтверждения всех частей.
+**What to build:** `WorklogSender` for reliable, idempotent interval submission to Jira Cloud. Submit each segment individually with an ADF comment and `jira-time-tracker.segment: {id: uuid}` property. Persist SQLite states (`pending` -> `sending` -> `sent` / `failed` / `unknown`), automatically reconcile `unknown` through issue properties without blind repeated POSTs, provide manual resolution, and consume source logs only after all parts are confirmed.
 
-**Blocked by:** 08: Загрузка существующих worklogs Jira и выявление конфликтов
+**Blocked by:** 08: Existing Jira worklog loading and conflict detection
 
 **Status:** resolved
 
 ## Acceptance criteria
 
-- [x] Перед выполнением сетевого POST сегмент транзакционно сохраняется в SQLite со статусом `sending` и неизменяемым телом запроса; отправка выполняется строго по одному интервалу (сценарий A14).
-- [x] Сетевой запрос POST `/rest/api/3/issue/{idOrKey}/worklog?adjustEstimate=leave` включает `started`, `timeSpentSeconds`, ADF-структуру для непустого описания и свойство `jira-time-tracker.segment` со значением `{id: segmentId}`.
-- [x] При ответе 201 сегмент переводится в `sent` с сохранением `jiraWorklogId`. Повторный клик «Отправить» пропускает уже подтвержденные записи (сценарий A14).
-- [x] Исходный `LocalLog` переводится в `consumed` (`consumedAtUtc != null`) только после того, как ВСЕ его сегменты в черновике перешли в `sent` (сценарии A10, A14).
-- [x] При обрыве соединения, таймауте или неоднозначной ошибке сегмент переходит в `unknown`; незавершенный статус `sending` при рестарте приложения также восстанавливается как `unknown` (сценарии A15, A19).
-- [x] Для сегмента со статусом `unknown` доступно действие «Проверить результат»: `WorklogSender` загружает worklogs задачи, находит сохраненную property `jira-time-tracker.segment` и при совпадении переводит запись в `sent` без второго POST (сценарий A15).
-- [x] При отсутствии property слепой повтор POST запрещен; поддерживаются ручные действия («Указать ID созданного worklog» и «Подтверждаю отсутствие записи, разрешить повтор»).
-- [x] Написаны интеграционные тесты с симуляцией обрыва сети, частичного сбоя и сверки properties.
+- [x] Before network POST, transactionally persist `sending` and an immutable request body in SQLite; submit strictly one interval at a time (A14).
+- [x] POST `/rest/api/3/issue/{idOrKey}/worklog?adjustEstimate=leave` includes `started`, `timeSpentSeconds`, ADF for nonempty descriptions, and `jira-time-tracker.segment` with `{id: segmentId}`.
+- [x] A 201 response changes the segment to `sent` and stores `jiraWorklogId`. Clicking Submit again skips confirmed records (A14).
+- [x] Mark source `LocalLog` as `consumed` (`consumedAtUtc != null`) only when ALL its draft segments are `sent` (A10, A14).
+- [x] A disconnected connection, timeout, or ambiguous failure becomes `unknown`; restart also recovers unfinished `sending` as `unknown` (A15, A19).
+- [x] Check result is available for `unknown`: `WorklogSender` loads issue worklogs, finds `jira-time-tracker.segment`, and on a match restores `sent` without a second POST (A15).
+- [x] Without the property, blind repeated POST is prohibited; support manual actions to specify a created worklog ID or explicitly confirm absence and permit retry.
+- [x] Integration tests simulate disconnection, partial failure, and property reconciliation.
 
 ## Comments
-Все требования и критерии приёмки реализованы и покрыты тестами:
-- Модуль `WorklogSender` реализует безопасный протокол отправки с заморозкой тела перед сетевым POST.
-- Поддержка параметров adjustEstimate=leave, ADF комментариев и safe-properties jira-time-tracker.segment.
-- Логика частичной отправки, повторные клики пропускают sent, источник переходит в consumed только после подтверждения всех частей.
-- Сверка неизвестного статуса по свойствам в Jira (сценарий A15) восстанавливает sent без слепых повторов.
-- Диалог ручного разрешения с валидацией ID и явным подтверждением отсутствия.
-- Восстановление зависших sending при рестарте.
-- Интеграционные тесты в `test/worklog_submission_test.dart` (6 тестов) и общий регрессионный сьют (66 тестов) успешно пройдены.
+All requirements and acceptance criteria implemented and tested:
+- `WorklogSender` freezes the body before network POST.
+- Supports adjustEstimate=leave, ADF comments, and jira-time-tracker.segment safe properties.
+- Partial submission skips sent records on repeat; a source becomes consumed only after all parts are confirmed.
+- Jira property reconciliation restores sent for unknown results without blind retries (A15).
+- Manual-resolution dialog validates IDs and explicit absence confirmation.
+- Restart recovers stuck sending states.
+- `test/worklog_submission_test.dart` (six tests) and the full 66-test regression suite pass.

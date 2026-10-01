@@ -1,20 +1,20 @@
-# 06: Чистый алгоритм сборки дня DayBuilder (паузы, фиксация, разбиение)
+# 06: Pure DayBuilder scheduling algorithm (breaks, locks, splitting)
 
-**What to build:** Чистый Dart-модуль `DayBuilder` с функциями `build(input, seed)` и `validate(plan, existingWorklogs)`. Генерация расписания по диапазонам настроек: начало дня (08:00–09:00), полная продолжительность (07:30–08:00, максимум 8 часов), обед (12:00–14:00, 30–45 мин), 2–4 короткие паузы (5–10 мин). Пропорциональное целочисленное деление остатка бюджета в секундах, сохранение фиксированных логов, разбиение интервалов свыше 120 минут на части по 45–120 минут.
+**What to build:** A pure Dart `DayBuilder` with `build(input, seed)` and `validate(plan, existingWorklogs)`. Generate schedules from settings ranges: start 08:00–09:00, full duration 07:30–08:00 (maximum eight hours), lunch 12:00–14:00 for 30–45 minutes, and 2–4 short breaks of 5–10 minutes. Allocate the remaining seconds proportionally with integer arithmetic, preserve fixed logs, and split intervals over 120 minutes into 45–120-minute parts.
 
-**Blocked by:** 01: Каркас Flutter Desktop, SQLite, single-instance lock и навигация
+**Blocked by:** 01: Flutter Desktop foundation, SQLite, single-instance lock, and navigation
 
 **Status:** resolved
 
 ## Acceptance criteria
 
-- [x] Модуль `DayBuilder` реализован как чистый Dart без зависимостей от Flutter, SQLite, HTTP или системных часов; принимает все входы явно.
-- [x] Детерминизм: при фиксированном seed и неизменных входных данных алгоритм выдает строго идентичное расписание (сценарий A06).
-- [x] Общая длительность дня от первого начала до последнего конца (включая все паузы и работу) не превышает 8 часов (<= 28 800 сек). Пересечения между новыми интервалами, паузами и существующими worklogs исключены (сценарий A06).
-- [x] Проверена арифметика из спецификации: при существующем 1 часе в Jira день 7:48 (28 080 с) с паузами 0:51 (3 060 с) дает ровно 5:57 (21 420 с) новых интервалов и суммарно 6:57 в Jira (сценарий A07).
-- [x] Поддерживается признак `durationLocked`: зафиксированный лог сохраняет свою суммарную длительность; при невозможности вместить зафиксированное время возвращается понятная ошибка без повреждения входных данных (сценарий A08).
-- [x] Логи длительностью более 120 минут разбиваются на части (обычно 45–120 минут); каждая часть ссылается на исходный `sourceLogId` и копирует исходное описание (сценарий A09).
-- [x] Функция `validate` проверяет полуоткрытые интервалы `[start, end)` и контролирует лимит дня 8 часов, отсутствие пересечений и корректность пауз.
-- [x] Написан исчерпывающий набор unit-тестов, проверяющий сценарии A06, A07, A08, A09 на различных seed и краевых случаях.
+- [x] `DayBuilder` is pure Dart, without Flutter, SQLite, HTTP, or system-clock dependencies, and receives all inputs explicitly.
+- [x] Determinism: identical inputs and fixed seed produce exactly the same schedule (A06).
+- [x] Duration from first start to last end, including breaks/work, is at most eight hours (<= 28,800 seconds). New intervals, breaks, and existing worklogs never overlap (A06).
+- [x] Verify specification arithmetic: with one existing Jira hour, a 7:48 day (28,080 s) and 0:51 breaks (3,060 s) yield exactly 5:57 new intervals (21,420 s) and 6:57 total Jira time (A07).
+- [x] `durationLocked` preserves a log's total duration; impossible placement returns an understandable error without damaging inputs (A08).
+- [x] Logs over 120 minutes split into parts (usually 45–120 minutes); each references the original `sourceLogId` and copies its description (A09).
+- [x] `validate` checks half-open intervals `[start, end)`, eight-hour limit, overlap absence, and valid breaks.
+- [x] Comprehensive unit tests verify A06–A09 across seeds and edge cases.
 
 ## Comments

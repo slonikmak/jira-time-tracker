@@ -1,14 +1,14 @@
-# 02. Модальный диалог настройки промежутка (EditBreakDialog)
+# 02. Gap configuration modal (EditBreakDialog)
 
 Status: resolved
 
-## Описание
-Создать виджет диалога `EditBreakDialog` (в `lib/ui/edit_break_dialog.dart`):
-1. Заголовок: «Настройка перерыва» или «Настройка обеда».
-2. Поле «Время начала» с кнопкой вызова TimePicker (заблокировано, если левый сосед — Jira worklog).
-3. Поля «Часы» и «Минуты» для задания длительности.
-4. Отображение времени окончания (автоматический пересчёт в реальном времени).
-5. Быстрые кнопки сдвига всего интервала целиком: «-15 мин» и «+15 мин».
-6. Переключатель типа промежутка: «Перерыв» / «Обед» (`SegmentedButton` или чипы).
-7. Кнопка «Удалить паузу» (смыкает интервалы соседних задач).
-8. Блок ошибок валидации (красный контейнер при недопустимом сжатии соседа или нарушении границ Jira).
+## Description
+Create `EditBreakDialog` in `lib/ui/edit_break_dialog.dart`:
+1. Title: Configure break or Configure lunch.
+2. Start time with TimePicker button, disabled if the left neighbor is a Jira worklog.
+3. Hours and Minutes duration fields.
+4. End time recalculated live.
+5. Whole-interval shift buttons: -15 min and +15 min.
+6. Break / Lunch type selector (`SegmentedButton` or chips).
+7. Delete break button closes neighboring task intervals together.
+8. Validation errors in a red container when a neighbor is compressed too far or Jira boundaries are violated.

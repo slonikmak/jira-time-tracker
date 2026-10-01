@@ -1,16 +1,16 @@
-# 02: Работа, очередь, история и формы логов
+# 02: Work, queue, history, and log forms
 
-**What to build:** Весь путь от выбора Issue до создания, выбора, разделения и объединения LocalLog доступен на обоих языках. Правила — в [спецификации](../spec.md).
+**What to build:** The entire path from Issue selection through LocalLog creation, selection, splitting, and merging is available in both languages. Rules are in the [specification](../spec.md).
 
-**Blocked by:** 01: Выбор языка, сохранение и оболочка.
+**Blocked by:** 01: Language selection, persistence, and shell.
 
 **Status:** complete
 
-- [x] Переведены собственные строки «Работы», очереди, истории, форм и сообщений.
-- [x] Единицы длительности, количество записей и даты корректны на обоих языках.
-- [x] Jira-данные и пользовательские тексты сохраняются в исходном виде.
-- [x] Проверены переключение языка и сохранность ввода, выбора логов и таймера.
+- [x] Application-owned strings in Work, queue, history, forms, and messages are translated.
+- [x] Duration units, record counts, and dates are correct in both languages.
+- [x] Jira data and user text remain in their original form.
+- [x] Language switching preserves input, log selection, and timer state.
 
 ## Comments
 
-2026-10-01: Реализовано и проверено. Проверки, независимое ревью, Windows-сборка и ограничения записаны в [отчёте](../verification.md). Рабочая Jira не использовалась.
+2026-10-01: Implemented and verified. Checks, independent review, Windows build, and limitations are recorded in the [report](../verification.md). Production Jira was not used.

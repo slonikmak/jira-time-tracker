@@ -1,50 +1,55 @@
-# ADR-0006: Встроенный локальный HTTP-сервер для AI-агентов
+# ADR-0006: Embedded local HTTP server for AI agents
 
-## Статус
-Принято (Accepted)
+## Status
 
-## Контекст
-При автоматизации разработки с помощью AI-агентов (Claude Code, Antigravity, локальные LLM-агенты, bash-скрипты) возникает потребность списывать рабочее время непосредственно в ходе решения задач и формировать рабочие дни без ручного кликанья по GUI.
+Accepted
 
-Пользовательские требования:
-1. Залогировать время по номеру issue в Jira (время, опционально описание).
-2. Получить список свободных неотправленных логов.
-3. Получить текущий день и существующие записи Jira.
-4. Загрузить готовый собранный день (агент строит расписание сам, не используя встроенный алгоритм сборки дня).
-5. Справка по всем действиям (текст + OpenAPI 3.0).
-6. Раздел в настройках с хостом/портом и кнопкой копирования готовой инструкции/скилла для агента.
-7. Безопасность: финальная отправка дня в Jira выполняется человеком через кнопку в интерфейсе (Human-in-the-loop).
+## Context
 
-## Принятое решение
-1. **Легковесный сервер на `dart:io`**:
-   - Используется стандартный `HttpServer.bind` без тяжелых внешних зависимостей.
-   - Сервер слушает исключительно `InternetAddress.loopbackIPv4` (`127.0.0.1`), защищая от запросов извне машины.
-   - Дефолтный порт `8765` с автоматическим переходом на следующий свободный при конфликте.
-2. **REST API контракт**:
-   - `GET /api/help` — читаемая справка с curl-примерами.
-   - `GET /api/openapi.json` — валидная спецификация OpenAPI 3.0.
-   - `GET /api/issues?q=...` — локальный поиск известных задач по ключу и названию.
-   - `GET /api/issues/{issueKey}` — актуальные текстовые данные Jira, все видимые комментарии и метаданные вложений; `/attachments/{attachmentId}` отдельно скачивает вложение этой задачи.
-   - `GET /api/issues/{issueKey}/worklogs` — все доступные Jira worklogs конкретной задачи с признаком записей текущего аккаунта.
-   - `GET /api/quick-issues`, `POST /api/quick-issues`, `PATCH` и `DELETE /api/quick-issues/{issueId}` — чтение и управление быстрыми ссылками активного Jira scope; локальное описание хранится в `note`.
-   - `GET /api/logs`, `POST /api/logs`, `PATCH /api/logs/{id}`, `DELETE /api/logs/{id}`, `/split` и `/merge` — поиск и управление фактами-источниками. Разделение источника нужно для независимого размещения частей, в том числе по разным дням.
-   - `GET /api/day?date=...` — свежие Jira worklogs, текущий черновик выбранной даты и его детерминированная revision.
-   - `POST /api/day` — атомарная замена полного черновика дня, построенного агентом, с проверкой base_revision; рабочие интервалы могут пересекаться.
-3. **Автоподгрузка задач**:
-   - Если при логировании задача отсутствует в локальном кэше, сервер на лету запрашивает метаданные из Jira через `JiraClient` и сохраняет в кэш. Ошибка Jira не подменяется синтетической локальной задачей.
-   - Устаревший статический `/api/service-tickets` и корпоративные значения EG удаляются; быстрые задачи не являются списком разрешённых issue.
-4. **Human-in-the-loop**:
-   - Агент формирует черновик и передает его в приложение; пользователь просматривает таймлайн на вкладке «День» и подтверждает отправку в Jira.
-5. **Готовый скилл для агента в UI**:
-   - В `SettingsDialog` пользователь может в один клик скопировать сгенерированный системный промпт/скилл с актуальным URL и инструкциями для передачи любому AI-агенту.
-6. **Граница источника и представления дня**:
-   - LocalLog — факт работы, которым агент может свободно управлять, пока он не работает, не использован и не привязан к черновику.
-   - Каждый Segment обязательно ссылается на существующий LocalLog. Один источник может дать несколько Segment одного DayDraft и одну привязку DraftLog; каждый Segment станет отдельным Jira worklog.
-   - Если части нужно отправить в разные даты, агент сначала разделяет LocalLog. Для компоновки одного дня отдельные команды изменения Segment не нужны: агент присылает полный снимок.
-   - Снимок не заменяет частично отправленный черновик, а устаревшая revision не перезаписывает ручные изменения пользователя.
+AI-assisted development (Claude Code, Antigravity, local LLM agents, and shell scripts) needs a way to log work during tasks and prepare workdays without manually clicking through the GUI.
 
-## Последствия
-- Приложение становится универсальным хабом учета времени, открытым для взаимодействия с любыми внешними агентами и инструментами.
-- Сохраняются строгая валидация расписания (`DayBuilder.validate`) и безопасность Jira-аккаунта пользователя.
-- Агенту приходится сначала читать дату и передавать revision, зато конкурентная ручная правка не теряется.
-- API не поддерживает пошаговое редактирование Segment: целый снимок уменьшает поверхность команд и оставляет одну транзакционную границу.
+User requirements:
+
+1. Log time against a Jira issue number, with a duration and optional description.
+2. List free, unsubmitted logs.
+3. Read the current day and existing Jira entries.
+4. Upload a complete day built by the agent without using the built-in day-building algorithm.
+5. Provide guidance for all actions as text and OpenAPI 3.0.
+6. Provide a Settings section with the host/port and a button to copy ready-to-use agent instructions or a skill.
+7. Keep final Jira submission under human control through the UI (human-in-the-loop).
+
+## Decision
+
+1. **Lightweight `dart:io` server:**
+   - Use standard `HttpServer.bind` without heavyweight dependencies.
+   - Listen only on `InternetAddress.loopbackIPv4` (`127.0.0.1`) to exclude requests from other machines.
+   - Default to port `8765`, automatically trying the next available port on conflict.
+2. **REST API contract:**
+   - `GET /api/help`: readable guidance with curl examples.
+   - `GET /api/openapi.json`: a valid OpenAPI 3.0 specification.
+   - `GET /api/issues?q=...`: search known local issues by key and summary.
+   - `GET /api/issues/{issueKey}`: current Jira text, all visible comments, and attachment metadata; `/attachments/{attachmentId}` downloads an attachment belonging to that issue.
+   - `GET /api/issues/{issueKey}/worklogs`: all accessible worklogs for the issue, including whether each belongs to the current account.
+   - `GET /api/quick-issues`, `POST /api/quick-issues`, `PATCH` and `DELETE /api/quick-issues/{issueId}`: read and manage quick references in the active Jira scope; store local descriptions in `note`.
+   - `GET /api/logs`, `POST /api/logs`, `PATCH /api/logs/{id}`, `DELETE /api/logs/{id}`, `/split`, and `/merge`: find and manage source facts. Split a source to place its parts independently, including on different dates.
+   - `GET /api/day?date=...`: fresh Jira worklogs, the selected date's draft, and its deterministic revision.
+   - `POST /api/day`: atomically replace the agent-built complete draft, validating `base_revision`; work intervals may overlap.
+3. **Load issues on demand:**
+   - If a logged issue is not cached, fetch metadata through `JiraClient` and cache it. A Jira failure must not produce a synthetic local issue.
+   - Remove the obsolete static `/api/service-tickets` and company-specific EG values. Quick issues are not an issue allowlist.
+4. **Human-in-the-loop:**
+   - The agent builds and passes a draft to the application. The user reviews its timeline on the Day tab and confirms Jira submission.
+5. **Ready-to-use agent skill in the UI:**
+   - `SettingsDialog` lets users copy a generated system prompt or skill with the current URL and instructions for any AI agent.
+6. **Source facts versus day representation:**
+   - A LocalLog is a work fact that the agent can freely manage while it is stopped, unused, and not bound to a draft.
+   - Every Segment references an existing LocalLog. One source can produce several Segments in one DayDraft and one DraftLog binding; each Segment becomes a separate Jira worklog.
+   - To submit parts on different dates, split the LocalLog first. For a single day, interval-editing commands are unnecessary: submit a complete snapshot.
+   - A snapshot cannot replace a partially submitted draft; a stale revision cannot overwrite manual edits.
+
+## Consequences
+
+- The application becomes a time-tracking hub for external agents and tools.
+- Strict schedule validation (`DayBuilder.validate`) and account safety remain in place.
+- Agents must first read a date and pass its revision, preserving concurrent manual edits.
+- There is no incremental Segment-editing API: a complete snapshot reduces the command surface and retains one transactional boundary.

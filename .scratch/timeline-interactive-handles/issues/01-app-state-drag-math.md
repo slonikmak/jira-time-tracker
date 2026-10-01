@@ -1,22 +1,22 @@
-# 01. Математика сдвигов границ в AppState (Ticket 01)
+# 01. Boundary-shift calculations in AppState (Ticket 01)
 
 Status: resolved
 
-## Описание
-Реализовать в `AppState` методы прямого манипулирования границами сегментов:
+## Description
+Implement direct segment-boundary manipulation in `AppState`:
 1. `resizeSegmentRight(Segment segment, int newDurationSeconds)`:
-   - Clamping `newDurationSeconds >= 600` (минимум 10 минут).
-   - Вычисление $\Delta t = newDurationSeconds - segment.durationSeconds$.
-   - Обновление текущего сегмента: `durationSeconds = newDurationSeconds`.
-   - Если $\Delta t > 0$: проверка упора в `ImportedWorklog` через `canShiftSegmentsRight`. Если есть упор, сдвигать на максимально возможное дельта-время либо бросать ошибку/ограничивать сдвиг.
-   - Сдвиг всех сегментов справа (`s.startUtc >= segment.endUtc`) на $\Delta t$.
-   - Сдвиг всех `Breaks` справа (обеды) на $\Delta t$.
-   - Авторасширение `DayDraft.endUtc`, если крайний сегмент вышел за границу.
+   - Clamp `newDurationSeconds >= 600` (minimum ten minutes).
+   - Calculate $\Delta t = newDurationSeconds - segment.durationSeconds$.
+   - Update `durationSeconds = newDurationSeconds`.
+   - For $\Delta t > 0$, check `ImportedWorklog` obstacles through `canShiftSegmentsRight`; use the largest permitted delta or throw/limit the shift.
+   - Shift all right-side segments (`s.startUtc >= segment.endUtc`) by $\Delta t$.
+   - Shift all right-side `Breaks` (lunches) by $\Delta t$.
+   - Extend `DayDraft.endUtc` automatically if the last segment crosses it.
 2. `resizeSegmentLeft(Segment segment, DateTime newStartUtc)`:
-   - Определение левого соседа (предыдущий сегмент или `ImportedWorklog` или `DayDraft.startUtc`).
-   - Ограничение слева: `minStart = max(leftNeighbor.endUtc, dayDraft.startUtc)`. Если `newStartUtc < minStart`, клампим в `minStart`.
-   - Ограничение справа: `maxStart = segment.endUtc.subtract(Duration(minutes: 10))`. Если `newStartUtc > maxStart`, клампим в `maxStart`.
-   - Вычисление новой длительности: `newDurationSeconds = segment.endUtc.difference(newStartUtc).inSeconds`.
-   - Обновление сегмента `segment.copyWith(startUtc: newStartUtc, durationSeconds: newDurationSeconds)`.
-   - Пересчёт или удаление зазора перед сегментом.
-3. Unit-тесты всех граничных условий и упоров.
+   - Find the left neighbor: previous segment, `ImportedWorklog`, or `DayDraft.startUtc`.
+   - Left limit: `minStart = max(leftNeighbor.endUtc, dayDraft.startUtc)`; clamp `newStartUtc < minStart` to `minStart`.
+   - Right limit: `maxStart = segment.endUtc.subtract(Duration(minutes: 10))`; clamp `newStartUtc > maxStart` to `maxStart`.
+   - Compute `newDurationSeconds = segment.endUtc.difference(newStartUtc).inSeconds`.
+   - Update `segment.copyWith(startUtc: newStartUtc, durationSeconds: newDurationSeconds)`.
+   - Recompute or remove the preceding gap.
+3. Unit-test every boundary condition and obstacle.

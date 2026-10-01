@@ -1,23 +1,23 @@
-# 02. Интеграция вычисляемых пауз в DayScreen и метрики дня
+# 02. Computed breaks in DayScreen and day metrics
 
 Status: resolved
 Blocked by: 01
 
-## Решение
-1. В `AppState`:
-   - Геттер `currentBreaks` переведён на динамический вызов `DayBuilder.computeTimelineGaps(...)`.
-   - Геттер `totalBreaksDurationSeconds` считает сумму вычисленных зазоров дня.
-   - Метод `_revalidateCurrentPlan` валидирует текущий план с учётом фактически вычисленных пауз.
-2. В `DayScreen`:
-   - Расписание получает актуальные промежутки (gaps) между нестыкующимися задачами и отображает их карточками `_buildBreakCard` с точным временем, длительностью и иконками кофе/обеда.
-   - Метрика «Паузы» честно отражает сумму свободного времени дня.
-3. Написан и успешно пройден сквозной интеграционный виджет-тест в `test/day_screen_gaps_test.dart`.
+## Solution
+1. `AppState`:
+   - `currentBreaks` dynamically calls `DayBuilder.computeTimelineGaps(...)`.
+   - `totalBreaksDurationSeconds` sums computed day gaps.
+   - `_revalidateCurrentPlan` validates against actual computed breaks.
+2. `DayScreen`:
+   - Schedule receives current gaps between nonadjacent tasks and displays `_buildBreakCard` with exact time/duration and coffee/lunch icons.
+   - Breaks accurately reports total free day time.
+3. End-to-end widget test in `test/day_screen_gaps_test.dart` passes.
 
-## Описание
-Подключить вычисление зазоров к отображению расписания на `DayScreen` и расчёту метрик дня в `AppState`.
+## Description
+Connect gap calculation to `DayScreen` schedule presentation and `AppState` metrics.
 
-## Критерии приёмки
-1. В `DayScreen` панель расписания формирует карточки зазоров из `computeTimelineGaps` (вместо статического `currentBreaks`).
-2. В метрике «Паузы» (`appState.totalBreaksDurationSeconds`) учитывается суммарная длительность фактически вычисленных зазоров.
-3. Карточки перерывов наглядно отображают время (`start — end`), форматированную длительность и статус (перерыв / обед).
-4. Проверено виджет-тестами и ручной проверкой.
+## Acceptance criteria
+1. `DayScreen` generates gap cards from `computeTimelineGaps` instead of static `currentBreaks`.
+2. Breaks (`appState.totalBreaksDurationSeconds`) sums actual computed gaps.
+3. Cards clearly show `start — end`, formatted duration, and break/lunch status.
+4. Widget tests and manual verification.

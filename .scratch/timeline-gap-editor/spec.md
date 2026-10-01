@@ -1,22 +1,22 @@
-# Спецификация: Интерактивное редактирование и сдвиг промежутков расписания (Timeline Gaps)
+# Specification: Interactive schedule gap editing and shifting (Timeline Gaps)
 
-## Цель
-Позволить пользователю напрямую настраивать и двигать промежутки (паузы/перерывы/обед) на таймлайне и в расписании дня: клик по промежутку открывает модальное окно настройки, где изменение границ автоматически сдвигает смежные границы соседних задач.
+## Goal
+Allow direct configuration/movement of timeline and day-schedule gaps (pauses/breaks/lunch): clicking a gap opens a modal whose boundary edits automatically move adjacent task boundaries.
 
-## Архитектурные правила
-1. **Сдвиг границ**:
-   - Изменение начала промежутка ($start_G$) сдвигает окончание левой задачи ($L.endUtc = new\_start_G$), изменяя её длительность ($L.durationSeconds = new\_start_G - L.startUtc$).
-   - Изменение окончания промежутка ($end_G$) сдвигает начало правой задачи ($R.startUtc = new\_end_G$), изменяя её длительность ($R.durationSeconds = R.endUtc - new\_end_G$).
-   - Краевые промежутки: внешняя граница сдвигает `DayDraft.startUtc` (для первого зазора) или `DayDraft.endUtc` (для последнего зазора).
-2. **Ограничения и валидация**:
-   - Длительность рабочего сегмента не может быть меньше 1 минуты (60 секунд). При попытке сжать задачу меньше этого порога диалог блокирует сохранение и показывает понятную ошибку.
-   - Записи Jira (`ImportedWorklog`) неизменяемы. Если сосед — `ImportedWorklog`, соответствующая граница промежутка фиксируется.
-3. **Удаление промежутка (Смыкание)**:
-   - Левая задача расширяется вправо до начала правой задачи ($L.durationSeconds += gap.durationSeconds$). Если $L$ — запись Jira, правая задача сдвигается/расширяется влево.
-   - Для краевого зазора в начале дня — `DayDraft.startUtc = firstTask.startUtc`.
-   - Для краевого зазора в конце дня — `DayDraft.endUtc = lastTask.endUtc`.
-4. **Тип промежутка**:
-   - Возможность явно переключать тип зазора: «Перерыв» (кофе) или «Обед» (ресторан).
-5. **Точки входа в UI**:
-   - `TimelineTrackBar`: клик по полосе паузы с курсором-указателем и hover-эффектом.
-   - `DayScreen`: клик по карточке перерыва и иконка карандаша «Редактировать интервал».
+## Architectural rules
+1. **Boundary shifts:**
+   - Changing gap start ($start_G$) moves the left task's end ($L.endUtc = new\_start_G$), changing duration ($L.durationSeconds = new\_start_G - L.startUtc$).
+   - Changing gap end ($end_G$) moves the right task's start ($R.startUtc = new\_end_G$), changing duration ($R.durationSeconds = R.endUtc - new\_end_G$).
+   - Edge gaps: the outer boundary moves `DayDraft.startUtc` for the first gap or `DayDraft.endUtc` for the last.
+2. **Constraints and validation:**
+   - Work segments cannot be shorter than one minute (60 seconds). Compressing below this threshold blocks saving and shows an understandable error.
+   - Jira records (`ImportedWorklog`) are immutable. A neighboring `ImportedWorklog` fixes the corresponding gap boundary.
+3. **Gap deletion (closing):**
+   - Extend the left task to the right task's start ($L.durationSeconds += gap.durationSeconds$). If $L$ is Jira, move/extend the right task left.
+   - Start-of-day edge gap: `DayDraft.startUtc = firstTask.startUtc`.
+   - End-of-day edge gap: `DayDraft.endUtc = lastTask.endUtc`.
+4. **Gap type:**
+   - Explicitly switch between Break (coffee) and Lunch (restaurant).
+5. **UI entry points:**
+   - `TimelineTrackBar`: clickable break bar with pointer cursor/hover effect.
+   - `DayScreen`: clickable break card and Edit interval pencil icon.

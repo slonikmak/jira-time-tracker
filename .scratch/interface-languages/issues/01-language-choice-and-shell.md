@@ -1,16 +1,16 @@
-# 01: Выбор языка, сохранение и оболочка
+# 01: Language selection, persistence, and shell
 
-**What to build:** Пользователь переключает язык в шапке настроек, немедленно видит переведённую оболочку и сохраняет выбор между запусками. Правила — в [спецификации](../spec.md).
+**What to build:** The user switches language in the Settings header, immediately sees the translated shell, and retains the choice between launches. Rules are in the [specification](../spec.md).
 
 **Blocked by:** None (can start immediately).
 
 **Status:** complete
 
-- [x] Новая установка выбирает русский для русской Windows и английский для остальных языков; обновление сохраняет русский.
-- [x] «Как в системе / Русский / English» доступны рядом с темой; ручной выбор сохраняется.
-- [x] Переключение не сбрасывает навигацию или работу; read-only запрещает изменение.
-- [x] Временная база и widget-сценарий проверяют выбор, перезапуск и оболочку.
+- [x] A new installation chooses Russian for Russian Windows and English for other languages; an upgrade preserves Russian.
+- [x] System default / Russian / English are available beside the theme; manual selection persists.
+- [x] Switching preserves navigation and work; read-only mode prohibits changes.
+- [x] A temporary database and widget scenario verify selection, restart, and shell.
 
 ## Comments
 
-2026-10-01: Реализовано и проверено. Проверки, независимое ревью, Windows-сборка и ограничения записаны в [отчёте](../verification.md). Рабочая Jira не использовалась.
+2026-10-01: Implemented and verified. Checks, independent review, Windows build, and limitations are recorded in the [report](../verification.md). Production Jira was not used.

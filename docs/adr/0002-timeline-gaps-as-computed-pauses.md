@@ -1,15 +1,19 @@
-# 0002. Паузы на таймлайне как вычисляемые временные зазоры (Timeline Gaps)
+# 0002. Timeline breaks as computed time gaps (Timeline Gaps)
 
-## Контекст
-В первоначальной архитектуре паузы хранились как статические записи в таблице `breaks`, создаваемые только при генерации дня. В режиме прямой сборки (`As-Recorded Build`) и после ручного редактирования времени сегментов в расписании естественные разрывы между задачами (например, окончание в 10:37 и старт следующей в 14:32) не попадали в список элементов UI, отображались встык, а метрика «Паузы» в шапке дня показывала `0:00`.
+## Context
 
-## Решение
-Определить паузы на таймлайне как **динамически вычисляемые зазоры (Timeline Gaps)**:
-1. Промежутки между последовательными рабочими интервалами (`next.startUtc - prev.endUtc`), а также свободное время от начала дня до первой задачи и от последней задачи до конца дня вычисляются алгоритмически при подготовке расписания для UI и расчёте метрик.
-2. Паузы не сохраняются как отдельные персистентные записи в базе данных, что исключает рассинхронизацию при редактировании или удалении сегментов.
-3. В UI каждый зазор отображается отдельной карточкой перерыва с точными границами времени и длительностью (зазоры $\ge 30$ минут в обеденное окно 12:00–14:00 или назначенные Smart Rebuild помечаются как обед).
+Originally, breaks were static records in the `breaks` table, created only during day generation. As-Recorded Build and manual segment edits left natural gaps between issues (such as an end at 10:37 and the next start at 14:32) out of the UI element list. Issues appeared adjacent, and the day header's **Breaks** metric showed `0:00`.
 
-## Последствия
-- Таймлайн честно отражает реальную картину дня независимо от режима сборки (As-Recorded или Smart Rebuild) и ручных правок.
-- Метрика «Паузы» в шапке дня рассчитывается динамически по фактическим зазорам.
-- Упрощается модель данных: отсутствие необходимости обновлять/удалять записи пауз в SQLite при изменении сегментов.
+## Decision
+
+Define timeline breaks as **dynamically computed Timeline Gaps**:
+
+1. Compute intervals between consecutive work intervals (`next.startUtc - prev.endUtc`), between the day start and first issue, and between the last issue and day end when preparing the UI schedule and metrics.
+2. Do not persist gaps as separate database records, avoiding drift when segments are edited or removed.
+3. Display each gap as a separate break card with exact boundaries and duration. Gaps lasting $\ge 30$ minutes in the 12:00–14:00 lunch window, or designated by Smart Rebuild, are labeled lunch.
+
+## Consequences
+
+- The timeline reflects the actual day regardless of build mode or manual edits.
+- The day header's **Breaks** metric is calculated dynamically from actual gaps.
+- The data model is simpler: editing segments does not require updating or deleting SQLite break records.

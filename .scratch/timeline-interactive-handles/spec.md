@@ -1,37 +1,37 @@
-# Спецификация: Интерактивные границы задач на таймлайне (Timeline Drag Handles)
+# Specification: Interactive task boundaries on the timeline (Timeline Drag Handles)
 
-## Цель
-Предоставить пользователю возможность интуитивно и напрямую менять границы рабочих задач на горизонтальном таймлайне мышью (drag & drop границ) без необходимости открывать диалоги ввода времени.
+## Goal
+Allow intuitive direct mouse manipulation of work-task boundaries on the horizontal timeline, without opening time-entry dialogs.
 
-## Логика и правила поведения
+## Logic and behavior rules
 
-### 1. Правый край задачи (Right Handle)
-- **Тянем вправо**:
-  - Задача удлиняется: $\Delta t > 0$.
-  - Весь правый хвост (все последующие задачи и паузы) синхронно сдвигается вправо на $\Delta t$.
-  - Относительное расстояние между задачами и паузами справа не изменяется.
-  - Если хвост упирается в `ImportedWorklog` из Jira — сдвиг ограничивается доступным свободным окном (жесткий упор).
-- **Тянем влево**:
-  - Задача укорачивается: $\Delta t < 0$.
-  - Минимальная длительность задачи — **10 минут** (600 секунд).
-  - Весь правый хвост синхронно подтягивается влево на $|\Delta t|$.
-  - Отрезанное время не возвращается в исходный лог (WYSIWYG: черновик фиксирует фактическое положение).
+### 1. Task right edge (Right Handle)
+- **Drag right:**
+  - Extend the task: $\Delta t > 0$.
+  - Shift the entire right-hand tail (all following tasks/breaks) right by $\Delta t$.
+  - Preserve relative distances between following tasks/breaks.
+  - An `ImportedWorklog` limits movement to the available free window (hard stop).
+- **Drag left:**
+  - Shorten the task: $\Delta t < 0$.
+  - Minimum duration: **ten minutes** (600 seconds).
+  - Pull the entire right-hand tail left by $|\Delta t|$.
+  - Removed time is not returned to the source log (WYSIWYG: the draft records actual placement).
 
-### 2. Левый край задачи (Left Handle)
-- **Тянем влево**:
-  - Задача удлиняется влево: `startUtc` уменьшается, `durationSeconds` увеличивается.
-  - Поглощается свободная пауза перед задачей.
-  - Соседняя задача слева **никогда не урезается**.
-  - Если пауза перед задачей сжимается до 0 (или до границы начала дня) — наступает жесткий упор (дальше влево тянуть нельзя).
-- **Тянем вправо**:
-  - Задача укорачивается слева: `startUtc` увеличивается, `durationSeconds` уменьшается.
-  - Минимальная длительность задачи — **10 минут**.
-  - Перед задачей увеличивается (или создаётся) свободная пауза.
-  - Сосед слева и все остальные задачи остаются неподвижными.
+### 2. Task left edge (Left Handle)
+- **Drag left:**
+  - Extend left: decrease `startUtc`, increase `durationSeconds`.
+  - Consume the preceding free break.
+  - **Never shorten** the left neighbor.
+  - When the break reaches zero or the day-start boundary, stop; further left movement is prohibited.
+- **Drag right:**
+  - Shorten from the left: increase `startUtc`, decrease `durationSeconds`.
+  - Minimum duration: **ten minutes**.
+  - Increase or create the preceding break.
+  - The left neighbor and all other tasks stay stationary.
 
-### 3. Обратная связь и подсветка (Hover / Active State)
-- Ручки шириной ~8–12 px по краям каждого рабочего сегмента.
-- При наведении курсор мыши меняется на `SystemMouseCursors.resizeLeftRight` (или `resizeColumn`).
-- Задача, на край которой наведён курсор (или которая перетаскивается), подсвечивается контрастным акцентным контуром (`AppColors.accent` / яркая рамка), исключая путаницу на нулевых стыках двух задач.
-- Во время drag отображается всплывающая подсказка с текущим временем границы (например, `14:30`) или длительностью задачи.
-- При завершении drag вызываются методы `AppState` с сохранением в локальное хранилище и перевалидацией.
+### 3. Feedback and highlighting (Hover / Active State)
+- Handles ~8–12 px wide at each work segment's edges.
+- Hover changes the cursor to `SystemMouseCursors.resizeLeftRight` (or `resizeColumn`).
+- Hovered/dragged segments have a contrasting accent outline (`AppColors.accent` / bright border), avoiding ambiguity at zero-gap joints.
+- During dragging, show current boundary time (e.g. `14:30`) or task duration in a tooltip.
+- Drag completion calls `AppState`, persists locally, and revalidates.

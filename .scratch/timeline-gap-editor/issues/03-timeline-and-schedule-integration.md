@@ -1,14 +1,14 @@
-# 03. Интеграция с таймлайном и расписанием дня (TimelineTrackBar & DayScreen)
+# 03. Timeline and day schedule integration (TimelineTrackBar & DayScreen)
 
 Status: resolved
 
-## Описание
+## Description
 1. `TimelineTrackBar`:
-   - Добавить в `_TrackItem` ссылку на `Break` (если `isBreak == true`).
-   - Добавить коллбэк `onEditBreak: (Break breakItem)?`.
-   - Для элементов пауз добавить визуальную реакцию (курсор `SystemMouseCursors.click`, InkWell с onTap).
+   - Add a `Break` reference to `_TrackItem` when `isBreak == true`.
+   - Add `onEditBreak: (Break breakItem)?`.
+   - Break items respond visually: `SystemMouseCursors.click`, InkWell with onTap.
 2. `DayScreen`:
-   - В `_buildBreakCard` сделать карточку кликабельной (`InkWell`) и добавить справа кнопку `IconButton` «Редактировать интервал» (иконка `Icons.edit_outlined`).
-   - Передать `onEditBreak` в `TimelineTrackBar`.
-   - Метод `_openEditBreakDialog(BuildContext context, Break breakItem)` открывает `EditBreakDialog` и передает в него данные о соседях и коллбэки сохранения/удаления.
-3. Прогон всех тестов и линтеров.
+   - Make `_buildBreakCard` clickable (`InkWell`); add right-side Edit interval `IconButton` (`Icons.edit_outlined`).
+   - Pass `onEditBreak` to `TimelineTrackBar`.
+   - `_openEditBreakDialog(BuildContext context, Break breakItem)` opens `EditBreakDialog` with neighbor information and save/delete callbacks.
+3. Run all tests and linters.

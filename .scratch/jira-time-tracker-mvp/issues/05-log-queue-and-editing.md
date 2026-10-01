@@ -1,25 +1,25 @@
-# 05: Очередь неиспользованных логов и управление записями
+# 05: Unconsumed log queue and entry management
 
-**What to build:** Панель очереди неиспользованных логов на экране «Работа». Отображение свободных записей с названием задачи, длительностью, датой создания и описанием. Редактирование длительности и описания остановленных свободных логов, удаление записей, доступность логов независимо от даты их создания (включая прошлую неделю).
+**What to build:** An unconsumed-log queue on Work. Display free entries with issue title, duration, creation date, and description. Edit stopped free logs' duration/description, delete entries, and retain availability regardless of creation date, including last week.
 
-**Blocked by:** 04: Таймеры и ручной ввод времени (Play/Pause, сохранение при рестарте)
+**Blocked by:** 04: Timers and manual time entry (Play/Pause, restart persistence)
 
 **Status:** resolved
 
 ## Acceptance criteria
 
-- [x] В правой панели экрана «Работа» отображается список всех неиспользованных (`consumedAtUtc == null`) и не включенных в черновики логов.
-- [x] Логи, созданные в прошлые дни (например, на прошлой неделе), остаются доступными в очереди и могут быть выбраны для сборки на любую дату (сценарий A11).
-- [x] Остановленный свободный лог можно отредактировать (изменить длительность в часах/минутах, описание) или удалить из базы (сценарий A04).
-- [x] Соблюдается четкое разделение: summary Jira-задачи (заголовок, фиксируемый при создании лога) vs пользовательское описание работы (сценарий A04).
-- [x] Для активных (запущенных) логов в очереди отображается статус «В процессе» с кнопкой паузы, без возможности включить их в сборку до остановки.
-- [x] Написаны тесты управления очередью и проверки сценариев A04 и A11.
+- [x] Work's right panel lists all unconsumed (`consumedAtUtc == null`) logs not included in drafts.
+- [x] Logs created on previous days (e.g. last week) remain available and can be selected for any build date (A11).
+- [x] A stopped free log can be edited (hours/minutes, description) or deleted from the database (A04).
+- [x] Clearly separate Jira summary (title captured at log creation) from user work description (A04).
+- [x] Active logs show In progress and a pause button, with no build selection before stopping.
+- [x] Queue-management tests cover A04/A11.
 
 ## Comments
 
-Реализовано:
-- Метод `getActiveDraftDatesBySourceLogId` в `LocalStore` для связи логов с активными черновиками.
-- В `AppState`: защита от изменения/удаления/повторного выбора логов, уже включенных в черновик (`isLogInDraft`, `getDraftDateForLog`).
-- В `WorkScreen`: бейджи статуса черновика `В черновике (ДАТА)`, блокировка редактирования и повторного выбора для занятых логов.
-- `test/log_queue_test.dart`: тесты сценария A11 (логи прошлой недели не удаляются фильтрами задач и остаются доступны), сценария A04 (независимость заголовка задачи от описания работы пользователя), защита работающих логов и логов в черновике.
-- Все 44 теста в репозитории проходят успешно.
+Implemented:
+- The `getActiveDraftDatesBySourceLogId` method in `LocalStore` links logs to active drafts.
+- `AppState` protects draft-linked logs from editing/deletion/reselection (`isLogInDraft`, `getDraftDateForLog`).
+- `WorkScreen` shows In draft (DATE) badges and blocks editing/reselection of held logs.
+- `test/log_queue_test.dart`: A11 (last week's logs survive issue filters and remain available), A04 (issue title independent of user description), and protection of running/draft-linked logs.
+- All 44 repository tests pass.

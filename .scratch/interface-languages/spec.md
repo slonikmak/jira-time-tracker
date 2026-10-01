@@ -1,119 +1,119 @@
-# Переключение языка интерфейса: русский и английский
+# Interface language switching: Russian and English
 
 Status: implemented
 
-Дата: 2026-10-01.
+Date: 2026-10-01.
 
-Продуктовые решения, проверки и разбиение задач согласованы в интервью `ask-matt` → `grill-with-docs` 2026-10-01.
+Product decisions, verification, and task breakdown were agreed in the `ask-matt` → `grill-with-docs` interview on 2026-10-01.
 
 ## Problem Statement
 
-Jira Time Tracker имеет русский интерфейс. Пользователь хочет пользоваться тем же приложением на русском или английском, переключать язык без перезапуска и не терять текущую работу. Простого перевода вкладок недостаточно: формы, сообщения, календарь и ошибки приложения должны следовать выбранному языку.
+Jira Time Tracker has a Russian interface. The user wants to use the same application in Russian or English, switch without restarting, and preserve current work. Translating tabs alone is insufficient: forms, messages, calendar, and application errors must follow the selected language.
 
 ## Solution
 
-В закреплённой шапке настроек рядом с выбором темы появляется селектор «Язык / Language». Он содержит «Как в системе / Русский / English»; на английском системный вариант называется «System default». Названия самих языков всегда показываются как «Русский» и «English».
+The fixed Settings header gains a Language selector beside the theme. It offers System default / Russian / English; the English system option is named “System default.” Language names always use their native spelling.
 
-Выбор немедленно применяется и сохраняется на этом устройстве. В режиме «Как в системе» русскому языку Windows соответствует русский интерфейс, английскому и остальным языкам — английский. Регион языка не меняет это правило. Новая установка начинает с системного варианта; существующая установка при первом обновлении закрепляет русский. Пользователь может затем выбрать любой из трёх вариантов.
+The choice applies immediately and persists on this device. In system mode, Russian Windows selects Russian; English and other Windows languages select English. Language region does not change this rule. New installations begin in system mode; on first upgrade, existing installations explicitly retain Russian. The user may then choose any of the three options.
 
-Переводятся все собственные тексты интерфейса, включая ошибки приложения, подсказки, пустые состояния, сообщения о сохранении, календарь, единицы длительности и стандартные диалоги. Названия и статусы задач Jira, тексты worklogs, описания и заголовки LocalLog, локальные подсказки QuickIssue и редактируемые инструкции пользователя сохраняются в исходном виде. Название Jira Time Tracker, ключи задач, адреса и идентификаторы не переводятся.
+Translate all application-owned interface text, including application errors, hints, empty states, save messages, calendar, duration units, and standard dialogs. Jira issue titles/statuses, worklog text, LocalLog descriptions/titles, QuickIssue local hints, and editable user instructions remain unchanged. Jira Time Tracker, issue keys, addresses, and identifiers are not translated.
 
-Названия месяцев и дней недели следуют языку. Числовые даты сохраняют порядок день–месяц–год (`30.09.2026`), время — 24-часовой формат (`14:05`). Короткие даты могут сохранять текущую длину представления (`30.09`). Смена языка не меняет часовой пояс, календарную дату, длительности и значения времени.
+Month and weekday names follow the language. Numeric dates retain day–month–year order (`30.09.2026`); time remains 24-hour (`14:05`). Short dates may retain their current length (`30.09`). Changing language does not change time zone, calendar date, durations, or time values.
 
-Тексты ошибок, полученные от Jira, и старые сохранённые ошибки показываются в исходном виде. Это согласованное ограничение; собственные новые сообщения приложения должны поддерживать оба языка.
+Jira error text and previously saved errors appear unchanged. This is an agreed limitation; new application-owned messages must support both languages.
 
 ## User Stories
 
-1. Как пользователь русской Windows, я хочу русский интерфейс при новой установке, чтобы начать работу без настройки языка.
-2. Как пользователь английской Windows, я хочу английский интерфейс при новой установке, чтобы понимать действия приложения.
-3. Как пользователь Windows на другом языке, я хочу английский интерфейс, чтобы получить поддерживаемый язык без пустых подписей.
-4. Как пользователь существующей установки, я хочу сохранить русский интерфейс после обновления, чтобы приложение не изменило язык неожиданно.
-5. Как пользователь, я хочу выбрать «Русский» независимо от Windows, чтобы закрепить удобный язык.
-6. Как пользователь, я хочу выбрать «English» независимо от Windows, чтобы закрепить удобный язык.
-7. Как пользователь, я хочу вернуть «Как в системе», чтобы приложение снова следовало языку Windows.
-8. Как пользователь, я хочу узнаваемые названия «Русский» и «English», чтобы найти свой язык в чужом интерфейсе.
-9. Как пользователь, я хочу немедленное переключение, чтобы не перезапускать приложение.
-10. Как пользователь, я хочу сохранение выбора между запусками, чтобы не настраивать его каждый раз.
-11. Как пользователь, я хочу одну настройку языка для всех Jira-подключений, чтобы интерфейс не зависел от аккаунта.
-12. Как пользователь, я хочу перевод всех вкладок и разделов настроек, чтобы навигация была понятной целиком.
-13. Как пользователь, я хочу перевод форм ручного времени, редактирования, разделения и объединения, чтобы выполнять действия на выбранном языке.
-14. Как пользователь, я хочу перевод очереди, истории и расписания дня, чтобы понимать состояние записей.
-15. Как пользователь, я хочу перевод подсказок, предупреждений и подтверждений, чтобы понимать последствия действий.
-16. Как пользователь, я хочу ошибки приложения на выбранном языке, чтобы исправлять ввод и восстанавливаться после отказов.
-17. Как пользователь, я хочу календарь и названия месяцев на выбранном языке, чтобы выбирать нужную дату.
-18. Как пользователь, я хочу числовые даты в порядке день–месяц–год и 24-часовое время на обоих языках, чтобы не путать даты и часы.
-19. Как пользователь, я хочу единицы времени и подписи количества записей на выбранном языке, чтобы правильно читать итог.
-20. Как пользователь, я хочу сохранение введённых данных формы при изменении языка, чтобы не повторять ввод.
-21. Как пользователь, я хочу сохранение выбранной даты, логов, черновика и работающих таймеров при переключении, чтобы не прерывать работу.
-22. Как пользователь, я хочу видеть исходные названия Jira-задач и собственные описания, чтобы переключение не меняло содержание учёта.
-23. Как пользователь, я хочу видеть исходный текст ошибки Jira и старой ошибки отправки, чтобы сохранить диагностическую информацию.
-24. Как пользователь узкого окна, я хочу доступные селекторы языка и темы без переполнения, чтобы управлять настройками при любой поддерживаемой ширине.
-25. Как пользователь тёмной темы, я хочу тот же переключатель и читаемые переводы, чтобы язык не ограничивал оформление.
-26. Как пользователь, я хочу локализованные объяснения режима только чтения, чтобы понимать недоступность изменения настроек.
+1. As a Russian Windows user, I want Russian on a new installation so I can start without configuring language.
+2. As an English Windows user, I want English on a new installation so I understand application actions.
+3. As a user of Windows in another language, I want English so I obtain a supported language without blank labels.
+4. As an existing-installation user, I want to retain Russian after upgrading so language does not change unexpectedly.
+5. As a user, I want to select Russian independently of Windows to keep my preferred language.
+6. As a user, I want to select English independently of Windows to keep my preferred language.
+7. As a user, I want to restore System default so the application follows Windows language again.
+8. As a user, I want recognizable native language names so I can find my language in an unfamiliar interface.
+9. As a user, I want immediate switching so I need not restart.
+10. As a user, I want my choice retained between launches so I need not configure it repeatedly.
+11. As a user, I want one language setting for all Jira connections so the interface does not depend on the account.
+12. As a user, I want all tabs and Settings sections translated so the entire navigation is understandable.
+13. As a user, I want manual-time, editing, splitting, and merging forms translated so I can act in my chosen language.
+14. As a user, I want queue, history, and day schedule translated so I understand record states.
+15. As a user, I want hints, warnings, and confirmations translated so I understand consequences.
+16. As a user, I want application errors in my language so I can correct input and recover from failures.
+17. As a user, I want calendar and month names in my language so I can select the right date.
+18. As a user, I want day–month–year numeric dates and 24-hour time in both languages so I do not confuse dates or hours.
+19. As a user, I want duration units and record counts in my language so I read totals correctly.
+20. As a user, I want form input preserved when language changes so I need not enter it again.
+21. As a user, I want selected date/logs, draft, and running timers preserved during switching so work is uninterrupted.
+22. As a user, I want original Jira issue titles and my descriptions retained so switching does not change recorded content.
+23. As a user, I want original Jira and old submission errors retained so diagnostic information survives.
+24. As a narrow-window user, I want accessible language/theme selectors without overflow at every supported width.
+25. As a dark-theme user, I want the same selector and readable translations so language does not constrain appearance.
+26. As a user, I want localized read-only explanations so I understand why Settings changes are unavailable.
 
 ## Implementation Decisions
 
-- Настройка языка общая для приложения и устройства; она не относится к Jira scope, DaySettings или снимку DayDraft.
-- Хранится выбор пользователя (`system`, `ru` или `en`), а не только вычисленный язык. Ручной выбор имеет приоритет над языком Windows.
-- В системном режиме изменение системного языка обновляет интерфейс, если платформа сообщает об изменении во время работы; в любом случае новый системный язык учитывается при следующем запуске.
-- Отсутствие настройки в старой установке не означает новую установку. Новую базу нужно отличить от существующей до того, как инициализация и миграции сотрут это различие. Пустая ранее существовавшая база также получает русский язык при обновлении.
-- Инициализация выбора существующей установки выполняется один раз в пишущем экземпляре. Ошибка сохранения не должна молча подтверждать изменение; повторный запуск не должен неожиданно переводить старую установку на английский.
-- Используется штатная локализация Flutter с каталогами русских и английских строк, параметрами и правилами количества. Переводы не собираются из фрагментов русского предложения и не выполняются сетевым сервисом во время работы.
-- Material-диалоги, календарь и выбор времени получают тот же язык, что собственные экраны; формат времени принудительно остаётся 24-часовым.
-- AppState координирует выбор языка, LocalStore владеет его сохранением, UI отвечает за представление локализованного текста. SQL и чтение языка Windows не переходят в виджеты.
-- Чистые доменные модули не получают зависимость от Flutter или BuildContext. Собственные ошибки представляются так, чтобы интерфейс мог выбрать перевод с исходными параметрами; технические причины и сообщения Jira не теряются.
-- Уже сохранённые строки ошибок совместимы с обновлением и не переписываются переводчиком. Новые собственные сообщения, отображаемые в интерфейсе, поддерживают оба языка, в том числе при отправке и восстановлении.
-- Числовые даты, время суток и длительности форматируются согласованно на всех экранах. Порядок даты и 24-часовой формат не зависят от регионального варианта английского.
-- Изменение языка обновляет подписи без пересоздания пользовательского состояния: не сбрасываются навигация, поля, выбранные логи, выбранная дата, таймеры, черновик, состояние загрузки и результаты отправки.
-- В узком окне шапка настроек переносит элементы без горизонтального переполнения; текущие масштаб, типографика, темы и разделы сохраняются.
-- Изменение языка в экземпляре только для чтения отключено, как изменение темы. Просмотр текущего языка и локализованных объяснений доступен.
-- Ошибка сохранения выбора языка оставляет прежний сохранённый выбор и показывает понятное сообщение.
-- Переключение языка не выполняет отправку worklogs, не меняет правила сборки и не меняет публичный контракт Local Agent API. Редактируемые инструкции для агента не переводятся автоматически.
-- Завершённая версия не содержит оставленных русских собственных подписей в английском UI. Поиск оставшихся строк служит вспомогательной проверкой; Jira-данные и пользовательские тексты могут законно оставаться русскими.
+- Language belongs to the application/device, not Jira scope, DaySettings, or a DayDraft snapshot.
+- Store the user's choice (`system`, `ru`, or `en`), not merely the resolved language. Manual selection overrides Windows language.
+- In system mode, a system-language change updates the interface if the platform reports changes while running; the next launch always uses the new system language.
+- A missing setting in an old installation does not imply a new installation. Distinguish a new database from an existing one before initialization/migrations erase that distinction. An existing empty database also receives Russian on upgrade.
+- Initialize an existing installation's choice once in the writable instance. Save failure must not silently confirm a change; restarting must not unexpectedly switch an old installation to English.
+- Use standard Flutter localization with Russian/English catalogs, parameters, and plural rules. Do not assemble translations from Russian sentence fragments or call a network translation service at runtime.
+- Material dialogs, calendar, and time picker share the screens' language; force 24-hour time.
+- AppState coordinates language selection; LocalStore owns persistence; UI presents localized text. SQL and Windows language reading do not move into widgets.
+- Pure domain modules do not depend on Flutter or BuildContext. Represent application-owned errors so the UI can translate with original parameters; retain technical causes and Jira messages.
+- Previously persisted error strings remain compatible and are not rewritten by translation. New application-owned interface messages support both languages, including submission/recovery.
+- Numeric dates, times of day, and durations are formatted consistently across screens. Date order and 24-hour format do not depend on the English regional variant.
+- Changing language updates labels without recreating user state: preserve navigation, fields, selected logs/date, timers, draft, loading state, and submission results.
+- In narrow windows the Settings header wraps without horizontal overflow; retain current scale, typography, themes, and sections.
+- Disable language changes in a read-only instance, as for theme changes. Viewing current language and localized explanations remains available.
+- Failure to save language leaves the previous persisted choice and shows an understandable message.
+- Language switching neither submits worklogs nor changes building rules or the public Local Agent API contract. Editable agent instructions are not translated automatically.
+- The completed version leaves no untranslated application-owned Russian labels in English UI. Searching for remaining strings is a supporting check; Jira data and user text may legitimately remain Russian.
 
 ## Testing Decisions
 
-- Главная граница проверки — настоящее приложение в widget-тестах с AppState, временной SQLite-базой, подставным HTTP-клиентом Jira и защищённым хранилищем в памяти. Это существующий подход к проверке оболочки, настроек и QuickIssue.
-- Проверяется наблюдаемое поведение через настройки и последующее отображение, а не приватные методы, имена ключей SQLite или конкретный состав внутренних виджетов.
-- Язык платформы и часы задаются явно, чтобы результат не зависел от Windows машины разработчика. Случайность сборщика также задаётся явно в сценариях, где нужен DayDraft.
-- Отдельные сценарии: новая установка с русским, английским и неподдерживаемым языком; существующая база без языковой настройки; повторный запуск после ручного выбора; возврат к системному выбору; отказ сохранения; режим только чтения.
-- Проверка повторного запуска использует временную файловую SQLite-базу с закрытием и повторным открытием; тест с той же живой AppState не доказывает сохранение.
-- Сквозной сценарий переключает язык в настройках и проверяет оболочку, «Работу», «День», формы, сообщения и календарь. Переключение системного языка при открытой форме проверяет сохранение ввода.
-- В сценарии с текущей работой после переключения сохраняются выбранные логи и дата, работающий таймер, LocalLog и DayDraft; смена языка не создаёт запросов отправки в Jira.
-- Подставной Jira-клиент возвращает исходные русские и английские названия и ошибки: данные остаются неизменными, собственное пояснение приложения переводится.
-- Новая собственная ошибка и старая сохранённая строка ошибки проверяются раздельно, включая результаты отправки и восстановление после перезапуска.
-- Даты, 24-часовое время, названия месяцев, единицы длительности и количество записей проверяются на обоих языках, включая 1, 2 и 5 записей и региональные варианты английского.
-- Проверяется работа обоих языков при широкой и узкой компоновке, со светлой и тёмной темой; длинные английские подписи не переполняют формы и шапку.
-- Регрессия охватывает затронутые сценарии A01–A24. Разработческие проверки используют подставной HTTP и не создают worklogs в рабочей Jira.
-- Финальная приёмка: форматирование Dart, `flutter analyze`, полный `flutter test`, `git diff --check`, Windows release-сборка и проверка основных экранов собранного приложения на обоих языках.
+- The main verification boundary is the real application in widget tests with AppState, temporary SQLite, fake Jira HTTP client, and in-memory secure storage. This is the existing shell, Settings, and QuickIssue testing approach.
+- Verify observable Settings behavior and subsequent presentation rather than private methods, SQLite key names, or exact internal widget composition.
+- Supply platform language and clocks explicitly so results do not depend on the developer's Windows machine. Supply builder randomness explicitly when scenarios need DayDraft.
+- Separate scenarios: new installations with Russian, English, and unsupported languages; existing database without language setting; restart after manual choice; restoring system selection; save failure; read-only mode.
+- Restart verification closes and reopens a temporary file-backed SQLite database; reusing the same live AppState does not prove persistence.
+- An end-to-end scenario switches language in Settings and checks shell, Work, Day, forms, messages, and calendar. Changing system language with an open form checks input preservation.
+- A current-work scenario preserves selected logs/date, running timer, LocalLog, and DayDraft after switching; no Jira submission requests are created.
+- The fake Jira client returns original Russian/English titles and errors: data remains unchanged while the application's own explanation is translated.
+- Verify new application-owned errors separately from old persisted error strings, including submission results and restart recovery.
+- Verify dates, 24-hour times, month names, duration units, and record counts in both languages, including 1, 2, and 5 records and regional English variants.
+- Check both languages in wide/narrow layouts and light/dark themes; long English labels do not overflow forms or header.
+- Regression covers affected scenarios A01–A24. Development checks use fake HTTP and create no worklogs in production Jira.
+- Final acceptance: Dart formatting, `flutter analyze`, full `flutter test`, `git diff --check`, Windows release build, and main-screen verification in the built application in both languages.
 
 ## Out of Scope
 
-- Третий язык и дополнительные региональные форматы дат или времени.
-- Автоматический перевод данных Jira, пользовательских описаний, подсказок или инструкций.
-- Перевод ранее сохранённых строк ошибок и текста ошибок Jira.
-- Изменение схемы и семантики внешнего Local Agent API ради языка UI.
-- Перевод всех Markdown-документов проекта на английский.
-- Переработка визуального стиля, навигации, алгоритма сборки, отправки или хранения рабочих данных.
-- Синхронизация языка между устройствами и установками.
+- A third language and additional regional date/time formats.
+- Automatic translation of Jira data, user descriptions, hints, or instructions.
+- Translation of previously persisted error strings or Jira error text.
+- Changing the external Local Agent API schema/semantics for UI language.
+- Translating all project Markdown documents into English as part of this interface-localization task.
+- Redesigning visual style, navigation, building/submission algorithms, or work-data storage.
+- Synchronizing language across devices/installations.
 
 ## Further Notes
 
-До начала реализации код не имел инфраструктуры локализации. Русские строки располагались в UI, AppState и доменных модулях; даты и длительности форматируются в нескольких местах. Тема уже сохраняется локально и применяется сразу. Эти факты проверены в репозитории; Результаты реализации и проверки записываются в связанных задачах.
+Before implementation, the code had no localization infrastructure. Russian strings occurred in UI, AppState, and domain modules; dates and durations were formatted in several places. Theme already persisted locally and applied immediately. These facts were verified in the repository; implementation and verification results are recorded in related tasks.
 
-Документы-владельцы: [MVP](../../docs/specs/jira-time-tracker-mvp.md), [UX/UI](../../docs/design/UX.md), [архитектура](../../ARCHITECTURE.md), [README](../../README.md). При реализации нужно обновить пользовательское правило языка в MVP, размещение переключателя в UX/UI, ответственность локализации в архитектуре и порядок настройки в README. Остальные документы должны ссылаться на владельца правила. Исторические спецификации выполненных задач не переписываются.
+Owning documents: [MVP](../../docs/specs/jira-time-tracker-mvp.md), [UX/UI](../../docs/design/UX.md), [architecture](../../ARCHITECTURE.md), [README](../../README.md). Implementation must update the language rule in MVP, selector placement in UX/UI, localization ownership in architecture, and setup steps in README. Other documents should link to the rule's owner. Historical specifications of completed tasks are not rewritten for behavioral changes.
 
-В рабочем дереве уже присутствуют изменения макета, UX, оболочки, экранов и widget-тестов. Они сохраняются; реализация переводов учитывает актуальное дерево. Код и документы не должны объявлять локализацию реализованной до проверенного завершения.
+The working tree already contains mockup, UX, shell, screen, and widget-test changes. Preserve them; localization implementation accounts for the current tree. Code and documentation must not declare localization implemented before verified completion.
 
-### Согласованное разбиение
+### Agreed breakdown
 
-1. **Выбор языка, сохранение и оболочка.** Блокеров нет. Пользователь выбирает язык в шапке настроек; оболочка переключается сразу. Работают новая установка, обновление старой, системный выбор, повторный запуск и read-only. Создаётся основа каталогов переводов без удаления существующего поведения.
-2. **«Работа», очередь, история и формы логов.** Блокируется задачей 1. Полностью переводится путь от выбора Issue и ручного ввода до таймеров, выбора LocalLog, разделения и объединения. Даты, длительности, сообщения и состояния проверены; данные сохраняются.
-3. **«День», редактор и результаты отправки.** Блокируется задачей 1. Переводятся календарь, расписание, действия Segment и Timeline Gap, проверки сборки, подтверждения, ошибки и восстановление отправки. Проверяется сохранение DayDraft и совместимость старых ошибок. Все сетевые сценарии используют подставную Jira.
-4. **Оставшиеся настройки и готовая Windows-версия.** Блокируется задачами 2 и 3. Полностью переводятся Jira-подключение, DaySettings, QuickIssue и представление Local API, выполняется проверка полного покрытия и сохранности пользовательских инструкций. Обновляются документы-владельцы, проверяются обе компоновки и темы, выполняются полные проверки и release-сборка.
+1. **Language selection, persistence, and shell.** No blockers. The user selects language in the Settings header; the shell switches immediately. New installation, old-installation upgrade, system selection, restart, and read-only behavior work. Establish translation catalogs without removing existing behavior.
+2. **Work, queue, history, and log forms.** Blocked by task 1. Translate the entire path from Issue selection/manual entry to timers, LocalLog selection, splitting, and merging. Verify dates, durations, messages, and states; preserve data.
+3. **Day, editor, and submission results.** Blocked by task 1. Translate calendar, schedule, Segment and Timeline Gap actions, building checks, confirmations, errors, and submission recovery. Verify DayDraft preservation and old-error compatibility. All network scenarios use fake Jira.
+4. **Remaining Settings and a ready Windows version.** Blocked by tasks 2 and 3. Fully translate Jira connection, DaySettings, QuickIssue, and Local API presentation; verify coverage and preservation of user instructions. Update owning documents, check both layouts/themes, and run full checks and release build.
 
-Отдельные файлы задач находятся в `issues/`, в порядке зависимостей. Промежуточные задачи дают проверяемые части интерфейса; полное переключение всех собственных текстов является результатом завершения всех четырёх.
+Individual task files are in `issues/`, in dependency order. Intermediate tasks deliver verifiable interface slices; complete switching of all application-owned text is the result of completing all four.
 
-### Завершение реализации
+### Implementation completion
 
-2026-10-01: Все четыре задачи завершены; [проверки и выпуск](verification.md).
+2026-10-01: All four tasks completed; see [verification and release](verification.md).

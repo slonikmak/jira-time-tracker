@@ -1,26 +1,26 @@
-# Issue 03: UI экрана «Работа»: разделение, объединение логов и фиксированное время старта
+# Issue 03: Work UI: log splitting/merging and fixed start time
 
-## Зависит от:
-- Issue 01 (Методы `splitLog`, `mergeLogs`, поле `fixedStartTime`)
+## Depends on:
+- Issue 01 (`splitLog`, `mergeLogs`, `fixedStartTime`)
 
-## Описание задачи:
-1. **Фиксированное время старта**:
-   - В диалог создания ручного лога (`ManualLogDialog`) и диалог редактирования лога добавить выбор фиксированного времени начала (`TimeOfDay` / `HH:mm`) с возможностью очистки.
-   - В карточке лога на экране «Работа» отображать бейдж фиксированного времени (например, `🔒 11:00`).
-2. **Диалог разделения лога (Split)**:
-   - В выпадающее меню лога добавить пункт «Разбить».
-   - Диалог: отображение текущей общей длительности, поле ввода времени первой части (минуты или ЧЧ:ММ), авторасчет оставшегося времени для второй части.
-   - Поля для ввода описания первой и второй части (по умолчанию копируют исходное описание).
-   - Кнопка «Разбить» вызывает `appState.splitLog(...)`.
-3. **Диалог объединения логов (Merge)**:
-   - В выпадающее меню лога добавить пункт «Объединить с...».
-   - Диалог: список доступных свободных логов за текущий день с указанием задачи и длительности.
-   - При совпадении задачи слияние происходит сразу по клику (длительности суммируются, комментарии объединяются).
-   - При несовпадении задачи — запрос выбора целевой задачи.
-   - Вызывает `appState.mergeLogs(...)`.
+## Task description:
+1. **Fixed start time:**
+   - Add fixed start selection (`TimeOfDay` / `HH:mm`) with clearing to manual creation (`ManualLogDialog`) and log editing.
+   - Show a fixed-time badge on Work log cards (e.g. `🔒 11:00`).
+2. **Split log dialog:**
+   - Add Split to the log menu.
+   - Show total duration, first-part duration input (minutes or HH:MM), and automatically calculated remainder.
+   - Description fields for both parts default to the original description.
+   - Split calls `appState.splitLog(...)`.
+3. **Merge logs dialog:**
+   - Add Merge with... to the log menu.
+   - List free logs for the current day with issue and duration.
+   - For the same issue, merge immediately on click, summing durations and combining comments.
+   - For different issues, request target-issue selection.
+   - Call `appState.mergeLogs(...)`.
 
-## Критерии приемки:
-- Виджет-тесты на открытие диалогов Split и Merge.
-- Проверка разделения лога через UI и обновление списка.
-- Проверка объединения двух логов через UI.
-- Отображение бейджа фиксированного времени старта.
+## Acceptance criteria:
+- Widget tests opening Split/Merge dialogs.
+- UI splitting updates the list.
+- UI merging of two logs.
+- Fixed-start badge display.

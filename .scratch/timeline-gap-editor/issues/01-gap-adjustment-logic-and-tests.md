@@ -1,16 +1,16 @@
-# 01. Логика сдвига смежных границ при изменении промежутка (AppState & DayBuilder)
+# 01. Adjacent-boundary shifts when editing a gap (AppState & DayBuilder)
 
 Status: resolved
 
-## Описание
-Реализовать в `AppState` бизнес-логику применения изменений к промежутку (`updateBreakGap` и `deleteBreakGap`):
-1. Поиск левого ($L$) и правого ($R$) соседей для зазора: это могут быть `Segment`, `ImportedWorklog` или граница дня.
-2. Проверка валидности новых границ:
+## Description
+Implement gap editing in `AppState` (`updateBreakGap`, `deleteBreakGap`):
+1. Find left ($L$) and right ($R$) neighbors: `Segment`, `ImportedWorklog`, or day boundary.
+2. Validate new boundaries:
    - $newStart < newEnd$.
-   - Если $L$ — `Segment`, его новая длительность $\ge 60$ сек.
-   - Если $L$ — `ImportedWorklog`, $newStart == L.endUtc$.
-   - Если $R$ — `Segment`, его новая длительность $\ge 60$ сек.
-   - Если $R$ — `ImportedWorklog`, $newEnd == R.startUtc$.
-3. Применение изменений к базе данных (`store.updateSegment`, `store.updateDayDraft`, сохранение `breaks`) и вызов `_revalidateCurrentPlan()`, `notifyListeners()`.
-4. Реализация операции смыкания `deleteBreakGap`.
-5. Покрытие unit-тестами.
+   - If $L$ is `Segment`, new duration $\ge 60$ seconds.
+   - If $L$ is `ImportedWorklog`, $newStart == L.endUtc$.
+   - If $R$ is `Segment`, new duration $\ge 60$ seconds.
+   - If $R$ is `ImportedWorklog`, $newEnd == R.startUtc$.
+3. Persist changes (`store.updateSegment`, `store.updateDayDraft`, `breaks`) and call `_revalidateCurrentPlan()`, `notifyListeners()`.
+4. Implement gap closing with `deleteBreakGap`.
+5. Cover with unit tests.

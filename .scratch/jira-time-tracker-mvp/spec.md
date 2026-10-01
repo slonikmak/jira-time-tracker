@@ -1,6 +1,6 @@
 # Jira Time Tracker MVP Spec
 
-Спецификация приложения находится в [docs/specs/jira-time-tracker-mvp.md](../../docs/specs/jira-time-tracker-mvp.md).
-Архитектурный план: [ARCHITECTURE.md](../../ARCHITECTURE.md).
-Руководство по интерфейсу: [docs/design/UX.md](../../docs/design/UX.md).
-Правила работы: [AGENTS.md](../../AGENTS.md).
+Application specification: [docs/specs/jira-time-tracker-mvp.md](../../docs/specs/jira-time-tracker-mvp.md).
+Architecture plan: [ARCHITECTURE.md](../../ARCHITECTURE.md).
+Interface guide: [docs/design/UX.md](../../docs/design/UX.md).
+Working rules: [AGENTS.md](../../AGENTS.md).

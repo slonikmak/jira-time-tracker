@@ -1,16 +1,16 @@
-# 03: День, редактор и результаты отправки
+# 03: Day, editor, and submission results
 
-**What to build:** Календарь, DayDraft, действия Segment и Timeline Gap, проверки и восстановление отправки показываются на выбранном языке. Правила — в [спецификации](../spec.md).
+**What to build:** The calendar, DayDraft, Segment and Timeline Gap actions, checks, and submission recovery appear in the selected language. Rules are in the [specification](../spec.md).
 
-**Blocked by:** 01: Выбор языка, сохранение и оболочка.
+**Blocked by:** 01: Language selection, persistence, and shell.
 
 **Status:** complete
 
-- [x] Переведены экран дня, формы редактора, подтверждения, собственные ошибки и результаты отправки.
-- [x] Сохраняются числовые даты день–месяц–год и 24-часовое время.
-- [x] Старые сохранённые ошибки и тексты Jira остаются исходными.
-- [x] Проверены сохранность черновика и отсутствие пользовательской отправки в рабочую Jira.
+- [x] Day screen, editor forms, confirmations, application-owned errors, and submission results are translated.
+- [x] Numeric dates retain day–month–year order and times retain the 24-hour format.
+- [x] Previously saved errors and Jira text remain unchanged.
+- [x] Draft preservation and absence of user submission to production Jira are verified.
 
 ## Comments
 
-2026-10-01: Реализовано и проверено. Проверки, независимое ревью, Windows-сборка и ограничения записаны в [отчёте](../verification.md). Рабочая Jira не использовалась.
+2026-10-01: Implemented and verified. Checks, independent review, Windows build, and limitations are recorded in the [report](../verification.md). Production Jira was not used.

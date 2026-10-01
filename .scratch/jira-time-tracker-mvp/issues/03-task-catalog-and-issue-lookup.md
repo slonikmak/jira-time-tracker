@@ -1,25 +1,25 @@
-# 03: Добавление и кэш задач (по ключу, ID, URL)
+# 03: Issue addition and caching (key, ID, URL)
 
-**What to build:** Добавление задач Jira в локальную базу данных (таблица `Issue`) по ключу задачи (`PROJ-123`), числовому issueId или веб-ссылке (`/browse/PROJ-123`). Получение заголовка (summary) через `JiraClient`. Список недавних задач на экране «Работа» с сортировкой по времени последнего действия и фильтрацией давности.
+**What to build:** Add Jira issues to the local `Issue` table by key (`PROJ-123`), numeric issueId, or web link (`/browse/PROJ-123`). Fetch title (summary) through `JiraClient`. Show recent issues on Work, sorted by last action and filtered by activity age.
 
-**Blocked by:** 01: Каркас Flutter Desktop, SQLite, single-instance lock и навигация, 02: Настройки подключения к Jira (Env, SecureStore, проверка маршрутов)
+**Blocked by:** 01: Flutter Desktop foundation, SQLite, single-instance lock, and navigation; 02: Jira connection settings (Env, SecureStore, route verification)
 
 **Status:** resolved
 
 ## Acceptance criteria
 
-- [x] Поле ввода задачи корректно разбирает текстовый ключ (например, `PROJ-123`), числовой ID и ссылку браузера (например, `https://domain.atlassian.net/browse/PROJ-123` или `/browse/PROJ-123`).
-- [x] `JiraClient.getIssue` запрашивает GET `/rest/api/3/issue/{idOrKey}?fields=summary`, получает канонический ключ и summary.
-- [x] Добавление задачи, назначенной на другого пользователя, разрешено и создает строку задачи (сценарий A05).
-- [x] Повторный ввод уже добавленной задачи не создает дубликат, а поднимает существующую задачу наверх списка (`lastUsedAtUtc`).
-- [x] Список задач на экране «Работа» сортируется по активности (добавление, запуск таймера, ручной лог), поддерживает поиск по ключу/названию и фильтры давности («7 дней / 30 дней / Все»), не удаляющие данные.
-- [x] Написаны тесты парсера ключей/URL и интеграционные тесты сохранения задач в SQLite.
+- [x] Parse textual keys (`PROJ-123`), numeric IDs, and browser links (`https://domain.atlassian.net/browse/PROJ-123` or `/browse/PROJ-123`).
+- [x] `JiraClient.getIssue` requests GET `/rest/api/3/issue/{idOrKey}?fields=summary` and retrieves canonical key/summary.
+- [x] Allow adding an issue assigned to another user and create its row (A05).
+- [x] Re-entering an existing issue creates no duplicate and moves it to the top (`lastUsedAtUtc`).
+- [x] Work sorts issues by activity (addition, timer start, manual log), supports key/title search and 7 days / 30 days / All filters without deleting data.
+- [x] Key/URL parser tests and SQLite issue-persistence integration tests are written.
 
 ## Comments
 
-Реализовано:
-- `lib/issue_parser.dart`: парсинг ключей, числовых идентификаторов, браузерных ссылок Atlassian (`https://.../browse/KEY`).
-- `lib/jira_client.dart`: метод `getIssue(idOrKey)` с поддержкой прямого и scoped роутинга.
-- `lib/app_state.dart`: каталог задач, добавление с авто-дедупликацией и обновлением `lastUsedAtUtc`, фильтрация по запросу поиска и периодам (7 дней / 30 дней / Все), режим выбора для массового удаления.
-- `lib/ui/work_screen.dart`: левая колонка каталога с полем ввода и кнопкой «Добавить», поиском, фильтрами, списком недавних задач с индикаторами и чекбоксами выбора.
-- `test/issue_lookup_test.dart`: 9 тестов для парсера, Jira API (A05) и управления локальным каталогом. Всего в проекте 27 тестов, все проходят успешно.
+Implemented:
+- `lib/issue_parser.dart`: key, numeric ID, and Atlassian browser link (`https://.../browse/KEY`) parsing.
+- `lib/jira_client.dart`: `getIssue(idOrKey)` with direct/scoped routing.
+- `lib/app_state.dart`: issue catalog, automatic deduplication and `lastUsedAtUtc` updates, query/age filtering (7 days / 30 days / All), and selection mode for bulk deletion.
+- `lib/ui/work_screen.dart`: left catalog column with input/Add button, search, filters, recent issues, indicators, and selection checkboxes.
+- `test/issue_lookup_test.dart`: nine parser, Jira API (A05), and local catalog tests. All 27 project tests pass.

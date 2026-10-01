@@ -1,6 +1,6 @@
 import 'dart:io';
 
-/// Межпроцессная блокировка Windows для гарантии единственного пишущего экземпляра.
+/// Межпроцессная файловая блокировка единственного пишущего экземпляра.
 class SingleInstanceLock {
   RandomAccessFile? _lockedFile;
   bool _isHeld = false;

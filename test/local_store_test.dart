@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:jira_time_tracker/models.dart';
@@ -360,7 +362,7 @@ void main() {
     });
   });
 
-  group('SingleInstanceLock межпроцессная блокировка Windows', () {
+  group('SingleInstanceLock межпроцессная блокировка', () {
     late Directory tempDir;
     late String lockPath;
 
@@ -377,26 +379,41 @@ void main() {
 
     test(
       'Acquires lock, second attempt fails, releasing allows re-acquisition',
-      () {
+      () async {
         final lock1 = SingleInstanceLock();
-        final lock2 = SingleInstanceLock();
+        addTearDown(lock1.release);
 
         expect(lock1.tryAcquire(lockPath), isTrue);
         expect(lock1.isHeld, isTrue);
 
-        // Второй экземпляр пытается захватить блокировку того же файла
-        expect(lock2.tryAcquire(lockPath), isFalse);
-        expect(lock2.isHeld, isFalse);
+        // POSIX-блокировки принадлежат процессу; проверяем отдельный процесс.
+        final child = await Process.start('dart', [
+          'test/support/lock_probe.dart',
+          lockPath,
+        ], runInShell: Platform.isWindows);
+        addTearDown(() => child.kill());
+        final output = StreamIterator(
+          child.stdout.transform(utf8.decoder).transform(const LineSplitter()),
+        );
+        addTearDown(output.cancel);
+        expect(
+          await output.moveNext().timeout(const Duration(seconds: 20)),
+          isTrue,
+        );
+        expect(output.current, 'blocked');
 
         // Первый освобождает
         lock1.release();
         expect(lock1.isHeld, isFalse);
 
-        // Теперь второй может захватить
-        expect(lock2.tryAcquire(lockPath), isTrue);
-        expect(lock2.isHeld, isTrue);
-
-        lock2.release();
+        child.stdin.writeln('retry');
+        await child.stdin.flush();
+        expect(
+          await output.moveNext().timeout(const Duration(seconds: 20)),
+          isTrue,
+        );
+        expect(output.current, 'acquired');
+        expect(await child.exitCode.timeout(const Duration(seconds: 20)), 0);
       },
     );
   });

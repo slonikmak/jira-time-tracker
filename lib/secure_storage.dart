@@ -3,12 +3,42 @@ import 'dart:ffi';
 import 'dart:io';
 import 'package:ffi/ffi.dart';
 import 'package:win32/win32.dart';
+import 'package:flutter_secure_storage_platform_interface/flutter_secure_storage_platform_interface.dart';
+
+/// Сохраняет прежнее хранилище Windows и использует системный Keychain на macOS.
+SecureStorage createPlatformSecureStorage() => Platform.isWindows
+    ? WindowsCredentialStorage()
+    : Platform.isMacOS
+    ? MacOsKeychainStorage()
+    : throw UnsupportedError('Supported platforms: Windows and macOS');
 
 /// Абстракция защищённого хранилища учётных данных.
 abstract class SecureStorage {
   Future<String?> read(String key);
   Future<void> write(String key, String value);
   Future<void> delete(String key);
+}
+
+class MacOsKeychainStorage implements SecureStorage {
+  final FlutterSecureStoragePlatform storage;
+  static const _options = <String, String>{
+    'accountName': 'JiraTimeTracker',
+    'usesDataProtectionKeychain': 'false',
+  };
+
+  MacOsKeychainStorage({FlutterSecureStoragePlatform? storage})
+    : storage = storage ?? MethodChannelFlutterSecureStorage();
+
+  @override
+  Future<String?> read(String key) => storage.read(key: key, options: _options);
+
+  @override
+  Future<void> write(String key, String value) =>
+      storage.write(key: key, value: value, options: _options);
+
+  @override
+  Future<void> delete(String key) =>
+      storage.delete(key: key, options: _options);
 }
 
 /// Реализация в памяти для тестов и сред без Windows Credential Manager.

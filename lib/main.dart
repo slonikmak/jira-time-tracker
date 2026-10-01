@@ -38,7 +38,7 @@ void main() async {
     store.recoverUnfinishedSending();
   }
 
-  final secureStorage = WindowsCredentialStorage();
+  final secureStorage = createPlatformSecureStorage();
   final connectionStore = ConnectionStore(secureStorage: secureStorage);
   final jiraClient = JiraClient();
 

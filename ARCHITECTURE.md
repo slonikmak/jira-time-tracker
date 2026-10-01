@@ -10,11 +10,11 @@
 
 ## 1. Форма приложения
 
-Один Flutter Desktop-процесс для Windows, прямое подключение к Jira Cloud, локальная SQLite-база и защищённое хранилище credentials. Таймеры восстанавливаются из сохранённого времени старта; фоновый процесс для отсчёта не нужен.
+Один Flutter Desktop-процесс для Windows или macOS, прямое подключение к Jira Cloud, локальная SQLite-база и защищённое хранилище credentials. Таймеры восстанавливаются из сохранённого времени старта; фоновый процесс для отсчёта не нужен.
 
-Стек: Flutter stable и Dart, Material 3, встроенные ChangeNotifier/ListenableBuilder. Зависимости: http для HTTP и подстановки клиента в тестах, sqlite3 для базы, path_provider для каталога данных, flutter_secure_storage для credentials, uuid для постоянных идентификаторов. Выбирай совместимые с SDK версии; после создания проекта их источником истины служат pubspec.yaml и pubspec.lock.
+Стек: Flutter stable и Dart, Material 3, встроенные ChangeNotifier/ListenableBuilder. Зависимости: http для HTTP и подстановки клиента в тестах, sqlite3 для базы, path_provider для каталога данных, win32 для Windows Credential Manager, flutter_secure_storage_darwin и его platform interface для macOS Keychain, uuid для постоянных идентификаторов. Версии определяют pubspec.yaml и pubspec.lock.
 
-Windows-поддержка и требования: [sqlite3](https://pub.dev/packages/sqlite3), [path_provider](https://pub.dev/packages/path_provider), [flutter_secure_storage](https://pub.dev/packages/flutter_secure_storage), [Flutter Windows toolchain](https://docs.flutter.dev/platform-integration/windows/setup). В частности, для выбранной версии secure storage проверь наличие C++ ATL.
+Требования сборки и доставки определяет [инструкция публикации](docs/releases.md). Darwin-плагин подключён отдельно: Windows не получает дополнительный native backend и не требует C++ ATL для secure storage.
 
 Каждый модуль скрывает содержательную работу за небольшим интерфейсом. Для MVP достаточно конкретных классов и функций, передаваемых через конструкторы. ORM, DI-контейнер, сервер, шина событий и отдельный слой use cases не нужны.
 
@@ -33,7 +33,7 @@ flowchart TD
     Sender --> Store
     Sender --> Jira
     Store --> DB[(SQLite)]
-    Connection --> Secure[Windows secure storage]
+    Connection --> Secure[Platform secure storage]
     Jira --> HTTP[http.Client]
 ```
 
@@ -45,7 +45,7 @@ flowchart TD
 | lib/single_instance_lock.dart | Реализован | SingleInstanceLock: эксклюзивная блокировка файла | Межпроцессная блокировка Windows (`RandomAccessFile.lockSync`) |
 | lib/models.dart | Реализован | Модели, enum и результаты операций | Типизированное представление Issue, QuickIssue, исходного лога, черновика, интервала и ошибок; без сетевых JSON-форматов |
 | lib/local_store.dart | Реализован | LocalStore: операции над локальными данными | SQL, миграции, scoped-каталог QuickIssue, транзакции, привязка и атомарное исключение логов из неотправленных черновиков, журнал отправки, общие настройки приложения и единственный пишущий экземпляр |
-| lib/secure_storage.dart | Реализован | SecureStorage: защищенное хранилище | Нативное хранение через Windows Credential Manager FFI, `InMemorySecureStorage` для тестов |
+| lib/secure_storage.dart | Реализован | SecureStorage: защищенное хранилище | Windows Credential Manager FFI или macOS Keychain; `InMemorySecureStorage` для тестов |
 | lib/connection_store.dart | Реализован | ConnectionStore: загрузка формы из saved/env и сохранение подключения | Подстановка окружения, защищённое хранение credentials и сохранение проверенного маршрута подключения |
 | lib/issue_parser.dart | Реализован | IssueParser: разбор ввода ключа, numeric ID и URL browse задачи | Извлечение идентификатора, очистка URL, поддержка разных форматов ввода |
 | lib/jira_client.dart | Реализован | JiraClient: проверить подключение, получить задачу/день, создать интервал, сверить запись | Авторизация (прямой и scoped маршруты), ADF, properties, обработка HTTP-ответов и ошибок |
@@ -87,6 +87,13 @@ flowchart TD
 - Доменные ошибки несут AppMessage; исходные строковые getters остаются совместимыми для существующих Dart-клиентов и Local Agent API. UI использует структурированные сообщения. Новые собственные ошибки в `last_error` кодируются с версией, старые строки остаются исходными. Models и чистые модули не импортируют Flutter.
 
 ## 3. Данные и их владельцы
+
+Платформенное secure storage выбирается в точке запуска: Windows сохраняет
+существующий WindowsCredentialStorage, macOS использует MacOsKeychainStorage
+через flutter_secure_storage_darwin без Keychain Sharing. Нативные entitlements
+разрешают исходящие Jira-запросы и входящие соединения локального API.
+SingleInstanceLock использует файл в каталоге данных приложения; конфликт
+проверяется между отдельными процессами, включая POSIX-платформы.
 
 ### Сохраняемые сущности
 

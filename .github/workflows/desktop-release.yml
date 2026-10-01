@@ -1,0 +1,112 @@
+name: Desktop builds and release
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.package }}
+    timeout-minutes: 45
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2022
+            platform: windows
+            architecture: x64
+            package: windows-x64
+          - runner: macos-14
+            platform: macos
+            architecture: arm64
+            package: macos-arm64
+          - runner: macos-15-intel
+            platform: macos
+            architecture: x64
+            package: macos-x64
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: '3.41.3'
+          channel: stable
+          architecture: ${{ matrix.architecture }}
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - name: Validate version tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="$(sed -n 's/^version: \([^+]*\).*/\1/p' pubspec.yaml)"
+          version="$(printf '%s' "$version" | tr -d '\r')"
+          test "$TAG" = "v$version"
+      - run: flutter analyze
+      - run: flutter test
+      - name: Build desktop bundle
+        run: flutter build ${{ matrix.platform }} --release
+      - name: Package Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $bundle = 'build/windows/x64/runner/Release'
+          if (!(Test-Path "$bundle/jira_time_tracker.exe") -or !(Test-Path "$bundle/data/app.so")) {
+            throw 'Incomplete Windows release bundle'
+          }
+          New-Item -ItemType Directory -Path dist | Out-Null
+          Compress-Archive -Path "$bundle/*" -DestinationPath dist/jira-time-tracker-windows-x64.zip
+      - name: Package macOS
+        if: runner.os == 'macOS'
+        env:
+          PACKAGE: ${{ matrix.package }}
+          ARCHITECTURE: ${{ matrix.architecture }}
+        run: |
+          app='build/macos/Build/Products/Release/Jira Time Tracker.app'
+          test -d "$app"
+          arch="$ARCHITECTURE"
+          if [ "$arch" = x64 ]; then arch=x86_64; fi
+          lipo -verify_arch "$arch" "$app/Contents/MacOS/Jira Time Tracker"
+          codesign --verify --deep --strict "$app"
+          mkdir -p dist
+          ditto -c -k --sequesterRsrc --keepParent "$app" "dist/jira-time-tracker-$PACKAGE.zip"
+      - name: Upload packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.package }}
+          path: dist/*.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Draft GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create or update draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" --json isDraft --jq .isDraft > is-draft.txt 2>/dev/null; then
+            test "$(cat is-draft.txt)" = true
+            gh release upload "$TAG" dist/*.zip --clobber
+          else
+            gh release create "$TAG" dist/*.zip --verify-tag --draft --title "$TAG" \
+              --notes 'Windows x64 and macOS (Apple Silicon / Intel) packages. macOS packages are ad-hoc signed and have not been notarized; validate on a Mac before publication.'
+          fi

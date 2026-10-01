@@ -1,12 +1,18 @@
+import 'app_message.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'models.dart';
 
 /// Исключение при попытке записи во втором (read-only) экземпляре приложения.
-class ReadOnlyException implements Exception {
-  final String message;
+class ReadOnlyException implements Exception, MessageException {
+  @override
+  final Object messageText;
+  String get message => messageText.toString();
   const ReadOnlyException([
-    this.message =
-        'Хранилище работает в режиме только чтения: другой экземпляр приложения удерживает блокировку записи.',
+    this.messageText = const AppMessage(
+      'storageIsReadOnlyAnotherApplicationInstanceHolds',
+      [],
+      'Хранилище работает в режиме только чтения: другой экземпляр приложения удерживает блокировку записи.',
+    ),
   ]);
 
   @override
@@ -17,6 +23,8 @@ class ReadOnlyException implements Exception {
 class LocalStore {
   final Database _db;
   final bool isReadOnly;
+  bool get isNewDatabase => _isNewDatabase;
+  bool _isNewDatabase = false;
 
   LocalStore(this._db, {this.isReadOnly = false});
 
@@ -24,6 +32,7 @@ class LocalStore {
 
   /// Инициализирует базу данных: включает foreign keys и применяет миграции.
   void init() {
+    _isNewDatabase = _db.select('PRAGMA user_version;').first.values.first == 0;
     _db.execute('PRAGMA foreign_keys = ON;');
     _runMigrations();
   }
@@ -247,12 +256,23 @@ class LocalStore {
   /// Восстановление после аварии: переводит зависшие sending в unknown (сценарий A19).
   void recoverUnfinishedSending() {
     if (isReadOnly) return;
-    _db.execute('''
+    _db.execute(
+      '''
       UPDATE segments
       SET send_state = 'unknown',
-          last_error = 'Прервано до получения подтверждения (восстановлено при запуске)'
+          last_error = ?
       WHERE send_state = 'sending';
-    ''');
+    ''',
+      [
+        serializeMessage(
+          const AppMessage(
+            'submissionInterruptedAtStartup',
+            [],
+            'Прервано до получения подтверждения (восстановлено при запуске)',
+          ),
+        ),
+      ],
+    );
     _db.execute('''
       UPDATE day_drafts
       SET status = 'draft'
@@ -557,8 +577,12 @@ class LocalStore {
       for (final dl in draftLogs) {
         final existingDate = activeDates[dl.sourceLogId];
         if (existingDate != null && existingDate != draft.date) {
-          throw StateError(
-            'Лог ${dl.sourceLogId} уже включен в черновик на дату $existingDate.',
+          throw AppStateError(
+            AppMessage(
+              'logIsAlreadyIncludedInADraftFor152',
+              [dl.sourceLogId, AppMessage.date(existingDate)],
+              'Лог ${dl.sourceLogId} уже включен в черновик на дату $existingDate.',
+            ),
           );
         }
       }
@@ -915,8 +939,12 @@ class LocalStore {
       final status = rows.first['status'] as String;
       final hasStartedSending = rows.first['has_started_sending'] as int == 1;
       if (status != DraftStatus.draft.name || hasStartedSending) {
-        throw StateError(
-          'Нельзя исключить лог после начала отправки дня в Jira.',
+        throw AppStateError(
+          AppMessage(
+            'cannotRemoveALogAfterDaySubmissionTo',
+            [],
+            'Нельзя исключить лог после начала отправки дня в Jira.',
+          ),
         );
       }
 

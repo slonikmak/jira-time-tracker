@@ -1,3 +1,4 @@
+import 'app_message.dart';
 import 'models.dart';
 
 /// Результат вычисления времени по часам.
@@ -9,13 +10,14 @@ class ClockResult {
   final bool hasClockRollback;
 
   /// Сообщение об ошибке при обнаружении отката времени.
-  final String? errorMessage;
+  final Object? errorText;
+  String? get errorMessage => errorText?.toString();
 
   const ClockResult({
     required this.elapsedSeconds,
     this.hasClockRollback = false,
-    this.errorMessage,
-  });
+    Object? errorMessage,
+  }) : errorText = errorMessage;
 }
 
 /// Чистый Dart-модуль расчёта времени логов.
@@ -53,8 +55,11 @@ class LogClock {
       return ClockResult(
         elapsedSeconds: log.accumulatedSeconds,
         hasClockRollback: true,
-        errorMessage:
-            'Отрицательная разница времени ($delta с): системные часы были переведены назад. Проверьте лог.',
+        errorMessage: AppMessage(
+          'negativeTimeDifferenceSTheSystemClockMoved',
+          [delta],
+          'Отрицательная разница времени ($delta с): системные часы были переведены назад. Проверьте лог.',
+        ),
       );
     }
 

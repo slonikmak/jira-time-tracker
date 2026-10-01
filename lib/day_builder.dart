@@ -1,3 +1,4 @@
+import 'app_message.dart';
 import 'dart:math';
 
 import 'models.dart';
@@ -106,19 +107,37 @@ class DayPlanResult {
 }
 
 /// Ошибка при сборке или валидации дня.
-class DayBuilderException implements Exception {
-  final String message;
-  const DayBuilderException(this.message);
+class DayBuilderException implements Exception, MessageException {
+  @override
+  final Object messageText;
+  String get message => messageText.toString();
+  const DayBuilderException(this.messageText);
 
   @override
   String toString() => message;
 }
 
 /// Вспомогательный класс для проверки полуоткрытых интервалов.
+enum _IntervalKind {
+  breakTime,
+  worklog,
+  pinnedTask,
+  segment,
+  candidate;
+
+  AppMessage get label => switch (this) {
+    breakTime => const AppMessage('break', [], 'Перерыв'),
+    worklog => const AppMessage('existingWorklog', [], 'Существующий worklog'),
+    pinnedTask => const AppMessage('pinnedTask', [], 'Фиксированная задача'),
+    segment => const AppMessage('segment', [], 'Сегмент'),
+    candidate => const AppMessage('candidate', [], 'Кандидат'),
+  };
+}
+
 class _TimeInterval {
   final DateTime start;
   final DateTime end;
-  final String type;
+  final _IntervalKind type;
   final String id;
 
   const _TimeInterval({
@@ -250,7 +269,11 @@ class DayBuilder {
       final b = fixedList[i + 1];
       if (a.endUtc.isAfter(b.startUtc)) {
         throw DayBuilderException(
-          'Обнаружен конфликт: фиксированная задача "${a.log.titleSnapshot}" пересекается с задачей "${b.log.titleSnapshot}".',
+          AppMessage(
+            'conflictPinnedTaskOverlapsTask',
+            [a.log.titleSnapshot, b.log.titleSnapshot],
+            'Обнаружен конфликт: фиксированная задача "${a.log.titleSnapshot}" пересекается с задачей "${b.log.titleSnapshot}".',
+          ),
         );
       }
     }
@@ -258,12 +281,17 @@ class DayBuilder {
     // Проверка пересечений с существующими записями Jira
     for (final f in fixedList) {
       for (final ew in existingWorklogs) {
-        final latestStart =
-            f.startUtc.isAfter(ew.startUtc) ? f.startUtc : ew.startUtc;
+        final latestStart = f.startUtc.isAfter(ew.startUtc)
+            ? f.startUtc
+            : ew.startUtc;
         final earliestEnd = f.endUtc.isBefore(ew.endUtc) ? f.endUtc : ew.endUtc;
         if (latestStart.isBefore(earliestEnd)) {
           throw DayBuilderException(
-            'Обнаружен конфликт: фиксированная задача "${f.log.titleSnapshot}" пересекается с существующей записью в Jira "${ew.issueKey}".',
+            AppMessage(
+              'conflictPinnedTaskOverlapsExistingJiraEntry',
+              [f.log.titleSnapshot, ew.issueKey],
+              'Обнаружен конфликт: фиксированная задача "${f.log.titleSnapshot}" пересекается с существующей записью в Jira "${ew.issueKey}".',
+            ),
           );
         }
       }
@@ -274,20 +302,26 @@ class DayBuilder {
 
   /// Построение плана дня «как записано» (без изменения длительностей,
   /// без искусственных пауз, с каскадным сдвигом при пересечениях).
-  static DayPlanResult buildAsRecorded({
-    required DayBuilderInput input,
-  }) {
+  static DayPlanResult buildAsRecorded({required DayBuilderInput input}) {
     final logs = input.logs;
     if (logs.isEmpty) {
-      throw const DayBuilderException(
-        'Не выбрано ни одного лога для сборки дня.',
+      throw DayBuilderException(
+        AppMessage(
+          'noLogsSelectedToBuildTheDay',
+          [],
+          'Не выбрано ни одного лога для сборки дня.',
+        ),
       );
     }
 
     for (final log in logs) {
       if (log.sourceDurationSeconds <= 0) {
-        throw const DayBuilderException(
-          'Лог содержит нулевую или отрицательную длительность.',
+        throw DayBuilderException(
+          AppMessage(
+            'theLogHasAZeroOrNegativeDuration',
+            [],
+            'Лог содержит нулевую или отрицательную длительность.',
+          ),
         );
       }
     }
@@ -299,8 +333,12 @@ class DayBuilder {
     // Проверка пересечений среди существующих записей
     for (var i = 0; i < existingSorted.length - 1; i++) {
       if (existingSorted[i].endUtc.isAfter(existingSorted[i + 1].startUtc)) {
-        throw const DayBuilderException(
-          'Обнаружен конфликт: существующие записи в Jira пересекаются друг с другом.',
+        throw DayBuilderException(
+          AppMessage(
+            'conflictExistingJiraEntriesOverlapEachOther',
+            [],
+            'Обнаружен конфликт: существующие записи в Jira пересекаются друг с другом.',
+          ),
         );
       }
     }
@@ -326,7 +364,7 @@ class DayBuilder {
         _TimeInterval(
           start: ew.startUtc,
           end: ew.endUtc,
-          type: 'Существующий worklog',
+          type: _IntervalKind.worklog,
           id: ew.id,
         ),
       );
@@ -382,7 +420,7 @@ class DayBuilder {
           final candInterval = _TimeInterval(
             start: curStart,
             end: curEnd,
-            type: 'Сегмент',
+            type: _IntervalKind.segment,
             id: 'temp',
           );
           if (candInterval.overlaps(occ)) {
@@ -400,8 +438,12 @@ class DayBuilder {
       }
 
       if (curEnd.isAfter(localDayEndUtc)) {
-        throw const DayBuilderException(
-          'Задачи не помещаются в выбранные сутки (до 23:59:59). Уменьшите длительность или перенесите часть задач на другой день.',
+        throw DayBuilderException(
+          AppMessage(
+            'tasksDoNotFitIntoTheSelectedDate',
+            [],
+            'Задачи не помещаются в выбранные сутки (до 23:59:59). Уменьшите длительность или перенесите часть задач на другой день.',
+          ),
         );
       }
 
@@ -409,7 +451,7 @@ class DayBuilder {
         _TimeInterval(
           start: curStart,
           end: curEnd,
-          type: 'Сегмент',
+          type: _IntervalKind.segment,
           id: log.sourceLogId,
         ),
       );
@@ -460,13 +502,13 @@ class DayBuilder {
       totalDaySeconds: dayEndUtc.difference(dayStartUtc).inSeconds,
     );
 
-    final errors = validate(
+    final errors = validateMessages(
       plan: plan,
       existingWorklogs: existingSorted,
       requirePauses: false,
     );
     if (errors.isNotEmpty) {
-      throw DayBuilderException(errors.join('\n'));
+      throw DayBuilderException(AppMessage.join(errors, '\n'));
     }
 
     return plan;
@@ -502,7 +544,12 @@ class DayBuilder {
             draftId: draftId,
             startUtc: dayStartUtc,
             durationSeconds: dur,
-            kind: _determineBreakKind(dayStartUtc, dayEndUtc, dur, plannedBreaks),
+            kind: _determineBreakKind(
+              dayStartUtc,
+              dayEndUtc,
+              dur,
+              plannedBreaks,
+            ),
           ),
         ];
       }
@@ -535,13 +582,20 @@ class DayBuilder {
     if (merged.first.start.isAfter(dayStartUtc)) {
       final gapDur = merged.first.start.difference(dayStartUtc).inSeconds;
       if (gapDur > 0) {
-        gaps.add(Break(
-          id: 'gap-${gapCounter++}',
-          draftId: draftId,
-          startUtc: dayStartUtc,
-          durationSeconds: gapDur,
-          kind: _determineBreakKind(dayStartUtc, merged.first.start, gapDur, plannedBreaks),
-        ));
+        gaps.add(
+          Break(
+            id: 'gap-${gapCounter++}',
+            draftId: draftId,
+            startUtc: dayStartUtc,
+            durationSeconds: gapDur,
+            kind: _determineBreakKind(
+              dayStartUtc,
+              merged.first.start,
+              gapDur,
+              plannedBreaks,
+            ),
+          ),
+        );
       }
     }
 
@@ -552,13 +606,20 @@ class DayBuilder {
       if (nextStart.isAfter(currentEnd)) {
         final gapDur = nextStart.difference(currentEnd).inSeconds;
         if (gapDur > 0) {
-          gaps.add(Break(
-            id: 'gap-${gapCounter++}',
-            draftId: draftId,
-            startUtc: currentEnd,
-            durationSeconds: gapDur,
-            kind: _determineBreakKind(currentEnd, nextStart, gapDur, plannedBreaks),
-          ));
+          gaps.add(
+            Break(
+              id: 'gap-${gapCounter++}',
+              draftId: draftId,
+              startUtc: currentEnd,
+              durationSeconds: gapDur,
+              kind: _determineBreakKind(
+                currentEnd,
+                nextStart,
+                gapDur,
+                plannedBreaks,
+              ),
+            ),
+          );
         }
       }
     }
@@ -567,13 +628,20 @@ class DayBuilder {
     if (dayEndUtc.isAfter(merged.last.end)) {
       final gapDur = dayEndUtc.difference(merged.last.end).inSeconds;
       if (gapDur > 0) {
-        gaps.add(Break(
-          id: 'gap-${gapCounter++}',
-          draftId: draftId,
-          startUtc: merged.last.end,
-          durationSeconds: gapDur,
-          kind: _determineBreakKind(merged.last.end, dayEndUtc, gapDur, plannedBreaks),
-        ));
+        gaps.add(
+          Break(
+            id: 'gap-${gapCounter++}',
+            draftId: draftId,
+            startUtc: merged.last.end,
+            durationSeconds: gapDur,
+            kind: _determineBreakKind(
+              merged.last.end,
+              dayEndUtc,
+              gapDur,
+              plannedBreaks,
+            ),
+          ),
+        );
       }
     }
 
@@ -597,23 +665,31 @@ class DayBuilder {
   }) {
     final logs = input.logs;
     if (logs.isEmpty) {
-      throw const DayBuilderException(
-        'Не выбрано ни одного лога для сборки дня.',
+      throw DayBuilderException(
+        AppMessage(
+          'noLogsSelectedToBuildTheDay',
+          [],
+          'Не выбрано ни одного лога для сборки дня.',
+        ),
       );
     }
 
     for (final log in logs) {
       if (log.sourceDurationSeconds <= 0) {
-        throw const DayBuilderException(
-          'Лог содержит нулевую или отрицательную длительность.',
+        throw DayBuilderException(
+          AppMessage(
+            'theLogHasAZeroOrNegativeDuration',
+            [],
+            'Лог содержит нулевую или отрицательную длительность.',
+          ),
         );
       }
     }
 
     final settings = input.settings;
-    final settingsErrors = settings.validationErrors();
+    final settingsErrors = settings.validationMessages();
     if (settingsErrors.isNotEmpty) {
-      throw DayBuilderException(settingsErrors.values.join('\n'));
+      throw DayBuilderException(AppMessage.join(settingsErrors.values, '\n'));
     }
 
     final rnd = Random(seed);
@@ -625,8 +701,12 @@ class DayBuilder {
     // Проверка пересечений среди существующих записей
     for (var i = 0; i < existingSorted.length - 1; i++) {
       if (existingSorted[i].endUtc.isAfter(existingSorted[i + 1].startUtc)) {
-        throw const DayBuilderException(
-          'Обнаружен конфликт: существующие записи в Jira пересекаются друг с другом.',
+        throw DayBuilderException(
+          AppMessage(
+            'conflictExistingJiraEntriesOverlapEachOther',
+            [],
+            'Обнаружен конфликт: существующие записи в Jira пересекаются друг с другом.',
+          ),
         );
       }
     }
@@ -638,7 +718,11 @@ class DayBuilder {
 
     if (totalExistingSeconds >= settings.totalDurationSecondsMax) {
       throw DayBuilderException(
-        'Существующие записи в Jira уже занимают ${settings.totalDurationSecondsMax ~/ 3600} или более часов.',
+        AppMessage(
+          'existingJiraEntriesAlreadyOccupyOrMoreHours',
+          [settings.totalDurationSecondsMax ~/ 3600],
+          'Существующие записи в Jira уже занимают ${settings.totalDurationSecondsMax ~/ 3600} или более часов.',
+        ),
       );
     }
 
@@ -670,10 +754,11 @@ class DayBuilder {
       (sum, l) => sum + l.sourceDurationSeconds,
     );
 
-    final isShortDay = (totalSourceSeconds + totalExistingSeconds) < 6 * 3600 &&
+    final isShortDay =
+        (totalSourceSeconds + totalExistingSeconds) < 6 * 3600 &&
         settings.totalDurationSecondsMin != settings.totalDurationSecondsMax;
-    final needsLunch = !isShortDay ||
-        (totalSourceSeconds + totalExistingSeconds) >= 4 * 3600;
+    final needsLunch =
+        !isShortDay || (totalSourceSeconds + totalExistingSeconds) >= 4 * 3600;
 
     // Выбор номинальной продолжительности дня
     var nominalDurationSeconds = pickSecondsInRange(
@@ -682,7 +767,8 @@ class DayBuilder {
       settings.totalDurationSecondsMax,
     );
 
-    final estimatedBreaks = (needsLunch ? settings.lunchDurationSecondsMax : 0) +
+    final estimatedBreaks =
+        (needsLunch ? settings.lunchDurationSecondsMax : 0) +
         settings.shortBreakCountMax * settings.shortBreakDurationSecondsMax;
     if (nominalDurationSeconds > 24 * 3600) {
       nominalDurationSeconds = 24 * 3600;
@@ -712,8 +798,12 @@ class DayBuilder {
       }
       final busySpanSeconds = latestBusy.difference(earliestBusy).inSeconds;
       if (busySpanSeconds > 24 * 3600) {
-        throw const DayBuilderException(
-          'Существующие записи в Jira или фиксированные задачи выходят за допустимое 24-часовое окно рабочего дня.',
+        throw DayBuilderException(
+          AppMessage(
+            'existingJiraEntriesOrPinnedTasksFallOutside',
+            [],
+            'Существующие записи в Jira или фиксированные задачи выходят за допустимое 24-часовое окно рабочего дня.',
+          ),
         );
       }
 
@@ -726,8 +816,12 @@ class DayBuilder {
 
       var currentSpan = dayEndUtc.difference(dayStartUtc).inSeconds;
       if (currentSpan > 24 * 3600) {
-        throw const DayBuilderException(
-          'С учётом существующих записей и фиксированных задач день превышает лимит в 24 часа.',
+        throw DayBuilderException(
+          AppMessage(
+            'withExistingEntriesAndPinnedTasksTheDay',
+            [],
+            'С учётом существующих записей и фиксированных задач день превышает лимит в 24 часа.',
+          ),
         );
       }
 
@@ -804,7 +898,7 @@ class DayBuilder {
         _TimeInterval(
           start: b.startUtc,
           end: b.endUtc,
-          type: 'Перерыв',
+          type: _IntervalKind.breakTime,
           id: b.id,
         ),
       );
@@ -814,7 +908,7 @@ class DayBuilder {
         _TimeInterval(
           start: ew.startUtc,
           end: ew.endUtc,
-          type: 'Существующий worklog',
+          type: _IntervalKind.worklog,
           id: ew.id,
         ),
       );
@@ -824,7 +918,7 @@ class DayBuilder {
         _TimeInterval(
           start: fs.startUtc,
           end: fs.endUtc,
-          type: 'Фиксированная задача',
+          type: _IntervalKind.pinnedTask,
           id: fs.id,
         ),
       );
@@ -869,8 +963,12 @@ class DayBuilder {
           totalExistingSeconds -
           totalFixedSeconds;
       if (newWorkBudget <= 0) {
-        throw const DayBuilderException(
-          'Бюджет рабочего времени исчерпан существующими записями, перерывами и фиксированными задачами.',
+        throw DayBuilderException(
+          AppMessage(
+            'existingEntriesBreaksAndPinnedTasksHaveExhausted',
+            [],
+            'Бюджет рабочего времени исчерпан существующими записями, перерывами и фиксированными задачами.',
+          ),
         );
       }
       final totalFloatingSeconds = floatingLogs.fold<int>(
@@ -879,9 +977,9 @@ class DayBuilder {
       );
       final targetWorkSeconds =
           (isShortDay ||
-                  (preserveOrder && totalFloatingSeconds <= newWorkBudget))
-              ? min(totalFloatingSeconds, newWorkBudget)
-              : newWorkBudget;
+              (preserveOrder && totalFloatingSeconds <= newWorkBudget))
+          ? min(totalFloatingSeconds, newWorkBudget)
+          : newWorkBudget;
 
       final workSchedule = _buildWorkSchedule(
         logs: floatingLogs,
@@ -891,7 +989,9 @@ class DayBuilder {
         mandatoryPauseSeconds: settings.shortBreakDurationSecondsMin,
         draftId: input.draftId,
         seed: seed,
-        occupiedActivities: occupied.where((o) => o.type != 'Перерыв').toList(),
+        occupiedActivities: occupied
+            .where((o) => o.type != _IntervalKind.breakTime)
+            .toList(),
         preserveOrder: preserveOrder,
       );
 
@@ -945,9 +1045,12 @@ class DayBuilder {
     );
 
     // Валидация построенного плана
-    final errors = validate(plan: plan, existingWorklogs: existingSorted);
+    final errors = validateMessages(
+      plan: plan,
+      existingWorklogs: existingSorted,
+    );
     if (errors.isNotEmpty) {
-      throw DayBuilderException(errors.join('\n'));
+      throw DayBuilderException(AppMessage.join(errors, '\n'));
     }
 
     return plan;
@@ -983,8 +1086,12 @@ class DayBuilder {
     if (lockedLogs.any(
       (log) => log.sourceDurationSeconds < minimumSegmentSeconds,
     )) {
-      throw const DayBuilderException(
-        'Зафиксированный лог короче минимального рабочего интервала 15 минут.',
+      throw DayBuilderException(
+        AppMessage(
+          'aDurationLockedLogIsShorterThanThe',
+          [],
+          'Зафиксированный лог короче минимального рабочего интервала 15 минут.',
+        ),
       );
     }
     if (lockedSum > maximumWorkSeconds) {
@@ -993,7 +1100,11 @@ class DayBuilder {
       final availH = maximumWorkSeconds ~/ 3600;
       final availM = (maximumWorkSeconds % 3600) ~/ 60;
       throw DayBuilderException(
-        'Фиксированные логи требуют $reqH ч $reqM мин, а доступно только $availH ч $availM мин.',
+        AppMessage(
+          'lockedLogsRequireHMinButOnlyH',
+          [reqH, reqM, availH, availM],
+          'Фиксированные логи требуют $reqH ч $reqM мин, а доступно только $availH ч $availM мин.',
+        ),
       );
     }
     if (unlockedLogs.isEmpty && lockedSum != maximumWorkSeconds) {
@@ -1003,7 +1114,11 @@ class DayBuilder {
         final availH = maximumWorkSeconds ~/ 3600;
         final availM = (maximumWorkSeconds % 3600) ~/ 60;
         throw DayBuilderException(
-          'Все логи зафиксированы ($reqH ч $reqM мин), но бюджет составляет $availH ч $availM мин. Разблокируйте хотя бы один лог.',
+          AppMessage(
+            'allLogsAreLockedHMinButThe',
+            [reqH, reqM, availH, availM],
+            'Все логи зафиксированы ($reqH ч $reqM мин), но бюджет составляет $availH ч $availM мин. Разблокируйте хотя бы один лог.',
+          ),
         );
       }
     }
@@ -1011,8 +1126,12 @@ class DayBuilder {
     final minimumWorkSeconds =
         lockedSum + unlockedLogs.length * minimumSegmentSeconds;
     if (minimumWorkSeconds > maximumWorkSeconds) {
-      throw const DayBuilderException(
-        'Недостаточно времени: каждому выбранному логу требуется минимум 15 минут.',
+      throw DayBuilderException(
+        AppMessage(
+          'notEnoughTimeEachSelectedLogRequiresAt',
+          [],
+          'Недостаточно времени: каждому выбранному логу требуется минимум 15 минут.',
+        ),
       );
     }
 
@@ -1024,8 +1143,8 @@ class DayBuilder {
     var workSeconds = (preserveOrder && unlockedLogs.isEmpty)
         ? lockedSum
         : (preserveOrder && totalSourceSeconds <= maximumWorkSeconds)
-            ? totalSourceSeconds
-            : maximumWorkSeconds;
+        ? totalSourceSeconds
+        : maximumWorkSeconds;
 
     while (true) {
       final allocated = _allocateWorkSeconds(
@@ -1066,8 +1185,9 @@ class DayBuilder {
         }
       }
 
-      final chunksToPlace =
-          preserveOrder ? chunks : _interleaveChunks(chunks, logs);
+      final chunksToPlace = preserveOrder
+          ? chunks
+          : _interleaveChunks(chunks, logs);
 
       final placement = _tryPlaceWorkChunks(
         chunks: chunksToPlace,
@@ -1091,8 +1211,12 @@ class DayBuilder {
       workSeconds = max(minimumWorkSeconds, workSeconds - 60);
     }
 
-    throw const DayBuilderException(
-      'Невозможно разместить рабочие интервалы от 15 минут с обязательными паузами. Измените выбор логов или настройки дня.',
+    throw DayBuilderException(
+      AppMessage(
+        'cannotFitWorkIntervalsOfAtLeastMinutes',
+        [],
+        'Невозможно разместить рабочие интервалы от 15 минут с обязательными паузами. Измените выбор логов или настройки дня.',
+      ),
     );
   }
 
@@ -1249,53 +1373,111 @@ class DayBuilder {
     List<ImportedWorklog> existingWorklogs = const [],
     bool requirePauses = true,
     bool allowWorklogOverlaps = false,
+  }) => validateMessages(
+    plan: plan,
+    existingWorklogs: existingWorklogs,
+    requirePauses: requirePauses,
+    allowWorklogOverlaps: allowWorklogOverlaps,
+  ).map((message) => message.toString()).toList();
+
+  static List<Object> validateMessages({
+    required DayPlanResult plan,
+    List<ImportedWorklog> existingWorklogs = const [],
+    bool requirePauses = true,
+    bool allowWorklogOverlaps = false,
   }) {
-    final errors = <String>[];
+    final errors = <Object>[];
 
     if (plan.totalDaySeconds > 24 * 3600) {
       errors.add(
-        'Общая продолжительность дня (${plan.totalDaySeconds} сек) превышает 24 часа.',
+        AppMessage(
+          'theTotalDayDurationSExceedsHours',
+          [plan.totalDaySeconds],
+          'Общая продолжительность дня (${plan.totalDaySeconds} сек) превышает 24 часа.',
+        ),
       );
     }
     if (!allowWorklogOverlaps &&
         plan.totalNewWorkSeconds + plan.totalExistingSeconds > 24 * 3600) {
       errors.add(
-        'Суммарное рабочее время превышает 24 часа.',
+        AppMessage(
+          'totalWorkTimeExceedsHours',
+          [],
+          'Суммарное рабочее время превышает 24 часа.',
+        ),
       );
     }
 
     for (final s in plan.segments) {
       if (s.durationSeconds <= 0) {
-        errors.add('Сегмент ${s.id} имеет неположительную длительность.');
+        errors.add(
+          AppMessage(
+            'segmentHasANonPositiveDuration',
+            [s.id],
+            'Сегмент ${s.id} имеет неположительную длительность.',
+          ),
+        );
       } else if (requirePauses && s.durationSeconds < 10 * 60) {
-        errors.add('Сегмент ${s.id} короче минимальных 10 минут.');
+        errors.add(
+          AppMessage(
+            'segmentIsShorterThanTheMinimumOfMinutes',
+            [s.id],
+            'Сегмент ${s.id} короче минимальных 10 минут.',
+          ),
+        );
       }
       if (s.startUtc.isBefore(plan.dayStartUtc) ||
           s.endUtc.isAfter(plan.dayEndUtc)) {
-        errors.add('Сегмент ${s.id} выходит за границы рабочего дня.');
+        errors.add(
+          AppMessage(
+            'segmentFallsOutsideTheWorkDay',
+            [s.id],
+            'Сегмент ${s.id} выходит за границы рабочего дня.',
+          ),
+        );
       }
     }
 
     for (final b in plan.breaks) {
       if (b.durationSeconds <= 0) {
-        errors.add('Перерыв ${b.id} имеет неположительную длительность.');
+        errors.add(
+          AppMessage(
+            'breakHasANonPositiveDuration',
+            [b.id],
+            'Перерыв ${b.id} имеет неположительную длительность.',
+          ),
+        );
       }
       if (b.startUtc.isBefore(plan.dayStartUtc) ||
           b.endUtc.isAfter(plan.dayEndUtc)) {
-        errors.add('Перерыв ${b.id} выходит за границы рабочего дня.');
+        errors.add(
+          AppMessage(
+            'breakFallsOutsideTheWorkDay',
+            [b.id],
+            'Перерыв ${b.id} выходит за границы рабочего дня.',
+          ),
+        );
       }
     }
 
     for (final ew in existingWorklogs) {
       if (ew.durationSeconds <= 0) {
         errors.add(
-          'Существующая запись ${ew.id} имеет неположительную длительность.',
+          AppMessage(
+            'existingEntryHasANonPositiveDuration',
+            [ew.id],
+            'Существующая запись ${ew.id} имеет неположительную длительность.',
+          ),
         );
       }
       if (ew.startUtc.isBefore(plan.dayStartUtc) ||
           ew.endUtc.isAfter(plan.dayEndUtc)) {
         errors.add(
-          'Существующая запись ${ew.id} выходит за границы рабочего дня.',
+          AppMessage(
+            'existingEntryFallsOutsideTheWorkDay',
+            [ew.id],
+            'Существующая запись ${ew.id} выходит за границы рабочего дня.',
+          ),
         );
       }
     }
@@ -1306,7 +1488,7 @@ class DayBuilder {
         _TimeInterval(
           start: s.startUtc,
           end: s.endUtc,
-          type: 'Сегмент',
+          type: _IntervalKind.segment,
           id: s.id,
         ),
       );
@@ -1316,7 +1498,7 @@ class DayBuilder {
         _TimeInterval(
           start: b.startUtc,
           end: b.endUtc,
-          type: 'Перерыв',
+          type: _IntervalKind.breakTime,
           id: b.id,
         ),
       );
@@ -1326,7 +1508,7 @@ class DayBuilder {
         _TimeInterval(
           start: ew.startUtc,
           end: ew.endUtc,
-          type: 'Существующий worklog',
+          type: _IntervalKind.worklog,
           id: ew.id,
         ),
       );
@@ -1336,26 +1518,36 @@ class DayBuilder {
 
     for (var i = 0; i < intervals.length - 1; i++) {
       final a = intervals[i];
-      for (var j = i + 1;
-          j < intervals.length && intervals[j].start.isBefore(a.end);
-          j++) {
+      for (
+        var j = i + 1;
+        j < intervals.length && intervals[j].start.isBefore(a.end);
+        j++
+      ) {
         final b = intervals[j];
         if (a.overlaps(b) &&
             (!allowWorklogOverlaps ||
-                a.type == 'Перерыв' ||
-                b.type == 'Перерыв')) {
+                a.type == _IntervalKind.breakTime ||
+                b.type == _IntervalKind.breakTime)) {
           errors.add(
-            'Обнаружено пересечение: ${a.type} (${a.start} - ${a.end}) и ${b.type} (${b.start} - ${b.end}).',
+            AppMessage(
+              'overlapDetectedAnd',
+              [a.type.label, a.start, a.end, b.type.label, b.start, b.end],
+              'Обнаружено пересечение: ${a.type.label} (${a.start} - ${a.end}) и ${b.type.label} (${b.start} - ${b.end}).',
+            ),
           );
         }
       }
 
       final b = intervals[i + 1];
-      if (a.type == 'Перерыв' &&
-          b.type == 'Перерыв' &&
+      if (a.type == _IntervalKind.breakTime &&
+          b.type == _IntervalKind.breakTime &&
           a.end.isAtSameMomentAs(b.start)) {
         errors.add(
-          'Перерывы не должны следовать подряд без рабочего интервала между ними.',
+          AppMessage(
+            'breaksMustHaveAWorkIntervalBetweenThem',
+            [],
+            'Перерывы не должны следовать подряд без рабочего интервала между ними.',
+          ),
         );
       }
     }
@@ -1375,7 +1567,11 @@ class DayBuilder {
         );
         if (!hasPause) {
           errors.add(
-            'Между рабочими интервалами ${current.id} и ${next.id} отсутствует обязательная пауза.',
+            AppMessage(
+              'theRequiredBreakBetweenWorkIntervalsAndIs',
+              [current.id, next.id],
+              'Между рабочими интервалами ${current.id} и ${next.id} отсутствует обязательная пауза.',
+            ),
           );
         }
       }
@@ -1425,8 +1621,12 @@ class DayBuilder {
           : latestLunch;
 
       if (maxLunchStart.isBefore(minLunchStart)) {
-        throw const DayBuilderException(
-          'Невозможно разместить длинную паузу в заданном диапазоне начала. Измените настройки дня.',
+        throw DayBuilderException(
+          AppMessage(
+            'cannotPlaceTheLongBreakWithinTheStart',
+            [],
+            'Невозможно разместить длинную паузу в заданном диапазоне начала. Измените настройки дня.',
+          ),
         );
       }
 
@@ -1446,7 +1646,7 @@ class DayBuilder {
           final candidateInterval = _TimeInterval(
             start: candidate,
             end: candidateEnd,
-            type: 'Перерыв',
+            type: _IntervalKind.breakTime,
             id: 'candidate-lunch',
           );
 
@@ -1455,7 +1655,7 @@ class DayBuilder {
               _TimeInterval(
                 start: ew.startUtc,
                 end: ew.endUtc,
-                type: 'Worklog',
+                type: _IntervalKind.worklog,
                 id: ew.id,
               ),
             ),
@@ -1476,7 +1676,7 @@ class DayBuilder {
           final candidateInterval = _TimeInterval(
             start: candidate,
             end: candidateEnd,
-            type: 'Перерыв',
+            type: _IntervalKind.breakTime,
             id: 'candidate-lunch',
           );
           final collides = existingWorklogs.any(
@@ -1484,7 +1684,7 @@ class DayBuilder {
               _TimeInterval(
                 start: ew.startUtc,
                 end: ew.endUtc,
-                type: 'Worklog',
+                type: _IntervalKind.worklog,
                 id: ew.id,
               ),
             ),
@@ -1498,8 +1698,12 @@ class DayBuilder {
       }
 
       if (chosenLunchStart == null) {
-        throw const DayBuilderException(
-          'Невозможно разместить длинную паузу в заданном диапазоне начала: время занято. Измените настройки дня.',
+        throw DayBuilderException(
+          AppMessage(
+            'cannotPlaceTheLongBreakWithinTheStart120',
+            [],
+            'Невозможно разместить длинную паузу в заданном диапазоне начала: время занято. Измените настройки дня.',
+          ),
         );
       }
 
@@ -1554,8 +1758,12 @@ class DayBuilder {
 
     final spanDuration = spanEnd.difference(spanStart).inSeconds;
     if (spanDuration < 600) {
-      throw const DayBuilderException(
-        'Невозможно разместить заданное число коротких пауз: слишком короткий свободный промежуток. Измените настройки дня.',
+      throw DayBuilderException(
+        AppMessage(
+          'cannotPlaceTheRequiredNumberOfShortBreaks',
+          [],
+          'Невозможно разместить заданное число коротких пауз: слишком короткий свободный промежуток. Измените настройки дня.',
+        ),
       );
     }
 
@@ -1587,8 +1795,12 @@ class DayBuilder {
       );
 
       if (placedStart == null) {
-        throw const DayBuilderException(
-          'Невозможно разместить заданное число коротких пауз в свободном времени. Измените настройки дня.',
+        throw DayBuilderException(
+          AppMessage(
+            'cannotPlaceTheRequiredNumberOfShortBreaks122',
+            [],
+            'Невозможно разместить заданное число коротких пауз в свободном времени. Измените настройки дня.',
+          ),
         );
       }
       breaks.add(
@@ -1621,7 +1833,7 @@ class DayBuilder {
       final cIntervalWithGaps = _TimeInterval(
         start: candidate.subtract(minGap),
         end: cEnd.add(minGap),
-        type: 'Кандидат',
+        type: _IntervalKind.candidate,
         id: 'candidate',
       );
 
@@ -1630,7 +1842,7 @@ class DayBuilder {
           _TimeInterval(
             start: ew.startUtc,
             end: ew.endUtc,
-            type: 'Worklog',
+            type: _IntervalKind.worklog,
             id: ew.id,
           ),
         )) {
@@ -1642,7 +1854,7 @@ class DayBuilder {
           _TimeInterval(
             start: b.startUtc,
             end: b.endUtc,
-            type: 'Break',
+            type: _IntervalKind.breakTime,
             id: b.id,
           ),
         )) {
@@ -1670,9 +1882,11 @@ class DayBuilder {
       }
     }
 
-    for (var candidate = minBound;
-        !candidate.isAfter(maxBound);
-        candidate = candidate.add(const Duration(minutes: 1))) {
+    for (
+      var candidate = minBound;
+      !candidate.isAfter(maxBound);
+      candidate = candidate.add(const Duration(minutes: 1))
+    ) {
       if (isValid(candidate)) return candidate;
     }
 
@@ -1756,8 +1970,5 @@ class _CandidateLog {
   final DayBuilderLogInput log;
   final DateTime projectedStartUtc;
 
-  const _CandidateLog({
-    required this.log,
-    required this.projectedStartUtc,
-  });
+  const _CandidateLog({required this.log, required this.projectedStartUtc});
 }

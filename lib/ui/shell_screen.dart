@@ -1,3 +1,5 @@
+import '../l10n/app_localizations.dart';
+import '../ui/message_format.dart';
 import 'package:flutter/material.dart';
 import '../app_state.dart';
 import 'app_theme.dart';
@@ -44,7 +46,9 @@ class _ShellScreenState extends State<ShellScreen> {
             children: [
               Container(
                 height: 76,
-                padding: const EdgeInsets.symmetric(horizontal: 40),
+                padding: EdgeInsets.symmetric(
+                  horizontal: MediaQuery.sizeOf(context).width < 700 ? 16 : 40,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.surface(isDark),
                   border: Border(
@@ -59,12 +63,16 @@ class _ShellScreenState extends State<ShellScreen> {
                       color: AppColors.text(isDark),
                     ),
                     const SizedBox(width: 8),
-                    Text(
-                      'Jira Time Tracker',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                        color: AppColors.text(isDark),
+                    Flexible(
+                      child: Text(
+                        'Jira Time Tracker',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                          color: AppColors.text(isDark),
+                        ),
                       ),
                     ),
                     SizedBox(
@@ -75,18 +83,20 @@ class _ShellScreenState extends State<ShellScreen> {
 
                     // Вкладка «Работа»
                     _NavTabButton(
-                      label: 'Работа',
+                      label: AppLocalizations.of(context).work,
                       icon: Icons.layers_outlined,
                       isSelected:
                           !_settingsOpen && appState.selectedTabIndex == 0,
                       onPressed: () => _selectTab(0),
                       isDark: isDark,
                     ),
-                    const SizedBox(width: 20),
+                    SizedBox(
+                      width: MediaQuery.sizeOf(context).width >= 900 ? 20 : 8,
+                    ),
 
                     // Вкладка «День»
                     _NavTabButton(
-                      label: 'День',
+                      label: AppLocalizations.of(context).day,
                       icon: Icons.calendar_today_outlined,
                       isSelected:
                           !_settingsOpen && appState.selectedTabIndex == 1,
@@ -105,7 +115,7 @@ class _ShellScreenState extends State<ShellScreen> {
                       const SizedBox(width: 8),
                       if (MediaQuery.sizeOf(context).width >= 1050)
                         Text(
-                          'Jira подключена',
+                          AppLocalizations.of(context).jiraConnected,
                           style: TextStyle(
                             color: AppColors.muted(isDark),
                             fontSize: 12,
@@ -126,7 +136,7 @@ class _ShellScreenState extends State<ShellScreen> {
                         textStyle: const TextStyle(fontSize: 13),
                       ),
                       icon: const Icon(Icons.tune, size: 15),
-                      label: const Text('Настройки'),
+                      label: Text(AppLocalizations.of(context).settings),
                     ),
                   ],
                 ),
@@ -156,7 +166,7 @@ class _ShellScreenState extends State<ShellScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          appState.statusMessage!,
+                          renderMessage(context, appState.statusText),
                           style: TextStyle(
                             fontSize: 12,
                             color: AppColors.primary(isDark),
@@ -202,7 +212,9 @@ class _ShellScreenState extends State<ShellScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Режим только чтения: другой экземпляр приложения удерживает блокировку записи (A19).',
+                          AppLocalizations.of(
+                            context,
+                          ).readOnlyModeAnotherApplicationInstanceHoldsThe,
                           style: TextStyle(
                             fontSize: 12,
                             color: AppColors.warn(isDark),

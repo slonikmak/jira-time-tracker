@@ -1,3 +1,4 @@
+import 'app_message.dart';
 import 'dart:convert';
 import 'jira_client.dart';
 import 'local_store.dart';
@@ -9,15 +10,16 @@ class SendDraftResult {
   final int failed;
   final int unknown;
   final int skipped;
-  final String? errorMessage;
+  final Object? errorText;
+  String? get errorMessage => errorText?.toString();
 
   const SendDraftResult({
     required this.sent,
     required this.failed,
     required this.unknown,
     required this.skipped,
-    this.errorMessage,
-  });
+    Object? errorMessage,
+  }) : errorText = errorMessage;
 
   bool get isSuccess => failed == 0 && unknown == 0 && errorMessage == null;
 }
@@ -29,44 +31,55 @@ enum ReconcileStatus { recovered, conflict, notFound, error }
 class ReconcileResult {
   final ReconcileStatus status;
   final String? worklogId;
-  final String message;
+  final Object messageText;
+  String get message => messageText.toString();
 
   const ReconcileResult({
     required this.status,
     this.worklogId,
-    required this.message,
-  });
+    required Object message,
+  }) : messageText = message;
 
   factory ReconcileResult.recovered(String worklogId) => ReconcileResult(
     status: ReconcileStatus.recovered,
     worklogId: worklogId,
-    message: 'Запись успешно найдена в Jira и подтверждена (ID: $worklogId).',
+    message: AppMessage(
+      'entrySuccessfullyFoundAndConfirmedInJiraId',
+      [worklogId],
+      'Запись успешно найдена в Jira и подтверждена (ID: $worklogId).',
+    ),
   );
 
-  factory ReconcileResult.conflict(String message) =>
+  factory ReconcileResult.conflict(Object message) =>
       ReconcileResult(status: ReconcileStatus.conflict, message: message);
 
-  factory ReconcileResult.notFound([String? message]) => ReconcileResult(
+  factory ReconcileResult.notFound([Object? message]) => ReconcileResult(
     status: ReconcileStatus.notFound,
     message:
         message ??
-        'Свойство jira-time-tracker.segment не найдено среди записей задачи в Jira. Слепая повторная отправка запрещена.',
+        AppMessage(
+          'theJiraTimeTrackerSegmentPropertyWasNot',
+          [],
+          'Свойство jira-time-tracker.segment не найдено среди записей задачи в Jira. Слепая повторная отправка запрещена.',
+        ),
   );
 
-  factory ReconcileResult.error(String message) =>
+  factory ReconcileResult.error(Object message) =>
       ReconcileResult(status: ReconcileStatus.error, message: message);
 }
 
 /// Результат ручной привязки worklog ID.
 class ManualResolveResult {
   final bool isSuccess;
-  final String? errorMessage;
+  final Object? errorText;
+  String? get errorMessage => errorText?.toString();
 
-  const ManualResolveResult({required this.isSuccess, this.errorMessage});
+  const ManualResolveResult({required this.isSuccess, Object? errorMessage})
+    : errorText = errorMessage;
 
   factory ManualResolveResult.success() =>
       const ManualResolveResult(isSuccess: true);
-  factory ManualResolveResult.error(String message) =>
+  factory ManualResolveResult.error(Object message) =>
       ManualResolveResult(isSuccess: false, errorMessage: message);
 }
 
@@ -148,8 +161,11 @@ class WorklogSender {
         failed: 0,
         unknown: 0,
         skipped: 0,
-        errorMessage:
-            'Несоответствие подключения: черновик принадлежит сайту/аккаунту "${draft.scope}", а текущее подключение — "${connection.scope}". Отправка заблокирована.',
+        errorMessage: AppMessage(
+          'connectionMismatchTheDraftBelongsToSiteAccount',
+          [draft.scope, connection.scope],
+          'Несоответствие подключения: черновик принадлежит сайту/аккаунту "${draft.scope}", а текущее подключение — "${connection.scope}". Отправка заблокирована.',
+        ),
       );
     }
 
@@ -159,12 +175,16 @@ class WorklogSender {
     final segments = store.getSegments(draftId: draft.id);
     if (segments.isEmpty) {
       store.updateDayDraft(draft.copyWith(status: DraftStatus.draft));
-      return const SendDraftResult(
+      return SendDraftResult(
         sent: 0,
         failed: 0,
         unknown: 0,
         skipped: 0,
-        errorMessage: 'Черновик пуст, нет интервалов для отправки.',
+        errorMessage: AppMessage(
+          'theDraftIsEmptyThereAreNoIntervals',
+          [],
+          'Черновик пуст, нет интервалов для отправки.',
+        ),
       );
     }
 
@@ -227,7 +247,10 @@ class WorklogSender {
         } else if (postResult.kind == JiraPostResultKind.failed) {
           final failedSegment = segment.copyWith(
             sendState: SendState.failed,
-            lastError: postResult.errorMessage ?? 'Отказ Jira',
+            lastError: serializeMessage(
+              postResult.errorText ??
+                  AppMessage('jiraRejectedTheRequest', [], 'Отказ Jira'),
+            ),
             frozenPayload: frozenPayloadStr,
           );
           store.updateSegment(failedSegment);
@@ -236,9 +259,14 @@ class WorklogSender {
         } else {
           final unknownSegment = segment.copyWith(
             sendState: SendState.unknown,
-            lastError:
-                postResult.errorMessage ??
-                'Неопределённый статус отправки (возможен обрыв связи)',
+            lastError: serializeMessage(
+              postResult.errorText ??
+                  AppMessage(
+                    'unknownSubmissionResultTheConnectionMayHaveBeen',
+                    [],
+                    'Неопределённый статус отправки (возможен обрыв связи)',
+                  ),
+            ),
             frozenPayload: frozenPayloadStr,
           );
           store.updateSegment(unknownSegment);
@@ -302,9 +330,12 @@ class WorklogSender {
       }
 
       if (matchingWorklogs.length > 1) {
-        final msg =
-            'Конфликт: найдено несколько (${matchingWorklogs.length}) записей с свойством segment id "${segment.id}". Требуется ручная проверка.';
-        store.updateSegment(segment.copyWith(lastError: msg));
+        final msg = AppMessage(
+          'conflictMultipleEntriesFoundWithSegmentIdManual',
+          [matchingWorklogs.length, segment.id],
+          'Конфликт: найдено несколько (${matchingWorklogs.length}) записей с свойством segment id "${segment.id}". Требуется ручная проверка.',
+        );
+        store.updateSegment(segment.copyWith(lastError: serializeMessage(msg)));
         return ReconcileResult.conflict(msg);
       }
 
@@ -345,16 +376,35 @@ class WorklogSender {
 
           return ReconcileResult.recovered(match.id);
         } else {
-          final msg =
-              'Конфликт: найдена запись с совпадающим segment id, но параметры не совпадают (автор: ${authorMatches ? "OK" : "не совпадает"}, длительность: ${durationMatches ? "OK" : "не совпадает"}, время: ${timeMatches ? "OK" : "не совпадает"}).';
-          store.updateSegment(segment.copyWith(lastError: msg));
+          final msg = AppMessage(
+            'conflictAnEntryWithTheSameSegmentId',
+            [
+              authorMatches
+                  ? "OK"
+                  : const AppMessage('mismatch', [], "не совпадает"),
+              durationMatches
+                  ? "OK"
+                  : const AppMessage('mismatch', [], "не совпадает"),
+              timeMatches
+                  ? "OK"
+                  : const AppMessage('mismatch', [], "не совпадает"),
+            ],
+            'Конфликт: найдена запись с совпадающим segment id, но параметры не совпадают (автор: ${authorMatches ? "OK" : const AppMessage('mismatch', [], "не совпадает")}, длительность: ${durationMatches ? "OK" : const AppMessage('mismatch', [], "не совпадает")}, время: ${timeMatches ? "OK" : const AppMessage('mismatch', [], "не совпадает")}).',
+          );
+          store.updateSegment(
+            segment.copyWith(lastError: serializeMessage(msg)),
+          );
           return ReconcileResult.conflict(msg);
         }
       }
 
       return ReconcileResult.notFound();
     } catch (e) {
-      return ReconcileResult.error('Сетевая ошибка при сверке: $e');
+      return ReconcileResult.error(
+        AppMessage('networkErrorDuringReconciliation', [
+          e,
+        ], 'Сетевая ошибка при сверке: $e'),
+      );
     }
   }
 
@@ -375,19 +425,31 @@ class WorklogSender {
 
       if (worklog == null) {
         return ManualResolveResult.error(
-          'Запись с ID "$worklogId" не найдена в задаче "${segment.issueId}".',
+          AppMessage(
+            'entryWithIdWasNotFoundInIssue',
+            [worklogId, segment.issueId],
+            'Запись с ID "$worklogId" не найдена в задаче "${segment.issueId}".',
+          ),
         );
       }
 
       if (worklog.authorAccountId != connection.accountId) {
         return ManualResolveResult.error(
-          'Запись принадлежит другому пользователю Jira (accountId: ${worklog.authorAccountId}).',
+          AppMessage(
+            'theEntryBelongsToAnotherJiraUserAccountid',
+            [worklog.authorAccountId],
+            'Запись принадлежит другому пользователю Jira (accountId: ${worklog.authorAccountId}).',
+          ),
         );
       }
 
       if (worklog.durationSeconds != segment.durationSeconds) {
         return ManualResolveResult.error(
-          'Длительность записи в Jira (${worklog.durationSeconds} с) не совпадает с сегментом (${segment.durationSeconds} с).',
+          AppMessage(
+            'jiraEntryDurationSDoesNotMatchThe',
+            [worklog.durationSeconds, segment.durationSeconds],
+            'Длительность записи в Jira (${worklog.durationSeconds} с) не совпадает с сегментом (${segment.durationSeconds} с).',
+          ),
         );
       }
 
@@ -415,7 +477,11 @@ class WorklogSender {
 
       return ManualResolveResult.success();
     } catch (e) {
-      return ManualResolveResult.error('Ошибка проверки записи в Jira: $e');
+      return ManualResolveResult.error(
+        AppMessage('errorCheckingTheJiraEntry', [
+          e,
+        ], 'Ошибка проверки записи в Jira: $e'),
+      );
     }
   }
 
@@ -423,8 +489,13 @@ class WorklogSender {
   void manuallyConfirmAbsenceAndAllowRetry({required Segment segment}) {
     final updated = segment.copyWith(
       sendState: SendState.pending,
-      lastError:
+      lastError: serializeMessage(
+        AppMessage(
+          'resetByUserConfirmedTheEntryDoesNot',
+          [],
           'Сброшено пользователем: подтверждено отсутствие записи в Jira, разрешён повтор',
+        ),
+      ),
     );
     store.updateSegment(updated);
   }

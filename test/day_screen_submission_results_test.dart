@@ -1,3 +1,4 @@
+import 'package:jira_time_tracker/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
@@ -15,6 +16,7 @@ void main() {
     (tester) async {
       final db = sqlite3.openInMemory();
       final store = LocalStore(db)..init();
+      store.setSetting('ui_language', 'ru');
       const scope = 'https://test.atlassian.net#acc-123';
       final date = DateTime.utc(2026, 9, 14);
       const statuses = [SendState.sent, SendState.failed, SendState.unknown];
@@ -116,7 +118,14 @@ void main() {
         tester.view.resetDevicePixelRatio();
       });
 
-      await tester.pumpWidget(MaterialApp(home: DayScreen(appState: appState)));
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('ru'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: DayScreen(appState: appState),
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('Шкала дня'), findsOneWidget);
@@ -158,7 +167,12 @@ void main() {
       addTearDown(readOnlyState.dispose);
       readOnlyState.setSelectedDate(DateTime(2026, 9, 14));
       await tester.pumpWidget(
-        MaterialApp(home: DayScreen(appState: readOnlyState)),
+        MaterialApp(
+          locale: const Locale('ru'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: DayScreen(appState: readOnlyState),
+        ),
       );
       await tester.pumpAndSettle();
 

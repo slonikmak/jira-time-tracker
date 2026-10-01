@@ -1,3 +1,6 @@
+import '../app_message.dart';
+import '../l10n/app_localizations.dart';
+import '../ui/message_format.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../agent_api_server.dart';
@@ -78,10 +81,11 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _isLoading = true;
   bool _isChecking = false;
   bool _obscureToken = true;
-  String? _errorMessage;
+  Object? _errorMessage;
   JiraConnection? _verifiedConnection;
-  Map<String, String> _dayErrors = {};
-  String? _dayMessage;
+  Map<String, Object> _dayErrors = {};
+  Object? _dayMessage;
+  bool _dayMessageIsError = false;
   late SettingsSection _selectedSection;
 
   @override
@@ -116,7 +120,7 @@ class _SettingsPageState extends State<SettingsPage> {
       ])
         key: TextEditingController(),
     };
-    _fillDaySettings(widget.appState.daySettings);
+
     _loadInitialData();
   }
 
@@ -130,6 +134,16 @@ class _SettingsPageState extends State<SettingsPage> {
         _verifiedConnection = widget.appState.currentConnection;
         _isLoading = false;
       });
+    }
+  }
+
+  bool _filledDaySettings = false;
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_filledDaySettings) {
+      _fillDaySettings(widget.appState.daySettings);
+      _filledDaySettings = true;
     }
   }
 
@@ -153,8 +167,15 @@ class _SettingsPageState extends State<SettingsPage> {
   String _duration(int seconds) {
     final hours = seconds ~/ 3600;
     final minutes = (seconds % 3600) ~/ 60;
-    if (hours == 0) return '$minutes м';
-    return minutes == 0 ? '$hours ч' : '$hours ч $minutes м';
+    if (hours == 0) {
+      return AppLocalizations.of(context).m390(renderMessage(context, minutes));
+    }
+    return minutes == 0
+        ? AppLocalizations.of(context).h(renderMessage(context, hours))
+        : AppLocalizations.of(context).hM392(
+            renderMessage(context, hours),
+            renderMessage(context, minutes),
+          );
   }
 
   void _fillDaySettings(DaySettings settings) {
@@ -187,7 +208,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   int? _parseDuration(String value) {
     final match = RegExp(
-      r'^(?:(\d+)\s*ч)?\s*(?:(\d+)\s*м)?$',
+      r'^(?:(\d+)\s*[чh])?\s*(?:(\d+)\s*[мm])?$',
     ).firstMatch(value.trim());
     if (match == null || (match.group(1) == null && match.group(2) == null)) {
       return null;
@@ -201,12 +222,12 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   void _saveDaySettings() {
-    final errors = <String, String>{};
+    final errors = <String, Object>{};
     int read(
       String key,
       String group,
       int? Function(String) parse,
-      String hint,
+      Object hint,
     ) {
       final value = parse(_dayControllers[key]!.text);
       if (value == null) errors[group] = hint;
@@ -218,76 +239,116 @@ class _SettingsPageState extends State<SettingsPage> {
         'start-min',
         'start',
         _parseClock,
-        'Введите время в формате ЧЧ:ММ.',
+        AppMessage(
+          'enterTimeInHhMmFormat',
+          [],
+          "Введите время в формате ЧЧ:ММ.",
+        ),
       ),
       startMinutesMax: read(
         'start-max',
         'start',
         _parseClock,
-        'Введите время в формате ЧЧ:ММ.',
+        AppMessage(
+          'enterTimeInHhMmFormat',
+          [],
+          "Введите время в формате ЧЧ:ММ.",
+        ),
       ),
       totalDurationSecondsMin: read(
         'duration-min',
         'duration',
         _parseDuration,
-        'Введите длительность, например 7 ч 30 м.',
+        AppMessage(
+          'enterADurationForExampleHM',
+          [],
+          "Введите длительность, например 7 ч 30 м.",
+        ),
       ),
       totalDurationSecondsMax: read(
         'duration-max',
         'duration',
         _parseDuration,
-        'Введите длительность, например 8 ч.',
+        AppMessage(
+          'enterADurationForExampleH',
+          [],
+          "Введите длительность, например 8 ч.",
+        ),
       ),
       lunchStartMinutesMin: read(
         'long-start-min',
         'long_start',
         _parseClock,
-        'Введите время в формате ЧЧ:ММ.',
+        AppMessage(
+          'enterTimeInHhMmFormat',
+          [],
+          "Введите время в формате ЧЧ:ММ.",
+        ),
       ),
       lunchStartMinutesMax: read(
         'long-start-max',
         'long_start',
         _parseClock,
-        'Введите время в формате ЧЧ:ММ.',
+        AppMessage(
+          'enterTimeInHhMmFormat',
+          [],
+          "Введите время в формате ЧЧ:ММ.",
+        ),
       ),
       lunchDurationSecondsMin: read(
         'long-duration-min',
         'long_duration',
         _parseDuration,
-        'Введите длительность, например 30 м.',
+        AppMessage(
+          'enterADurationForExampleM',
+          [],
+          "Введите длительность, например 30 м.",
+        ),
       ),
       lunchDurationSecondsMax: read(
         'long-duration-max',
         'long_duration',
         _parseDuration,
-        'Введите длительность, например 45 м.',
+        AppMessage(
+          'enterADurationForExampleM398',
+          [],
+          "Введите длительность, например 45 м.",
+        ),
       ),
       shortBreakCountMin: read(
         'short-count-min',
         'short_count',
         int.tryParse,
-        'Введите целое число от 0.',
+        AppMessage('enterAnIntegerFrom', [], "Введите целое число от 0."),
       ),
       shortBreakCountMax: read(
         'short-count-max',
         'short_count',
         int.tryParse,
-        'Введите целое число от 0.',
+        AppMessage('enterAnIntegerFrom', [], "Введите целое число от 0."),
       ),
       shortBreakDurationSecondsMin: read(
         'short-duration-min',
         'short_duration',
         _parseDuration,
-        'Введите длительность, например 5 м.',
+        AppMessage(
+          'enterADurationForExampleM400',
+          [],
+          "Введите длительность, например 5 м.",
+        ),
       ),
       shortBreakDurationSecondsMax: read(
         'short-duration-max',
         'short_duration',
         _parseDuration,
-        'Введите длительность, например 10 м.',
+        AppMessage(
+          'enterADurationForExampleM401',
+          [],
+          "Введите длительность, например 10 м.",
+        ),
       ),
     );
-    if (errors.isEmpty) errors.addAll(settings.validationErrors());
+    if (errors.isEmpty) errors.addAll(settings.validationMessages());
     if (errors.isNotEmpty) {
       setState(() {
         _dayErrors = errors;
@@ -302,10 +363,20 @@ class _SettingsPageState extends State<SettingsPage> {
       );
       setState(() {
         _dayErrors = {};
-        _dayMessage = 'Параметры сборки дня сохранены.';
+        _dayMessageIsError = false;
+        _dayMessage = AppMessage(
+          'dayBuildSettingsSaved',
+          [],
+          'Параметры сборки дня сохранены.',
+        );
       });
     } catch (e) {
-      setState(() => _dayMessage = 'Не удалось сохранить параметры: $e');
+      setState(() {
+        _dayMessageIsError = true;
+        _dayMessage = AppMessage('couldNotSaveSettings', [
+          e,
+        ], "Не удалось сохранить параметры: {p0}");
+      });
     }
   }
 
@@ -331,7 +402,7 @@ class _SettingsPageState extends State<SettingsPage> {
     } on JiraApiException catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = e.message;
+          _errorMessage = e.messageText;
           _verifiedConnection = null;
           _isChecking = false;
         });
@@ -339,7 +410,9 @@ class _SettingsPageState extends State<SettingsPage> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = 'Ошибка подключения: $e';
+          _errorMessage = AppMessage('connectionError', [
+            e,
+          ], "Ошибка подключения: {p0}");
           _verifiedConnection = null;
           _isChecking = false;
         });
@@ -360,7 +433,13 @@ class _SettingsPageState extends State<SettingsPage> {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Подключение к Jira успешно сохранено')),
+        SnackBar(
+          content: Builder(
+            builder: (context) => Text(
+              AppLocalizations.of(context).jiraConnectionSuccessfullySaved,
+            ),
+          ),
+        ),
       );
     }
   }
@@ -384,24 +463,41 @@ class _SettingsPageState extends State<SettingsPage> {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final showSidebar = constraints.maxWidth >= 1300;
+          if (constraints.maxHeight < 700 && constraints.maxWidth < 1100) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(32, 24, 32, 28),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSettingsHeading(context),
+                  const SizedBox(height: 16),
+                  _buildAppearanceSelectors(context),
+                  const SizedBox(height: 24),
+                  _buildSectionSelector(context),
+                  const SizedBox(height: 20),
+                  _buildSelectedSection(context),
+                ],
+              ),
+            );
+          }
           return Padding(
             padding: const EdgeInsets.fromLTRB(32, 24, 32, 28),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (constraints.maxWidth >= 760)
+                if (constraints.maxWidth >= 1100)
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(child: _buildSettingsHeading(context)),
                       const SizedBox(width: 24),
-                      _buildThemeSelector(context),
+                      _buildAppearanceSelectors(context),
                     ],
                   )
                 else ...[
                   _buildSettingsHeading(context),
                   const SizedBox(height: 16),
-                  _buildThemeSelector(context),
+                  _buildAppearanceSelectors(context),
                 ],
                 const SizedBox(height: 24),
                 Expanded(
@@ -510,14 +606,16 @@ class _SettingsPageState extends State<SettingsPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Быстрые задачи',
+                    AppLocalizations.of(context).quickIssues406,
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Сохранённые задачи для быстрого добавления времени.',
+                    AppLocalizations.of(
+                      context,
+                    ).savedIssuesForQuicklyAddingTime,
                     style: TextStyle(
                       color: scheme.onSurfaceVariant,
                       fontSize: 13,
@@ -537,7 +635,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                 style: _actionButtonStyle,
                 icon: const Icon(Icons.add, size: 16),
-                label: const Text('Добавить задачу'),
+                label: Text(AppLocalizations.of(context).addIssue),
               ),
           ],
         ),
@@ -545,10 +643,11 @@ class _SettingsPageState extends State<SettingsPage> {
         if (connection == null)
           _QuickIssuesEmptyState(
             icon: Icons.link_off_outlined,
-            title: 'Сначала подключите Jira',
-            message:
-                'Быстрые задачи хранятся отдельно для каждого сайта и аккаунта.',
-            actionLabel: 'Перейти к подключению',
+            title: AppLocalizations.of(context).connectJiraFirst,
+            message: AppLocalizations.of(
+              context,
+            ).quickIssuesAreStoredSeparatelyForEachSite,
+            actionLabel: AppLocalizations.of(context).goToConnection,
             onAction: () =>
                 setState(() => _selectedSection = SettingsSection.jira),
           )
@@ -598,7 +697,7 @@ class _SettingsPageState extends State<SettingsPage> {
           if (widget.appState.isReadOnly) ...[
             const SizedBox(height: 12),
             Text(
-              'В режиме только чтения список можно просматривать, но нельзя изменять.',
+              AppLocalizations.of(context).inReadOnlyModeYouCanViewThe,
               style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
             ),
           ],
@@ -606,10 +705,11 @@ class _SettingsPageState extends State<SettingsPage> {
           if (widget.appState.quickIssues.isEmpty)
             _QuickIssuesEmptyState(
               icon: Icons.bolt_outlined,
-              title: 'Быстрых задач пока нет',
-              message:
-                  'Добавьте часто используемую Jira-задачу — она появится здесь и на экране «Работа».',
-              actionLabel: 'Добавить задачу',
+              title: AppLocalizations.of(context).noQuickIssuesYet,
+              message: AppLocalizations.of(
+                context,
+              ).addAFrequentlyUsedJiraIssueToShow,
+              actionLabel: AppLocalizations.of(context).addIssue,
               onAction: widget.appState.isReadOnly
                   ? null
                   : () => QuickIssueDialog.showAdd(
@@ -660,10 +760,10 @@ class _SettingsPageState extends State<SettingsPage> {
   };
 
   String _sectionLabel(SettingsSection section) => switch (section) {
-    SettingsSection.jira => 'Подключение к Jira',
-    SettingsSection.day => 'Сборка дня',
-    SettingsSection.quickIssues => 'Быстрые задачи',
-    SettingsSection.agentApi => 'Локальный API',
+    SettingsSection.jira => AppLocalizations.of(context).jiraConnection,
+    SettingsSection.day => AppLocalizations.of(context).dayBuild,
+    SettingsSection.quickIssues => AppLocalizations.of(context).quickIssues406,
+    SettingsSection.agentApi => AppLocalizations.of(context).localApi,
   };
 
   IconData _sectionIcon(SettingsSection section) => switch (section) {
@@ -678,15 +778,91 @@ class _SettingsPageState extends State<SettingsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Настройки', style: Theme.of(context).textTheme.titleLarge),
+        Text(
+          AppLocalizations.of(context).settings418,
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
         const SizedBox(height: 4),
         Text(
-          'Подключение к Jira, сборка дня, быстрые задачи и локальный API.',
+          AppLocalizations.of(
+            context,
+          ).jiraConnectionDayBuildQuickIssuesAndLocal,
           style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
         ),
       ],
     );
   }
+
+  Widget _buildLanguageSelector(BuildContext context) {
+    final theme = Theme.of(context);
+    return SizedBox(
+      width: 180,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            AppLocalizations.of(context).language,
+            style: theme.textTheme.titleSmall,
+          ),
+          const SizedBox(height: 8),
+          DropdownButton<UiLanguage>(
+            isExpanded: true,
+            key: const ValueKey('language-selector'),
+            value: widget.appState.language.value,
+            items: [
+              DropdownMenuItem(
+                value: UiLanguage.system,
+                child: Text(AppLocalizations.of(context).systemDefault),
+              ),
+              const DropdownMenuItem(
+                value: UiLanguage.ru,
+                child: Text('Русский'),
+              ),
+              const DropdownMenuItem(
+                value: UiLanguage.en,
+                child: Text('English'),
+              ),
+            ],
+            onChanged: widget.appState.isReadOnly
+                ? null
+                : (value) {
+                    if (value == null) return;
+                    try {
+                      widget.appState.selectLanguage(value);
+                    } catch (error) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Builder(
+                            builder: (context) => Text(
+                              AppLocalizations.of(
+                                context,
+                              ).languageSaveFailed(error.toString()),
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+                  },
+          ),
+
+          if (widget.appState.isReadOnly)
+            Text(
+              AppLocalizations.of(context).readOnlyLanguage,
+              style: theme.textTheme.bodySmall,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAppearanceSelectors(BuildContext context) => Wrap(
+    spacing: 24,
+    runSpacing: 16,
+    children: [
+      _buildLanguageSelector(context),
+      SizedBox(width: 340, child: _buildThemeSelector(context)),
+    ],
+  );
 
   Widget _buildThemeSelector(BuildContext context) {
     final theme = Theme.of(context);
@@ -694,17 +870,26 @@ class _SettingsPageState extends State<SettingsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Тема оформления', style: Theme.of(context).textTheme.titleSmall),
+        Text(
+          AppLocalizations.of(context).theme,
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
         const SizedBox(height: 8),
         SegmentedButton<UiThemeMode>(
           showSelectedIcon: false,
-          segments: const [
+          segments: [
             ButtonSegment(
               value: UiThemeMode.system,
-              label: Text('Как в системе'),
+              label: Text(AppLocalizations.of(context).systemDefault422),
             ),
-            ButtonSegment(value: UiThemeMode.light, label: Text('Светлая')),
-            ButtonSegment(value: UiThemeMode.dark, label: Text('Тёмная')),
+            ButtonSegment(
+              value: UiThemeMode.light,
+              label: Text(AppLocalizations.of(context).light),
+            ),
+            ButtonSegment(
+              value: UiThemeMode.dark,
+              label: Text(AppLocalizations.of(context).dark),
+            ),
           ],
           selected: {widget.appState.themeMode.value},
           onSelectionChanged: widget.appState.isReadOnly
@@ -715,7 +900,15 @@ class _SettingsPageState extends State<SettingsPage> {
                   } catch (e) {
                     setState(() {});
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Не удалось сохранить тему: $e')),
+                      SnackBar(
+                        content: Builder(
+                          builder: (context) => Text(
+                            AppLocalizations.of(
+                              context,
+                            ).couldNotSaveTheTheme(renderMessage(context, e)),
+                          ),
+                        ),
+                      ),
                     );
                   }
                 },
@@ -738,7 +931,7 @@ class _SettingsPageState extends State<SettingsPage> {
         if (widget.appState.isReadOnly) ...[
           const SizedBox(height: 6),
           Text(
-            'В режиме только чтения изменить тему нельзя.',
+            AppLocalizations.of(context).theThemeCannotBeChangedInReadOnly,
             style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11),
           ),
         ],
@@ -753,7 +946,7 @@ class _SettingsPageState extends State<SettingsPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Сборка дня',
+          AppLocalizations.of(context).dayBuild,
           style: theme.textTheme.titleLarge?.copyWith(
             fontSize: 20,
             fontWeight: FontWeight.w600,
@@ -761,7 +954,9 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
         const SizedBox(height: 13),
         Text(
-          'Умная пересборка выбирает значения внутри этих диапазонов.',
+          AppLocalizations.of(
+            context,
+          ).smartRebuildChoosesValuesWithinTheseRanges,
           style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
         ),
         const SizedBox(height: 20),
@@ -769,14 +964,14 @@ class _SettingsPageState extends State<SettingsPage> {
           children: [
             Expanded(
               child: Text(
-                'ПАРАМЕТР',
+                AppLocalizations.of(context).parameter,
                 style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant),
               ),
             ),
             SizedBox(
               width: 100,
               child: Text(
-                'ОТ',
+                AppLocalizations.of(context).from,
                 style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant),
               ),
             ),
@@ -784,59 +979,68 @@ class _SettingsPageState extends State<SettingsPage> {
             SizedBox(
               width: 100,
               child: Text(
-                'ДО',
+                AppLocalizations.of(context).to,
                 style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant),
               ),
             ),
           ],
         ),
         const SizedBox(height: 12),
-        _dayRangeRow(context, 'Начало дня', 'start', 'start-min', 'start-max'),
         _dayRangeRow(
           context,
-          'Длительность дня',
+          AppLocalizations.of(context).dayStart,
+          'start',
+          'start-min',
+          'start-max',
+        ),
+        _dayRangeRow(
+          context,
+          AppLocalizations.of(context).dayDuration,
           'duration',
           'duration-min',
           'duration-max',
         ),
         _dayRangeRow(
           context,
-          'Начало длинной паузы',
+          AppLocalizations.of(context).longBreakStart,
           'long_start',
           'long-start-min',
           'long-start-max',
         ),
         _dayRangeRow(
           context,
-          'Длительность длинной паузы',
+          AppLocalizations.of(context).longBreakDuration,
           'long_duration',
           'long-duration-min',
           'long-duration-max',
         ),
         _dayRangeRow(
           context,
-          'Короткие паузы за день',
+          AppLocalizations.of(context).shortBreaksPerDay,
           'short_count',
           'short-count-min',
           'short-count-max',
         ),
         _dayRangeRow(
           context,
-          'Длительность короткой паузы',
+          AppLocalizations.of(context).shortBreakDuration,
           'short_duration',
           'short-duration-min',
           'short-duration-max',
         ),
         const SizedBox(height: 12),
         Text(
-          'Минимальный рабочий интервал — 15 минут.',
+          AppLocalizations.of(context).minimumWorkIntervalMinutes,
           style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
         ),
         const SizedBox(height: 20),
-        Text('Правило сборки для агента', style: theme.textTheme.titleSmall),
+        Text(
+          AppLocalizations.of(context).agentDayBuildRule,
+          style: theme.textTheme.titleSmall,
+        ),
         const SizedBox(height: 6),
         Text(
-          'Агент получает этот текст вместе с диапазонами через локальный API. Встроенный сборщик использует только диапазоны.',
+          AppLocalizations.of(context).theAgentReceivesThisTextTogetherWithThe,
           style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
         ),
         const SizedBox(height: 10),
@@ -846,17 +1050,19 @@ class _SettingsPageState extends State<SettingsPage> {
           enabled: !widget.appState.isReadOnly,
           minLines: 5,
           maxLines: 8,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             border: OutlineInputBorder(),
-            hintText: 'Опишите, как агенту использовать параметры сборки дня',
+            hintText: AppLocalizations.of(
+              context,
+            ).describeHowTheAgentShouldUseTheDay,
           ),
         ),
         if (_dayMessage != null) ...[
           const SizedBox(height: 12),
           Text(
-            _dayMessage!,
+            renderMessage(context, _dayMessage!),
             style: TextStyle(
-              color: _dayMessage!.startsWith('Не удалось')
+              color: _dayMessageIsError
                   ? scheme.error
                   : AppColors.green(theme.brightness == Brightness.dark),
               fontSize: 12,
@@ -866,13 +1072,15 @@ class _SettingsPageState extends State<SettingsPage> {
         if (widget.appState.isReadOnly) ...[
           const SizedBox(height: 8),
           Text(
-            'В режиме только чтения изменить параметры нельзя.',
+            AppLocalizations.of(context).settingsCannotBeChangedInReadOnlyMode,
             style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11),
           ),
         ],
         const SizedBox(height: 20),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
+        Wrap(
+          alignment: WrapAlignment.end,
+          spacing: 10,
+          runSpacing: 8,
           children: [
             OutlinedButton(
               style: _actionButtonStyle,
@@ -887,13 +1095,12 @@ class _SettingsPageState extends State<SettingsPage> {
                         _dayMessage = null;
                       });
                     },
-              child: const Text('Сбросить'),
+              child: Text(AppLocalizations.of(context).reset),
             ),
-            const SizedBox(width: 10),
             FilledButton(
               style: _actionButtonStyle,
               onPressed: widget.appState.isReadOnly ? null : _saveDaySettings,
-              child: const Text('Сохранить параметры'),
+              child: Text(AppLocalizations.of(context).saveSettings),
             ),
           ],
         ),
@@ -929,7 +1136,7 @@ class _SettingsPageState extends State<SettingsPage> {
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Text(
-              _dayErrors[group]!,
+              renderMessage(context, _dayErrors[group]),
               style: TextStyle(fontSize: 11, color: scheme.error),
             ),
           ),
@@ -972,7 +1179,7 @@ class _SettingsPageState extends State<SettingsPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Подключение к Jira',
+          AppLocalizations.of(context).jiraConnection,
           style: theme.textTheme.titleLarge?.copyWith(
             fontSize: 20,
             fontWeight: FontWeight.w600,
@@ -980,13 +1187,13 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
         const SizedBox(height: 20),
         Text(
-          'Используется для загрузки задач и отправки времени.',
+          AppLocalizations.of(context).usedToLoadIssuesAndSubmitTime,
           style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
         ),
         const SizedBox(height: 22),
         _field(
           context,
-          'Адрес Jira',
+          AppLocalizations.of(context).jiraAddress,
           _urlController,
           hint: 'https://company.atlassian.net',
           onChanged: _invalidateConnectionVerification,
@@ -1002,12 +1209,14 @@ class _SettingsPageState extends State<SettingsPage> {
         const SizedBox(height: 20),
         _field(
           context,
-          'API-токен',
+          AppLocalizations.of(context).apiToken,
           _tokenController,
           obscureText: _obscureToken,
           onChanged: _invalidateConnectionVerification,
           suffix: IconButton(
-            tooltip: _obscureToken ? 'Показать токен' : 'Скрыть токен',
+            tooltip: _obscureToken
+                ? AppLocalizations.of(context).showToken
+                : AppLocalizations.of(context).hideToken,
             icon: Icon(
               _obscureToken
                   ? Icons.visibility_outlined
@@ -1019,16 +1228,30 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
         if (_errorMessage != null) ...[
           const SizedBox(height: 16),
-          _statusMessage(context, _errorMessage!, error: true),
+          _statusMessage(
+            context,
+            renderMessage(context, _errorMessage),
+            error: true,
+          ),
         ],
         if (_verifiedConnection != null) ...[
           const SizedBox(height: 22),
           Tooltip(
-            message:
-                'Account ID: ${_verifiedConnection!.accountId}\nМаршрут: ${_verifiedConnection!.route == JiraAuthRoute.direct ? "Прямой API" : "Scoped API (cloudId: ${_verifiedConnection!.cloudId})"}',
+            message: AppLocalizations.of(context).accountIdRoute(
+              renderMessage(context, _verifiedConnection!.accountId),
+              renderMessage(
+                context,
+                _verifiedConnection!.route == JiraAuthRoute.direct
+                    ? AppLocalizations.of(context).directApi
+                    : "Scoped API (cloudId: ${_verifiedConnection!.cloudId})",
+              ),
+            ),
             child: _statusMessage(
               context,
-              'Подключено · ${_verifiedConnection!.displayName}\n${_verifiedConnection!.email}',
+              AppLocalizations.of(context).connected(
+                renderMessage(context, _verifiedConnection!.displayName),
+                renderMessage(context, _verifiedConnection!.email),
+              ),
             ),
           ),
         ],
@@ -1041,7 +1264,7 @@ class _SettingsPageState extends State<SettingsPage> {
               OutlinedButton(
                 style: _actionButtonStyle,
                 onPressed: widget.onCancel,
-                child: const Text('Отмена'),
+                child: Text(AppLocalizations.of(context).cancel),
               ),
             OutlinedButton(
               onPressed: _isChecking ? null : _checkConnection,
@@ -1052,14 +1275,14 @@ class _SettingsPageState extends State<SettingsPage> {
                       height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Text('Проверить подключение'),
+                  : Text(AppLocalizations.of(context).checkConnection),
             ),
             FilledButton(
               onPressed: _isChecking || widget.appState.isReadOnly
                   ? null
                   : _saveConnection,
               style: _actionButtonStyle,
-              child: const Text('Сохранить'),
+              child: Text(AppLocalizations.of(context).save),
             ),
           ],
         ),
@@ -1074,7 +1297,7 @@ class _SettingsPageState extends State<SettingsPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Локальный API для AI-агентов',
+          AppLocalizations.of(context).localApiForAiAgents,
           style: theme.textTheme.titleLarge?.copyWith(
             fontSize: 20,
             fontWeight: FontWeight.w600,
@@ -1082,49 +1305,60 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
         const SizedBox(height: 13),
         Text(
-          'Встроенный HTTP-сервер позволяет AI-агентам логировать время и передавать готовое расписание дня.',
+          AppLocalizations.of(context).theBuiltInHttpServerAllowsAiAgents,
           style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
         ),
         const SizedBox(height: 22),
         _field(
           context,
-          'Адрес локального сервера',
+          AppLocalizations.of(context).localServerAddress,
           _agentUrlController,
           readOnly: true,
           suffix: IconButton(
-            tooltip: 'Скопировать адрес',
+            tooltip: AppLocalizations.of(context).copyAddress,
             icon: const Icon(Icons.copy, size: 17),
             onPressed: () {
               Clipboard.setData(ClipboardData(text: _agentUrlController.text));
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Адрес сервера скопирован в буфер обмена'),
+                SnackBar(
+                  content: Builder(
+                    builder: (context) => Text(
+                      AppLocalizations.of(
+                        context,
+                      ).serverAddressCopiedToClipboard,
+                    ),
+                  ),
                 ),
               );
             },
           ),
         ),
         const SizedBox(height: 20),
-        Row(
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          spacing: 12,
+          runSpacing: 8,
           children: [
-            Expanded(
-              child: Text(
-                'Инструкция для скилла агента',
-                style: theme.textTheme.titleSmall,
-              ),
+            Text(
+              AppLocalizations.of(context).agentSkillInstructions,
+              style: theme.textTheme.titleSmall,
             ),
             FilledButton.icon(
               style: _actionButtonStyle,
               icon: const Icon(Icons.copy, size: 16),
-              label: const Text('Скопировать инструкцию'),
+              label: Text(AppLocalizations.of(context).copyInstructions),
               onPressed: () {
                 Clipboard.setData(
                   ClipboardData(text: _skillPromptController.text),
                 );
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Инструкция для агента скопирована в буфер обмена',
+                  SnackBar(
+                    content: Builder(
+                      builder: (context) => Text(
+                        AppLocalizations.of(
+                          context,
+                        ).agentInstructionsCopiedToClipboard,
+                      ),
                     ),
                   ),
                 );
@@ -1389,13 +1623,13 @@ class _QuickIssueSettingsRow extends StatelessWidget {
           ),
           IconButton(
             key: ValueKey('quick-issue-edit-${issue.issueId}'),
-            tooltip: 'Изменить подсказку',
+            tooltip: AppLocalizations.of(context).editNote,
             visualDensity: VisualDensity.compact,
             onPressed: readOnly ? null : onEdit,
             icon: const Icon(Icons.edit_outlined, size: 17),
           ),
           PopupMenuButton<String>(
-            tooltip: 'Действия',
+            tooltip: AppLocalizations.of(context).actions,
             enabled: !readOnly,
             onSelected: (_) async {
               try {
@@ -1404,22 +1638,32 @@ class _QuickIssueSettingsRow extends StatelessWidget {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text(
-                        'Не удалось удалить быструю задачу: $error',
+                      content: Builder(
+                        builder: (context) => Text(
+                          AppLocalizations.of(
+                            context,
+                          ).couldNotDeleteTheQuickIssue(
+                            renderMessage(context, error),
+                          ),
+                        ),
                       ),
                     ),
                   );
                 }
               }
             },
-            itemBuilder: (_) => const [
+            itemBuilder: (_) => [
               PopupMenuItem(
                 value: 'delete',
                 child: Row(
                   children: [
                     Icon(Icons.delete_outline, size: 17),
                     SizedBox(width: 8),
-                    Expanded(child: Text('Удалить из быстрых')),
+                    Expanded(
+                      child: Text(
+                        AppLocalizations.of(context).removeFromQuickIssues,
+                      ),
+                    ),
                   ],
                 ),
               ),

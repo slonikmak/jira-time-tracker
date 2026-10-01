@@ -1,3 +1,5 @@
+import '../l10n/app_localizations.dart';
+import '../ui/message_format.dart';
 import 'package:flutter/material.dart';
 import '../app_state.dart';
 import '../log_clock.dart';
@@ -70,7 +72,14 @@ class _WorkScreenState extends State<WorkScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Задача добавлена: ${issue.key} — ${issue.summary}'),
+            content: Builder(
+              builder: (context) => Text(
+                AppLocalizations.of(context).issueAdded(
+                  renderMessage(context, issue.key),
+                  renderMessage(context, issue.summary),
+                ),
+              ),
+            ),
           ),
         );
       }
@@ -79,8 +88,10 @@ class _WorkScreenState extends State<WorkScreen> {
         showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: const Text('Не удалось добавить задачу'),
-            content: Text(e.toString()),
+            title: Text(AppLocalizations.of(context).couldNotAddTheIssue),
+            content: Builder(
+              builder: (context) => Text(renderMessage(context, e)),
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(ctx).pop(),
@@ -112,67 +123,94 @@ class _WorkScreenState extends State<WorkScreen> {
             final taskWidth = (contentWidth - 65) * .46;
             final dateLabel = _formatHeaderDate(widget.appState.selectedDate);
 
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(40, 32, 40, 0),
-                  child: Column(
+            final header = Padding(
+              padding: const EdgeInsets.fromLTRB(40, 32, 40, 0),
+              child: Column(
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Работа',
-                                  style: Theme.of(context).textTheme.titleLarge
-                                      ?.copyWith(
-                                        fontSize: 29,
-                                        fontWeight: FontWeight.w600,
-                                        letterSpacing: -0.7,
-                                      ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  dateLabel,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: AppColors.muted(isDark),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              AppLocalizations.of(context).work493,
+                              style: Theme.of(context).textTheme.titleLarge
+                                  ?.copyWith(
+                                    fontSize: 29,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: -0.7,
                                   ),
-                                ),
-                              ],
                             ),
+                            const SizedBox(height: 4),
+                            Text(
+                              dateLabel,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: AppColors.muted(isDark),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: OutlinedButton.icon(
+                          key: const ValueKey('add-time-global'),
+                          onPressed: () => AddTimeDialog.show(
+                            context,
+                            appState: widget.appState,
                           ),
-                          Padding(
-                            padding: const EdgeInsets.only(top: 12),
-                            child: OutlinedButton.icon(
-                              key: const ValueKey('add-time-global'),
-                              onPressed: () => AddTimeDialog.show(
-                                context,
-                                appState: widget.appState,
-                              ),
-                              style: OutlinedButton.styleFrom(
-                                minimumSize: const Size(0, 36),
-                                visualDensity: VisualDensity.standard,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                ),
-                                textStyle: const TextStyle(fontSize: 14),
-                              ),
-                              icon: const Icon(Icons.add, size: 17),
-                              label: const Text('Добавить время'),
-                            ),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(0, 36),
+                            visualDensity: VisualDensity.standard,
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            textStyle: const TextStyle(fontSize: 14),
+                          ),
+                          icon: const Icon(Icons.add, size: 17),
+                          label: Text(AppLocalizations.of(context).addTime),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  _buildAddIssueRow(context),
+                ],
+              ),
+            );
+            if (isNarrow && constraints.maxHeight < 700) {
+              return SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    header,
+                    const SizedBox(height: 26),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Column(
+                        children: [
+                          SizedBox(
+                            height: 310,
+                            child: _buildTasksColumn(context),
+                          ),
+                          const SizedBox(height: 24),
+                          SizedBox(
+                            height: 360,
+                            child: _buildQueueColumn(context),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 24),
-                      _buildAddIssueRow(context),
-                    ],
-                  ),
+                    ),
+                    _buildBottomAssemblyBar(context),
+                  ],
                 ),
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                header,
                 const SizedBox(height: 26),
                 Expanded(
                   child: isNarrow
@@ -227,193 +265,216 @@ class _WorkScreenState extends State<WorkScreen> {
   Widget _buildAddIssueRow(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Row(
-      children: [
-        Expanded(
-          child: SizedBox(
-            height: 44,
-            child: TextField(
-              controller: _addController,
-              decoration: InputDecoration(
-                hintText: 'Вставьте ID или ссылку на задачу Jira',
-                prefixIcon: const Icon(Icons.search, size: 18),
-                prefixIconConstraints: const BoxConstraints(
-                  minWidth: 44,
-                  minHeight: 44,
-                ),
-                isDense: true,
-                filled: true,
-                fillColor: isDark
-                    ? AppColors.insetDark
-                    : AppColors.hover(false),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(6),
-                  borderSide: BorderSide.none,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(6),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-              onSubmitted: (_) => _handleAddIssue(),
-            ),
+    final query = SizedBox(
+      height: 44,
+      child: TextField(
+        controller: _addController,
+        decoration: InputDecoration(
+          hintText: AppLocalizations.of(context).pasteAJiraIssueIdOrLink,
+          prefixIcon: const Icon(Icons.search, size: 18),
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: 44,
+            minHeight: 44,
+          ),
+          isDense: true,
+          filled: true,
+          fillColor: isDark ? AppColors.insetDark : AppColors.hover(false),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(6),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(6),
+            borderSide: BorderSide.none,
           ),
         ),
-        const SizedBox(width: 10),
-        OutlinedButton.icon(
-          onPressed: _isAdding ? null : _handleAddIssue,
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(0, 44),
-            visualDensity: VisualDensity.standard,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            textStyle: const TextStyle(fontSize: 14),
-          ),
-          icon: _isAdding
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.arrow_forward, size: 16),
-          label: const Text('Добавить задачу'),
-        ),
-        const SizedBox(width: 10),
-        PopupMenuButton<String>(
-          key: const ValueKey('quick-issues-menu'),
-          tooltip: 'Быстрые задачи',
-          offset: const Offset(0, 36),
-          constraints: const BoxConstraints(minWidth: 300, maxWidth: 340),
-          onSelected: (value) async {
-            if (value == '__settings__') {
-              widget.onOpenQuickIssueSettings?.call();
-              return;
-            }
-            for (final issue in widget.appState.issues) {
-              if (issue.issueId == value && context.mounted) {
-                await AddTimeDialog.show(
-                  context,
-                  appState: widget.appState,
-                  issue: issue,
-                );
-                return;
-              }
-            }
-          },
-          itemBuilder: (context) {
-            final rows = <PopupMenuEntry<String>>[];
-            for (final quickIssue in widget.appState.quickIssues) {
-              final issue = _issueById(quickIssue.issueId);
-              if (issue == null) continue;
-              rows.add(
-                PopupMenuItem<String>(
-                  value: issue.issueId,
-                  enabled: !widget.appState.isReadOnly,
-                  child: SizedBox(
-                    width: 304,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
+        onSubmitted: (_) => _handleAddIssue(),
+      ),
+    );
+    final addButton = OutlinedButton.icon(
+      onPressed: _isAdding ? null : _handleAddIssue,
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size(0, 44),
+        visualDensity: VisualDensity.standard,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        textStyle: const TextStyle(fontSize: 14),
+      ),
+      icon: _isAdding
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.arrow_forward, size: 16),
+      label: Text(AppLocalizations.of(context).addIssue),
+    );
+    final quickMenu = PopupMenuButton<String>(
+      key: const ValueKey('quick-issues-menu'),
+      tooltip: AppLocalizations.of(context).quickIssues406,
+      offset: const Offset(0, 36),
+      constraints: const BoxConstraints(minWidth: 300, maxWidth: 340),
+      onSelected: (value) async {
+        if (value == '__settings__') {
+          widget.onOpenQuickIssueSettings?.call();
+          return;
+        }
+        for (final issue in widget.appState.issues) {
+          if (issue.issueId == value && context.mounted) {
+            await AddTimeDialog.show(
+              context,
+              appState: widget.appState,
+              issue: issue,
+            );
+            return;
+          }
+        }
+      },
+      itemBuilder: (context) {
+        final rows = <PopupMenuEntry<String>>[];
+        for (final quickIssue in widget.appState.quickIssues) {
+          final issue = _issueById(quickIssue.issueId);
+          if (issue == null) continue;
+          rows.add(
+            PopupMenuItem<String>(
+              value: issue.issueId,
+              enabled: !widget.appState.isReadOnly,
+              child: SizedBox(
+                width: 304,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
                       children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 5,
-                                vertical: 1,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.selected(isDark),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                issue.key,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 11,
-                                  color: AppColors.primary(isDark),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                issue.summary,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 12,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (quickIssue.note?.isNotEmpty == true) ...[
-                          const SizedBox(height: 3),
-                          Text(
-                            quickIssue.note!,
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.selected(isDark),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            issue.key,
                             style: TextStyle(
+                              fontWeight: FontWeight.bold,
                               fontSize: 11,
-                              color: AppColors.muted(isDark),
+                              color: AppColors.primary(isDark),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            issue.summary,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
                             ),
                             overflow: TextOverflow.ellipsis,
-                            maxLines: 2,
                           ),
-                        ],
+                        ),
                       ],
                     ),
-                  ),
-                ),
-              );
-            }
-            if (rows.isNotEmpty) return rows;
-            return [
-              PopupMenuItem<String>(
-                enabled: false,
-                child: SizedBox(
-                  width: 248,
-                  child: Text(
-                    'Часто используемые задачи ещё не настроены.',
-                    style: TextStyle(
-                      color: AppColors.muted(isDark),
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ),
-              const PopupMenuDivider(),
-              const PopupMenuItem<String>(
-                key: ValueKey('configure-quick-issues'),
-                value: '__settings__',
-                child: Row(
-                  children: [
-                    Icon(Icons.tune, size: 17),
-                    SizedBox(width: 8),
-                    Expanded(child: Text('Настроить быстрые задачи')),
+                    if (quickIssue.note?.isNotEmpty == true) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        quickIssue.note!,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.muted(isDark),
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
+                      ),
+                    ],
                   ],
                 ),
               ),
-            ];
-          },
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 44),
-            padding: const EdgeInsets.symmetric(horizontal: 9),
-            decoration: BoxDecoration(
-              border: Border.all(color: AppColors.line(isDark)),
-              borderRadius: BorderRadius.circular(6),
             ),
+          );
+        }
+        if (rows.isNotEmpty) return rows;
+        return [
+          PopupMenuItem<String>(
+            enabled: false,
+            child: SizedBox(
+              width: 248,
+              child: Text(
+                AppLocalizations.of(
+                  context,
+                ).frequentlyUsedIssuesHaveNotBeenConfiguredYet,
+                style: TextStyle(color: AppColors.muted(isDark), fontSize: 12),
+              ),
+            ),
+          ),
+          const PopupMenuDivider(),
+          PopupMenuItem<String>(
+            key: ValueKey('configure-quick-issues'),
+            value: '__settings__',
             child: Row(
-              mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.bolt_outlined, size: 16),
-                const SizedBox(width: 6),
-                const Text('Быстрые задачи', style: TextStyle(fontSize: 14)),
-                const SizedBox(width: 4),
-                const Icon(Icons.arrow_drop_down, size: 18),
+                Icon(Icons.tune, size: 17),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    AppLocalizations.of(context).configureQuickIssues,
+                  ),
+                ),
               ],
             ),
           ),
+        ];
+      },
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 44),
+        padding: const EdgeInsets.symmetric(horizontal: 9),
+        decoration: BoxDecoration(
+          border: Border.all(color: AppColors.line(isDark)),
+          borderRadius: BorderRadius.circular(6),
         ),
-      ],
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.bolt_outlined, size: 16),
+            const SizedBox(width: 6),
+            Text(
+              AppLocalizations.of(context).quickIssues406,
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(width: 4),
+            const Icon(Icons.arrow_drop_down, size: 18),
+          ],
+        ),
+      ),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 760) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              query,
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 10,
+                runSpacing: 8,
+                children: [addButton, quickMenu],
+              ),
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: query),
+            const SizedBox(width: 10),
+            addButton,
+            const SizedBox(width: 10),
+            quickMenu,
+          ],
+        );
+      },
     );
   }
 
@@ -428,7 +489,7 @@ class _WorkScreenState extends State<WorkScreen> {
           children: [
             Expanded(
               child: Text(
-                'Недавние задачи',
+                AppLocalizations.of(context).recentIssues497,
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w600,
                   fontSize: 16,
@@ -440,7 +501,12 @@ class _WorkScreenState extends State<WorkScreen> {
                 onPressed: () => widget.appState.startSelectedIssues(),
                 icon: const Icon(Icons.play_arrow, size: 17),
                 label: Text(
-                  'Запустить (${widget.appState.selectedIssueIds.length})',
+                  AppLocalizations.of(context).start498(
+                    renderMessage(
+                      context,
+                      widget.appState.selectedIssueIds.length,
+                    ),
+                  ),
                 ),
               ),
             TextButton(
@@ -450,7 +516,11 @@ class _WorkScreenState extends State<WorkScreen> {
                   if (!_isSelectionMode) widget.appState.clearIssueSelection();
                 });
               },
-              child: Text(_isSelectionMode ? 'Отмена' : 'Выбрать несколько'),
+              child: Text(
+                _isSelectionMode
+                    ? AppLocalizations.of(context).cancel
+                    : AppLocalizations.of(context).selectMultiple,
+              ),
             ),
           ],
         ),
@@ -463,7 +533,7 @@ class _WorkScreenState extends State<WorkScreen> {
               child: TextField(
                 controller: _searchController,
                 decoration: InputDecoration(
-                  hintText: 'Поиск по задачам',
+                  hintText: AppLocalizations.of(context).searchIssues,
                   isDense: true,
                   filled: false,
                   contentPadding: const EdgeInsets.symmetric(vertical: 8),
@@ -473,7 +543,7 @@ class _WorkScreenState extends State<WorkScreen> {
                   suffixIcon: _searchController.text.isNotEmpty
                       ? IconButton(
                           icon: const Icon(Icons.clear, size: 16),
-                          tooltip: 'Очистить поиск',
+                          tooltip: AppLocalizations.of(context).clearSearch,
                           onPressed: () {
                             _searchController.clear();
                             widget.appState.setIssueSearchQuery('');
@@ -485,20 +555,20 @@ class _WorkScreenState extends State<WorkScreen> {
               ),
             ),
             PopupMenuButton<IssueFilterPeriod>(
-              tooltip: 'Фильтр активности',
+              tooltip: AppLocalizations.of(context).activityFilter,
               onSelected: widget.appState.setIssueFilterPeriod,
-              itemBuilder: (context) => const [
+              itemBuilder: (context) => [
                 PopupMenuItem(
                   value: IssueFilterPeriod.days7,
-                  child: Text('За 7 дней'),
+                  child: Text(AppLocalizations.of(context).lastDays),
                 ),
                 PopupMenuItem(
                   value: IssueFilterPeriod.days30,
-                  child: Text('За 30 дней'),
+                  child: Text(AppLocalizations.of(context).lastDays504),
                 ),
                 PopupMenuItem(
                   value: IssueFilterPeriod.all,
-                  child: Text('За всё время'),
+                  child: Text(AppLocalizations.of(context).allTime),
                 ),
               ],
               child: Padding(
@@ -531,8 +601,12 @@ class _WorkScreenState extends State<WorkScreen> {
                         const SizedBox(height: 8),
                         Text(
                           widget.appState.issues.isEmpty
-                              ? 'Нет добавленных задач.\nВведите ключ, ID или ссылку выше.'
-                              : 'Нет задач, соответствующих фильтру.',
+                              ? AppLocalizations.of(
+                                  context,
+                                ).noIssuesAddedEnterAKeyIdOr
+                              : AppLocalizations.of(
+                                  context,
+                                ).noIssuesMatchTheFilter,
                           textAlign: TextAlign.center,
                           style: TextStyle(color: AppColors.muted(isDark)),
                         ),
@@ -627,7 +701,12 @@ class _WorkScreenState extends State<WorkScreen> {
                           const SizedBox(height: 3),
                           Text(
                             quickIssue?.note ??
-                                'Активность: ${_formatDateTime(issue.lastUsedAtUtc)}',
+                                AppLocalizations.of(context).activity(
+                                  renderMessage(
+                                    context,
+                                    _formatDateTime(issue.lastUsedAtUtc),
+                                  ),
+                                ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -675,7 +754,9 @@ class _WorkScreenState extends State<WorkScreen> {
                                   }
                                 },
                                 child: Text(
-                                  isRunning ? 'Остановить' : 'Начать',
+                                  isRunning
+                                      ? AppLocalizations.of(context).stop
+                                      : AppLocalizations.of(context).start510,
                                 ),
                               ),
                               const Spacer(),
@@ -686,7 +767,9 @@ class _WorkScreenState extends State<WorkScreen> {
                                   issue: issue,
                                 ),
                                 icon: const Icon(Icons.add, size: 15),
-                                label: const Text('Добавить время'),
+                                label: Text(
+                                  AppLocalizations.of(context).addTime,
+                                ),
                               ),
                             ],
                           ),
@@ -716,21 +799,29 @@ class _WorkScreenState extends State<WorkScreen> {
             _buildQueueTab(
               context,
               tab: WorkScreenQueueTab.queue,
-              label: 'Очередь',
+              label: AppLocalizations.of(context).queue,
               count: unconsumed.length,
             ),
             const SizedBox(width: 18),
             _buildQueueTab(
               context,
               tab: WorkScreenQueueTab.history,
-              label: 'История',
+              label: AppLocalizations.of(context).history,
               count: consumed.length,
             ),
             const Spacer(),
             if (_currentQueueTab == WorkScreenQueueTab.queue &&
                 unconsumed.isNotEmpty)
               Text(
-                'Всего ${LogClock.formatHoursMinutes(widget.appState.totalUnconsumedSeconds)}',
+                AppLocalizations.of(context).total(
+                  renderMessage(
+                    context,
+                    formatHoursMinutes(
+                      context,
+                      widget.appState.totalUnconsumedSeconds,
+                    ),
+                  ),
+                ),
                 style: TextStyle(
                   fontSize: 11,
                   color: AppColors.muted(isDark),
@@ -740,7 +831,7 @@ class _WorkScreenState extends State<WorkScreen> {
             if (hasRunningTimers &&
                 _currentQueueTab == WorkScreenQueueTab.queue)
               IconButton(
-                tooltip: 'Поставить все таймеры на паузу',
+                tooltip: AppLocalizations.of(context).pauseAllTimers,
                 visualDensity: VisualDensity.compact,
                 onPressed: widget.appState.pauseAllTimers,
                 icon: const Icon(Icons.pause, size: 17),
@@ -794,13 +885,13 @@ class _WorkScreenState extends State<WorkScreen> {
               color: AppColors.muted(isDark),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Очередь логов пуста',
+            Text(
+              AppLocalizations.of(context).theLogQueueIsEmpty,
               style: TextStyle(fontWeight: FontWeight.w500),
             ),
             const SizedBox(height: 4),
             Text(
-              'Запустите таймер на задаче или добавьте время вручную.',
+              AppLocalizations.of(context).startAnIssueTimerOrAddTimeManually,
               style: TextStyle(color: AppColors.muted(isDark), fontSize: 12),
               textAlign: TextAlign.center,
             ),
@@ -855,8 +946,14 @@ class _WorkScreenState extends State<WorkScreen> {
                       height: 24,
                       child: Tooltip(
                         message: canRemoveFromDraft
-                            ? 'Убрать лог из черновика на $draftDate'
-                            : 'После начала отправки состав дня изменить нельзя',
+                            ? AppLocalizations.of(
+                                context,
+                              ).removeLogFromDraftFor(
+                                formatCalendarDate(draftDate),
+                              )
+                            : AppLocalizations.of(
+                                context,
+                              ).dayContentsCannotBeChangedAfterSubmissionHas,
                         child: Checkbox(
                           value: true,
                           onChanged: canRemoveFromDraft
@@ -870,8 +967,13 @@ class _WorkScreenState extends State<WorkScreen> {
                       width: 22,
                       height: 24,
                       child: Tooltip(
-                        message:
-                            'Запись уже включена в день ${_formatDraftDate(draftDate!)}',
+                        message: AppLocalizations.of(context)
+                            .entryIsAlreadyIncludedInTheDayFor(
+                              renderMessage(
+                                context,
+                                _formatDraftDate(draftDate!),
+                              ),
+                            ),
                         child: Icon(
                           Icons.event_available_outlined,
                           size: 17,
@@ -884,7 +986,7 @@ class _WorkScreenState extends State<WorkScreen> {
                       width: 22,
                       height: 24,
                       child: Tooltip(
-                        message: 'Выбрать для сборки дня',
+                        message: AppLocalizations.of(context).selectForDayBuild,
                         child: Checkbox(
                           value: isSelected,
                           onChanged: (_) =>
@@ -923,7 +1025,8 @@ class _WorkScreenState extends State<WorkScreen> {
                   Text(
                     log.isRunning
                         ? LogClock.formatDigital(clockResult.elapsedSeconds)
-                        : LogClock.formatHoursMinutes(
+                        : formatHoursMinutes(
+                            context,
                             clockResult.elapsedSeconds,
                           ),
                     style: TextStyle(
@@ -938,8 +1041,9 @@ class _WorkScreenState extends State<WorkScreen> {
                   ),
                   if (log.isRunning)
                     Tooltip(
-                      message:
-                          'Поставьте таймер на паузу перед выбором для сборки дня',
+                      message: AppLocalizations.of(
+                        context,
+                      ).pauseTheTimerBeforeSelectingItForDay,
                       child: SizedBox(
                         width: 28,
                         height: 28,
@@ -949,7 +1053,7 @@ class _WorkScreenState extends State<WorkScreen> {
                   if (log.isRunning)
                     IconButton(
                       visualDensity: VisualDensity.compact,
-                      tooltip: 'Поставить таймер на паузу',
+                      tooltip: AppLocalizations.of(context).pauseTimer,
                       onPressed: () => widget.appState.pauseLog(log.id),
                       icon: const Icon(Icons.pause, size: 17),
                     ),
@@ -981,7 +1085,7 @@ class _WorkScreenState extends State<WorkScreen> {
                 Padding(
                   padding: const EdgeInsets.only(left: 30, top: 3),
                   child: Text(
-                    'Остановите таймер, чтобы добавить запись в день.',
+                    AppLocalizations.of(context).stopTheTimerToAddThisEntryTo,
                     style: TextStyle(
                       fontSize: 11,
                       color: AppColors.muted(isDark),
@@ -1001,8 +1105,7 @@ class _WorkScreenState extends State<WorkScreen> {
                       const SizedBox(width: 5),
                       Expanded(
                         child: Text(
-                          clockResult.errorMessage ??
-                              'Обнаружен откат системного времени!',
+                          renderMessage(context, clockResult.errorText),
                           style: const TextStyle(
                             fontSize: 11,
                             color: Colors.brown,
@@ -1018,7 +1121,12 @@ class _WorkScreenState extends State<WorkScreen> {
                   children: [
                     Expanded(
                       child: Text(
-                        'Создан: ${_formatDateTime(log.createdAtUtc)}',
+                        AppLocalizations.of(context).created(
+                          renderMessage(
+                            context,
+                            _formatDateTime(log.createdAtUtc),
+                          ),
+                        ),
                         style: TextStyle(
                           fontSize: 11,
                           color: AppColors.muted(isDark),
@@ -1031,13 +1139,17 @@ class _WorkScreenState extends State<WorkScreen> {
                         onPressed: () => _openDraft(draftDate),
                         icon: const Icon(Icons.open_in_new, size: 14),
                         label: Text(
-                          'В дне ${_formatDraftDate(draftDate)} · Открыть',
+                          AppLocalizations.of(context).inDayOpen(
+                            renderMessage(context, _formatDraftDate(draftDate)),
+                          ),
                         ),
                       ),
                       if (!isInSelectedDateDraft && canRemoveFromDraft)
                         PopupMenuButton<String>(
                           key: ValueKey('draft-actions-${log.id}'),
-                          tooltip: 'Действия с записью в другом дне',
+                          tooltip: AppLocalizations.of(
+                            context,
+                          ).actionsForAnEntryInAnotherDay,
                           icon: const Icon(Icons.more_horiz, size: 19),
                           onSelected: (_) =>
                               _removeLogFromDraft(context, log.id),
@@ -1045,14 +1157,19 @@ class _WorkScreenState extends State<WorkScreen> {
                             PopupMenuItem(
                               value: 'remove-from-draft',
                               child: Text(
-                                'Убрать из дня ${_formatDraftDate(draftDate)}',
+                                AppLocalizations.of(context).removeFromDay(
+                                  renderMessage(
+                                    context,
+                                    _formatDraftDate(draftDate),
+                                  ),
+                                ),
                               ),
                             ),
                           ],
                         ),
                     ] else if (!log.isRunning)
                       PopupMenuButton<String>(
-                        tooltip: 'Действия с логом',
+                        tooltip: AppLocalizations.of(context).logActions,
                         icon: const Icon(Icons.more_horiz, size: 19),
                         onSelected: (value) {
                           switch (value) {
@@ -1082,20 +1199,23 @@ class _WorkScreenState extends State<WorkScreen> {
                               break;
                           }
                         },
-                        itemBuilder: (context) => const [
+                        itemBuilder: (context) => [
                           PopupMenuItem(
                             value: 'edit',
-                            child: Text('Редактировать'),
+                            child: Text(AppLocalizations.of(context).edit),
                           ),
-                          PopupMenuItem(value: 'split', child: Text('Разбить')),
+                          PopupMenuItem(
+                            value: 'split',
+                            child: Text(AppLocalizations.of(context).split),
+                          ),
                           PopupMenuItem(
                             value: 'merge',
-                            child: Text('Объединить с…'),
+                            child: Text(AppLocalizations.of(context).mergeWith),
                           ),
                           PopupMenuDivider(),
                           PopupMenuItem(
                             value: 'delete',
-                            child: Text('Удалить'),
+                            child: Text(AppLocalizations.of(context).delete),
                           ),
                         ],
                       ),
@@ -1114,7 +1234,7 @@ class _WorkScreenState extends State<WorkScreen> {
     if (logs.isEmpty) {
       return Center(
         child: Text(
-          'История отправленных логов пока пуста.',
+          AppLocalizations.of(context).noSubmittedLogsInHistoryYet,
           style: TextStyle(color: AppColors.muted(isDark)),
         ),
       );
@@ -1171,7 +1291,7 @@ class _WorkScreenState extends State<WorkScreen> {
                   ),
                   const Spacer(),
                   Text(
-                    LogClock.formatHoursMinutes(log.accumulatedSeconds),
+                    formatHoursMinutes(context, log.accumulatedSeconds),
                     style: const TextStyle(
                       fontFamily: 'IBM Plex Mono',
                       fontFeatures: [FontFeature.tabularFigures()],
@@ -1229,7 +1349,9 @@ class _WorkScreenState extends State<WorkScreen> {
             ),
             const SizedBox(width: 10),
             Text(
-              'История отправок хранится на этом устройстве',
+              AppLocalizations.of(
+                context,
+              ).submissionHistoryIsStoredOnThisDevice,
               style: TextStyle(fontSize: 13, color: AppColors.muted(isDark)),
             ),
           ],
@@ -1245,79 +1367,105 @@ class _WorkScreenState extends State<WorkScreen> {
         color: AppColors.inset(isDark),
         border: Border(top: BorderSide(color: AppColors.line(isDark))),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final summary = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                count == 0
+                    ? AppLocalizations.of(context).noEntriesSelectedFor(
+                        renderMessage(
+                          context,
+                          _formatHeaderDate(
+                            widget.appState.selectedDate,
+                            includeWeekday: false,
+                          ),
+                        ),
+                      )
+                    : AppLocalizations.of(context).selectedLogCount(count),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 13,
+                ),
+              ),
+              Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: formatHoursMinutes(context, totalSec),
+                      style: const TextStyle(fontFamily: 'IBM Plex Mono'),
+                    ),
+                    TextSpan(
+                      text: AppLocalizations.of(context).recordedTime,
+                      style: TextStyle(color: AppColors.muted(isDark)),
+                    ),
+                  ],
+                ),
+                style: const TextStyle(fontSize: 11),
+              ),
+            ],
+          );
+          final actions = <Widget>[
+            OutlinedButton.icon(
+              onPressed: () => _pickAssemblyDate(context),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(0, 36),
+                visualDensity: VisualDensity.standard,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                textStyle: const TextStyle(fontSize: 13),
+              ),
+              icon: const Icon(Icons.calendar_today_outlined, size: 16),
+              label: Text(
+                _formatHeaderDate(
+                  widget.appState.selectedDate,
+                  includeYear: true,
+                ),
+              ),
+            ),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.action(isDark),
+                foregroundColor: AppColors.onAction(isDark),
+                minimumSize: const Size(0, 36),
+                visualDensity: VisualDensity.standard,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                textStyle: const TextStyle(fontSize: 13),
+              ),
+              onPressed: count == 0 ? null : () => _handleBuildDay(context),
+              icon: const Icon(Icons.arrow_forward, size: 16),
+              label: Text(AppLocalizations.of(context).buildDay),
+            ),
+          ];
+          if (constraints.maxWidth < 1000) {
+            return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  count == 0
-                      ? 'Для ${_formatHeaderDate(widget.appState.selectedDate, includeWeekday: false)} записи не выбраны'
-                      : 'Выбрано $count ${_logWord(count)}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w500,
-                    fontSize: 13,
-                  ),
-                ),
-                Text.rich(
-                  TextSpan(
-                    children: [
-                      TextSpan(
-                        text: LogClock.formatHoursMinutes(totalSec),
-                        style: const TextStyle(fontFamily: 'IBM Plex Mono'),
-                      ),
-                      TextSpan(
-                        text: ' исходного времени',
-                        style: TextStyle(color: AppColors.muted(isDark)),
-                      ),
-                    ],
-                  ),
-                  style: const TextStyle(fontSize: 11),
+                summary,
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 16,
+                  runSpacing: 12,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: actions,
                 ),
               ],
-            ),
-          ),
-          Text(
-            'Собрать на',
-            style: TextStyle(fontSize: 12, color: AppColors.muted(isDark)),
-          ),
-          const SizedBox(width: 24),
-          OutlinedButton.icon(
-            onPressed: () => _pickAssemblyDate(context),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(0, 36),
-              visualDensity: VisualDensity.standard,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              textStyle: const TextStyle(fontSize: 13),
-            ),
-            icon: const Icon(Icons.calendar_today_outlined, size: 16),
-            label: Text(
-              _formatHeaderDate(
-                widget.appState.selectedDate,
-                includeYear: true,
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: summary),
+              ...actions.expand(
+                (action) => [const SizedBox(width: 24), action],
               ),
-            ),
-          ),
-          const SizedBox(width: 24),
-          FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.action(isDark),
-              foregroundColor: AppColors.onAction(isDark),
-              minimumSize: const Size(0, 36),
-              visualDensity: VisualDensity.standard,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(6),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              textStyle: const TextStyle(fontSize: 13),
-            ),
-            onPressed: count == 0 ? null : () => _handleBuildDay(context),
-            icon: const Icon(Icons.arrow_forward, size: 16),
-            label: const Text('Собрать день'),
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -1328,9 +1476,6 @@ class _WorkScreenState extends State<WorkScreen> {
       initialDate: widget.appState.selectedDate,
       firstDate: DateTime(2020),
       lastDate: DateTime(2035),
-      helpText: 'Дата для сборки дня',
-      cancelText: 'Отмена',
-      confirmText: 'Выбрать',
     );
     if (picked != null) widget.appState.setSelectedDate(picked);
   }
@@ -1341,9 +1486,13 @@ class _WorkScreenState extends State<WorkScreen> {
       widget.appState.selectTab(1);
     } catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Builder(
+            builder: (context) => Text(renderMessage(context, error)),
+          ),
+        ),
+      );
     }
   }
 
@@ -1355,28 +1504,28 @@ class _WorkScreenState extends State<WorkScreen> {
     bool includeYear = false,
     bool includeWeekday = true,
   }) {
-    const months = [
-      'января',
-      'февраля',
-      'марта',
-      'апреля',
-      'мая',
-      'июня',
-      'июля',
-      'августа',
-      'сентября',
-      'октября',
-      'ноября',
-      'декабря',
+    final months = [
+      AppLocalizations.of(context).january,
+      AppLocalizations.of(context).february,
+      AppLocalizations.of(context).march,
+      AppLocalizations.of(context).april,
+      AppLocalizations.of(context).may,
+      AppLocalizations.of(context).june,
+      AppLocalizations.of(context).july,
+      AppLocalizations.of(context).august,
+      AppLocalizations.of(context).september,
+      AppLocalizations.of(context).october,
+      AppLocalizations.of(context).november,
+      AppLocalizations.of(context).december,
     ];
-    const weekdays = [
-      'понедельник',
-      'вторник',
-      'среда',
-      'четверг',
-      'пятница',
-      'суббота',
-      'воскресенье',
+    final weekdays = [
+      AppLocalizations.of(context).monday539,
+      AppLocalizations.of(context).tuesday540,
+      AppLocalizations.of(context).wednesday541,
+      AppLocalizations.of(context).thursday542,
+      AppLocalizations.of(context).friday543,
+      AppLocalizations.of(context).saturday544,
+      AppLocalizations.of(context).sunday545,
     ];
     final dateText = '${date.day} ${months[date.month - 1]}';
     if (includeYear) return '$dateText ${date.year}';
@@ -1386,19 +1535,10 @@ class _WorkScreenState extends State<WorkScreen> {
   }
 
   String _filterPeriodLabel(IssueFilterPeriod period) => switch (period) {
-    IssueFilterPeriod.days7 => 'За 7 дней',
-    IssueFilterPeriod.days30 => 'За 30 дней',
-    IssueFilterPeriod.all => 'За всё время',
+    IssueFilterPeriod.days7 => AppLocalizations.of(context).lastDays,
+    IssueFilterPeriod.days30 => AppLocalizations.of(context).lastDays504,
+    IssueFilterPeriod.all => AppLocalizations.of(context).allTime,
   };
-
-  String _logWord(int count) {
-    final lastTwo = count % 100;
-    final last = count % 10;
-    if (lastTwo >= 11 && lastTwo <= 14) return 'записей';
-    if (last == 1) return 'запись';
-    if (last >= 2 && last <= 4) return 'записи';
-    return 'записей';
-  }
 
   String _formatDraftDate(String date) {
     final parsed = DateTime.tryParse(date);
@@ -1416,9 +1556,13 @@ class _WorkScreenState extends State<WorkScreen> {
     try {
       widget.appState.removeLogFromDraft(logId);
     } catch (error) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Builder(
+            builder: (context) => Text(renderMessage(context, error)),
+          ),
+        ),
+      );
     }
   }
 
@@ -1433,14 +1577,22 @@ class _WorkScreenState extends State<WorkScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Удалить запись времени?'),
-        content: Text(
-          'Запись «${log.titleSnapshot}» (${LogClock.formatHoursMinutes(log.accumulatedSeconds)}) будет удалена безвозвратно.',
+        title: Text(AppLocalizations.of(context).deleteTimeEntry),
+        content: Builder(
+          builder: (context) => Text(
+            AppLocalizations.of(context).entryWillBePermanentlyDeleted(
+              renderMessage(context, log.titleSnapshot),
+              renderMessage(
+                context,
+                formatHoursMinutes(context, log.accumulatedSeconds),
+              ),
+            ),
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Отмена'),
+            child: Text(AppLocalizations.of(context).cancel),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
@@ -1448,7 +1600,7 @@ class _WorkScreenState extends State<WorkScreen> {
               Navigator.of(ctx).pop();
               widget.appState.deleteLog(log.id);
             },
-            child: const Text('Удалить'),
+            child: Text(AppLocalizations.of(context).delete),
           ),
         ],
       ),

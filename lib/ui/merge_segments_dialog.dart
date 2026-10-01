@@ -1,6 +1,7 @@
+import '../l10n/app_localizations.dart';
+import '../ui/message_format.dart';
 import 'package:flutter/material.dart';
 import '../app_state.dart';
-import '../log_clock.dart';
 import '../models.dart';
 import 'app_theme.dart';
 
@@ -33,7 +34,7 @@ class MergeSegmentsDialog extends StatefulWidget {
 
 class _MergeSegmentsDialogState extends State<MergeSegmentsDialog> {
   Segment? _selectedSegment;
-  String? _errorMessage;
+  Object? _errorMessage;
   bool _isSaving = false;
 
   List<Segment> get _candidates {
@@ -88,13 +89,19 @@ class _MergeSegmentsDialogState extends State<MergeSegmentsDialog> {
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Интервалы успешно объединены.')),
+          SnackBar(
+            content: Builder(
+              builder: (context) => Text(
+                AppLocalizations.of(context).intervalsSuccessfullyMerged,
+              ),
+            ),
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = e.toString();
+          _errorMessage = e;
           _isSaving = false;
         });
       }
@@ -108,7 +115,7 @@ class _MergeSegmentsDialogState extends State<MergeSegmentsDialog> {
     final primaryKey = _getIssueKey(widget.segment.issueId);
 
     return AlertDialog(
-      title: const Text('Объединить интервалы'),
+      title: Text(AppLocalizations.of(context).mergeIntervals),
       content: SizedBox(
         width: 480,
         child: SingleChildScrollView(
@@ -117,7 +124,16 @@ class _MergeSegmentsDialogState extends State<MergeSegmentsDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Текущий интервал: $primaryKey (${_formatTimeRange(widget.segment.startUtc, widget.segment.endUtc)})',
+                AppLocalizations.of(context).currentInterval(
+                  renderMessage(context, primaryKey),
+                  renderMessage(
+                    context,
+                    _formatTimeRange(
+                      widget.segment.startUtc,
+                      widget.segment.endUtc,
+                    ),
+                  ),
+                ),
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 13,
@@ -125,12 +141,17 @@ class _MergeSegmentsDialogState extends State<MergeSegmentsDialog> {
               ),
               const SizedBox(height: 2),
               Text(
-                'Длительность: ${LogClock.formatHoursMinutes(widget.segment.durationSeconds)}',
+                AppLocalizations.of(context).duration376(
+                  renderMessage(
+                    context,
+                    formatHoursMinutes(context, widget.segment.durationSeconds),
+                  ),
+                ),
                 style: TextStyle(fontSize: 12, color: AppColors.muted(isDark)),
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Выберите интервал для объединения:',
+              Text(
+                AppLocalizations.of(context).selectAnIntervalToMerge,
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
               ),
               const SizedBox(height: 8),
@@ -140,7 +161,9 @@ class _MergeSegmentsDialogState extends State<MergeSegmentsDialog> {
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   child: Center(
                     child: Text(
-                      'Нет других интервалов для объединения.',
+                      AppLocalizations.of(
+                        context,
+                      ).noOtherIntervalsAvailableToMerge,
                       style: TextStyle(
                         color: AppColors.muted(isDark),
                         fontSize: 13,
@@ -244,7 +267,8 @@ class _MergeSegmentsDialogState extends State<MergeSegmentsDialog> {
                               ),
                               const SizedBox(width: 8),
                               Text(
-                                LogClock.formatHoursMinutes(
+                                formatHoursMinutes(
+                                  context,
                                   candidate.durationSeconds,
                                 ),
                                 style: const TextStyle(
@@ -263,7 +287,7 @@ class _MergeSegmentsDialogState extends State<MergeSegmentsDialog> {
               if (_errorMessage != null) ...[
                 const SizedBox(height: 12),
                 Text(
-                  _errorMessage!,
+                  renderMessage(context, _errorMessage!),
                   style: const TextStyle(color: Colors.red, fontSize: 12),
                 ),
               ],
@@ -274,7 +298,7 @@ class _MergeSegmentsDialogState extends State<MergeSegmentsDialog> {
       actions: [
         TextButton(
           onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
-          child: const Text('Отмена'),
+          child: Text(AppLocalizations.of(context).cancel),
         ),
         FilledButton(
           onPressed: _isSaving || _selectedSegment == null
@@ -286,7 +310,7 @@ class _MergeSegmentsDialogState extends State<MergeSegmentsDialog> {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Объединить'),
+              : Text(AppLocalizations.of(context).merge),
         ),
       ],
     );

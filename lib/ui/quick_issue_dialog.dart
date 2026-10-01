@@ -1,3 +1,6 @@
+import '../app_message.dart';
+import '../l10n/app_localizations.dart';
+import '../ui/message_format.dart';
 import 'package:flutter/material.dart';
 
 import '../app_state.dart';
@@ -52,7 +55,7 @@ class _QuickIssueDialogState extends State<QuickIssueDialog> {
   late final TextEditingController _inputController;
   late final TextEditingController _noteController;
   Issue? _foundIssue;
-  String? _error;
+  Object? _error;
   bool _isSearching = false;
   bool _isSaving = false;
 
@@ -78,7 +81,13 @@ class _QuickIssueDialogState extends State<QuickIssueDialog> {
   Future<void> _findIssue() async {
     final input = _inputController.text.trim();
     if (input.isEmpty) {
-      setState(() => _error = 'Введите ключ, ID или ссылку на задачу Jira');
+      setState(
+        () => _error = AppMessage(
+          'enterAJiraIssueKeyIdOrLink',
+          [],
+          'Введите ключ, ID или ссылку на задачу Jira',
+        ),
+      );
       return;
     }
     setState(() {
@@ -126,7 +135,8 @@ class _QuickIssueDialogState extends State<QuickIssueDialog> {
     }
   }
 
-  String _friendlyError(Object error) {
+  Object _friendlyError(Object error) {
+    if (error is MessageException) return error.messageText;
     final value = error.toString();
     return value
         .replaceFirst('Bad state: ', '')
@@ -150,13 +160,13 @@ class _QuickIssueDialogState extends State<QuickIssueDialog> {
           Expanded(
             child: Text(
               _isEditing
-                  ? 'Изменить быструю задачу'
-                  : 'Добавить быструю задачу',
+                  ? AppLocalizations.of(context).editQuickIssue
+                  : AppLocalizations.of(context).addQuickIssue,
               style: theme.textTheme.titleLarge?.copyWith(fontSize: 20),
             ),
           ),
           IconButton(
-            tooltip: 'Закрыть',
+            tooltip: AppLocalizations.of(context).close,
             onPressed: busy ? null : () => Navigator.of(context).pop(),
             icon: const Icon(Icons.close, size: 18),
           ),
@@ -169,14 +179,19 @@ class _QuickIssueDialogState extends State<QuickIssueDialog> {
           children: [
             if (!_isEditing) ...[
               Text(
-                'Найдите существующую задачу в подключённой Jira.',
+                AppLocalizations.of(
+                  context,
+                ).findAnExistingIssueInTheConnectedJira,
                 style: TextStyle(
                   color: theme.colorScheme.onSurfaceVariant,
                   fontSize: 13,
                 ),
               ),
               const SizedBox(height: 16),
-              Text('Ключ, ID или ссылка', style: theme.textTheme.labelMedium),
+              Text(
+                AppLocalizations.of(context).keyIdOrLink,
+                style: theme.textTheme.labelMedium,
+              ),
               const SizedBox(height: 6),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -196,8 +211,8 @@ class _QuickIssueDialogState extends State<QuickIssueDialog> {
                         }
                       },
                       onSubmitted: (_) => _findIssue(),
-                      decoration: const InputDecoration(
-                        hintText: 'например, PROJ-123',
+                      decoration: InputDecoration(
+                        hintText: AppLocalizations.of(context).forExampleProj,
                         isDense: true,
                       ),
                     ),
@@ -215,7 +230,7 @@ class _QuickIssueDialogState extends State<QuickIssueDialog> {
                             height: 16,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text('Найти'),
+                        : Text(AppLocalizations.of(context).find),
                   ),
                 ],
               ),
@@ -233,7 +248,7 @@ class _QuickIssueDialogState extends State<QuickIssueDialog> {
                   const SizedBox(width: 7),
                   Expanded(
                     child: Text(
-                      _error!,
+                      renderMessage(context, _error!),
                       style: TextStyle(
                         color: theme.colorScheme.error,
                         fontSize: 12,
@@ -247,7 +262,10 @@ class _QuickIssueDialogState extends State<QuickIssueDialog> {
               if (!_isEditing) const SizedBox(height: 16),
               _IssuePreview(issue: _foundIssue!, isDark: isDark),
               const SizedBox(height: 16),
-              Text('Подсказка', style: theme.textTheme.labelMedium),
+              Text(
+                AppLocalizations.of(context).note,
+                style: theme.textTheme.labelMedium,
+              ),
               const SizedBox(height: 6),
               TextField(
                 key: const ValueKey('quick-issue-note'),
@@ -256,13 +274,15 @@ class _QuickIssueDialogState extends State<QuickIssueDialog> {
                 minLines: 2,
                 maxLines: 3,
                 maxLength: 240,
-                decoration: const InputDecoration(
-                  hintText: 'Необязательно: когда использовать эту задачу',
+                decoration: InputDecoration(
+                  hintText: AppLocalizations.of(
+                    context,
+                  ).optionalWhenToUseThisIssue,
                   alignLabelWithHint: true,
                 ),
               ),
               Text(
-                'Подсказка видна только локально и не отправляется в Jira.',
+                AppLocalizations.of(context).theNoteIsLocalAndIsNotSubmitted,
                 style: TextStyle(
                   color: theme.colorScheme.onSurfaceVariant,
                   fontSize: 11,
@@ -275,7 +295,7 @@ class _QuickIssueDialogState extends State<QuickIssueDialog> {
       actions: [
         TextButton(
           onPressed: busy ? null : () => Navigator.of(context).pop(),
-          child: const Text('Отмена'),
+          child: Text(AppLocalizations.of(context).cancel),
         ),
         FilledButton(
           key: const ValueKey('quick-issue-save'),
@@ -286,7 +306,11 @@ class _QuickIssueDialogState extends State<QuickIssueDialog> {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : Text(_isEditing ? 'Сохранить' : 'Добавить'),
+              : Text(
+                  _isEditing
+                      ? AppLocalizations.of(context).save
+                      : AppLocalizations.of(context).add,
+                ),
         ),
       ],
     );

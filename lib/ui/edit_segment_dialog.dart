@@ -1,3 +1,6 @@
+import '../app_message.dart';
+import '../l10n/app_localizations.dart';
+import '../ui/message_format.dart';
 import 'package:flutter/material.dart';
 import '../models.dart';
 
@@ -30,7 +33,7 @@ class _EditSegmentDialogState extends State<EditSegmentDialog> {
   late TextEditingController _hoursController;
   late TextEditingController _minutesController;
   late TextEditingController _descriptionController;
-  String? _errorMessage;
+  Object? _errorMessage;
 
   @override
   void initState() {
@@ -90,9 +93,6 @@ class _EditSegmentDialogState extends State<EditSegmentDialog> {
     final picked = await showTimePicker(
       context: context,
       initialTime: _startTime,
-      helpText: 'Выберите время начала',
-      cancelText: 'Отмена',
-      confirmText: 'Готово',
     );
     if (picked != null) {
       setState(() {
@@ -105,7 +105,11 @@ class _EditSegmentDialogState extends State<EditSegmentDialog> {
     final durationSec = _parsedDurationSeconds;
     if (durationSec <= 0) {
       setState(() {
-        _errorMessage = 'Длительность должна быть больше 0 минут.';
+        _errorMessage = AppMessage(
+          'durationMustBeGreaterThanMinutes',
+          [],
+          "Длительность должна быть больше 0 минут.",
+        );
       });
       return;
     }
@@ -119,9 +123,7 @@ class _EditSegmentDialogState extends State<EditSegmentDialog> {
       Navigator.of(context).pop();
     } catch (e) {
       setState(() {
-        _errorMessage = e is ArgumentError
-            ? (e.message?.toString() ?? e.toString())
-            : e.toString();
+        _errorMessage = e;
       });
     }
   }
@@ -150,14 +152,14 @@ class _EditSegmentDialogState extends State<EditSegmentDialog> {
             children: [
               Expanded(
                 child: Text(
-                  'Изменить интервал',
+                  AppLocalizations.of(context).editInterval348,
                   style: Theme.of(
                     context,
                   ).textTheme.titleLarge?.copyWith(fontSize: 24),
                 ),
               ),
               IconButton(
-                tooltip: 'Закрыть',
+                tooltip: AppLocalizations.of(context).close,
                 onPressed: () => Navigator.of(context).pop(),
                 constraints: const BoxConstraints.tightFor(
                   width: 24,
@@ -193,7 +195,10 @@ class _EditSegmentDialogState extends State<EditSegmentDialog> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Начало', style: TextStyle(fontSize: 12)),
+                        Text(
+                          AppLocalizations.of(context).start349,
+                          style: TextStyle(fontSize: 12),
+                        ),
                         const SizedBox(height: 7),
                         SizedBox(
                           width: double.infinity,
@@ -217,8 +222,8 @@ class _EditSegmentDialogState extends State<EditSegmentDialog> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Длительность',
+                        Text(
+                          AppLocalizations.of(context).duration,
                           style: TextStyle(fontSize: 12),
                         ),
                         const SizedBox(height: 7),
@@ -228,8 +233,8 @@ class _EditSegmentDialogState extends State<EditSegmentDialog> {
                               child: TextField(
                                 controller: _hoursController,
                                 keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
-                                  hintText: 'Часы',
+                                decoration: InputDecoration(
+                                  hintText: AppLocalizations.of(context).hours,
                                   isDense: true,
                                 ),
                                 onChanged: (_) => setState(() {}),
@@ -240,8 +245,10 @@ class _EditSegmentDialogState extends State<EditSegmentDialog> {
                               child: TextField(
                                 controller: _minutesController,
                                 keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
-                                  hintText: 'Минуты',
+                                decoration: InputDecoration(
+                                  hintText: AppLocalizations.of(
+                                    context,
+                                  ).minutes,
                                   isDense: true,
                                 ),
                                 onChanged: (_) => setState(() {}),
@@ -267,7 +274,7 @@ class _EditSegmentDialogState extends State<EditSegmentDialog> {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        _errorMessage!,
+                        renderMessage(context, _errorMessage!),
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.error,
                           fontSize: 12,
@@ -278,14 +285,19 @@ class _EditSegmentDialogState extends State<EditSegmentDialog> {
                 ),
               ],
               Text(
-                'Окончание: $endFormatted',
+                AppLocalizations.of(
+                  context,
+                ).end(renderMessage(context, endFormatted)),
                 style: TextStyle(
                   fontSize: 12,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
               const SizedBox(height: 22),
-              const Text('Что сделано', style: TextStyle(fontSize: 12)),
+              Text(
+                AppLocalizations.of(context).workDone,
+                style: TextStyle(fontSize: 12),
+              ),
               const SizedBox(height: 7),
               SizedBox(
                 height: 104,
@@ -294,8 +306,10 @@ class _EditSegmentDialogState extends State<EditSegmentDialog> {
                   expands: true,
                   maxLines: null,
                   minLines: null,
-                  decoration: const InputDecoration(
-                    hintText: 'Что было сделано за этот интервал...',
+                  decoration: InputDecoration(
+                    hintText: AppLocalizations.of(
+                      context,
+                    ).workDoneDuringThisInterval,
                     isDense: true,
                     contentPadding: EdgeInsets.all(12),
                   ),
@@ -320,7 +334,7 @@ class _EditSegmentDialogState extends State<EditSegmentDialog> {
                   padding: EdgeInsets.zero,
                   minimumSize: const Size(0, 39),
                 ),
-                child: const Text('Удалить интервал'),
+                child: Text(AppLocalizations.of(context).deleteInterval),
               ),
             OutlinedButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -328,7 +342,7 @@ class _EditSegmentDialogState extends State<EditSegmentDialog> {
                 minimumSize: const Size(82, 39),
                 textStyle: const TextStyle(fontSize: 12),
               ),
-              child: const Text('Отмена'),
+              child: Text(AppLocalizations.of(context).cancel),
             ),
             FilledButton(
               onPressed: _submit,
@@ -336,7 +350,7 @@ class _EditSegmentDialogState extends State<EditSegmentDialog> {
                 minimumSize: const Size(101, 39),
                 textStyle: const TextStyle(fontSize: 12),
               ),
-              child: const Text('Сохранить'),
+              child: Text(AppLocalizations.of(context).save),
             ),
           ],
         ),

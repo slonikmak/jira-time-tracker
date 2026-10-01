@@ -1,3 +1,4 @@
+import 'app_message.dart';
 import 'dart:ffi';
 import 'dart:io';
 import 'package:ffi/ffi.dart';
@@ -88,8 +89,12 @@ class WindowsCredentialStorage implements SecureStorage {
 
       final result = CredWrite(credential, 0);
       if (!result.value) {
-        throw StateError(
-          'Не удалось сохранить учетные данные в Windows Credential Manager',
+        throw AppStateError(
+          AppMessage(
+            'couldNotSaveCredentialsInWindowsCredentialManager',
+            [],
+            'Не удалось сохранить учетные данные в Windows Credential Manager',
+          ),
         );
       }
     } finally {

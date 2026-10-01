@@ -11,6 +11,8 @@ import 'secure_storage.dart';
 import 'single_instance_lock.dart';
 import 'ui/app_theme.dart';
 import 'ui/shell_screen.dart';
+import 'l10n/app_localizations.dart';
+import 'ui/date_localizations.dart';
 
 void main() async {
   if (const bool.fromEnvironment('ENABLE_FLUTTER_DRIVER')) {
@@ -64,9 +66,23 @@ class JiraTimeTrackerApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<UiThemeMode>(
-      valueListenable: appState.themeMode,
-      builder: (context, mode, _) => MaterialApp(
+    return ListenableBuilder(
+      listenable: Listenable.merge([appState.themeMode, appState.language]),
+      builder: (context, _) => MaterialApp(
+        locale: switch (appState.language.value) {
+          UiLanguage.system => null,
+          UiLanguage.ru => const Locale('ru'),
+          UiLanguage.en => const Locale('en'),
+        },
+        localeListResolutionCallback: (locales, supported) =>
+            locales?.firstOrNull?.languageCode == 'ru'
+            ? const Locale('ru')
+            : const Locale('en'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          DayFirstMaterialDelegate(),
+          ...AppLocalizations.localizationsDelegates,
+        ],
         title: 'Jira Time Tracker',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
@@ -75,7 +91,7 @@ class JiraTimeTrackerApp extends StatelessWidget {
             ? ThemeMode.light
             : const bool.fromEnvironment('UI_PREVIEW_DARK')
             ? ThemeMode.dark
-            : switch (mode) {
+            : switch (appState.themeMode.value) {
                 UiThemeMode.system => ThemeMode.system,
                 UiThemeMode.light => ThemeMode.light,
                 UiThemeMode.dark => ThemeMode.dark,
@@ -89,7 +105,10 @@ class JiraTimeTrackerApp extends StatelessWidget {
             child: SizedBox.fromSize(
               size: layoutSize,
               child: MediaQuery(
-                data: media.copyWith(size: layoutSize),
+                data: media.copyWith(
+                  size: layoutSize,
+                  alwaysUse24HourFormat: true,
+                ),
                 child: child!,
               ),
             ),

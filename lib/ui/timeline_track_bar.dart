@@ -1,3 +1,5 @@
+import '../l10n/app_localizations.dart';
+import '../ui/message_format.dart';
 import 'package:flutter/material.dart';
 import '../models.dart';
 import 'app_theme.dart';
@@ -48,9 +50,15 @@ class _TimelineTrackBarState extends State<TimelineTrackBar> {
     final m = (seconds / 60).round();
     final h = m ~/ 60;
     final mins = m % 60;
-    if (h == 0) return '$mins мин';
-    if (mins == 0) return '$h ч';
-    return '$h ч $mins мин';
+    if (h == 0) {
+      return AppLocalizations.of(context).min(renderMessage(context, mins));
+    }
+    if (mins == 0) {
+      return AppLocalizations.of(context).h486(renderMessage(context, h));
+    }
+    return AppLocalizations.of(
+      context,
+    ).hMin(renderMessage(context, h), renderMessage(context, mins));
   }
 
   @override
@@ -79,7 +87,8 @@ class _TimelineTrackBarState extends State<TimelineTrackBar> {
     }
 
     for (final seg in widget.segments) {
-      final key = widget.issueKeys[seg.issueId] ?? 'Задача';
+      final key =
+          widget.issueKeys[seg.issueId] ?? AppLocalizations.of(context).issue;
       final isExisting = seg.sourceLogId.toLowerCase().contains('existing');
       items.add(
         _TrackItem(
@@ -103,8 +112,11 @@ class _TimelineTrackBarState extends State<TimelineTrackBar> {
           start: b.startUtc,
           durationSeconds: b.durationSeconds,
           color: AppColors.trackBreak(isDark),
-          label:
-              'Перерыв · ${_formatTime(b.startUtc)}–${_formatTime(b.endUtc)} (${_formatDuration(b.durationSeconds)})',
+          label: AppLocalizations.of(context).break488(
+            renderMessage(context, _formatTime(b.startUtc)),
+            renderMessage(context, _formatTime(b.endUtc)),
+            renderMessage(context, _formatDuration(b.durationSeconds)),
+          ),
           breakItem: b,
           isBreak: true,
           isExisting: false,
@@ -118,8 +130,11 @@ class _TimelineTrackBarState extends State<TimelineTrackBar> {
           start: worklog.startUtc,
           durationSeconds: worklog.durationSeconds,
           color: AppColors.trackExisting(isDark),
-          label:
-              '${worklog.issueKey ?? worklog.issueId} · уже в Jira · ${_formatTime(worklog.startUtc)}–${_formatTime(worklog.endUtc)}',
+          label: AppLocalizations.of(context).alreadyInJira489(
+            renderMessage(context, worklog.issueKey ?? worklog.issueId),
+            renderMessage(context, _formatTime(worklog.startUtc)),
+            renderMessage(context, _formatTime(worklog.endUtc)),
+          ),
           isBreak: false,
           isExisting: true,
         ),
@@ -420,17 +435,17 @@ class _TimelineTrackBarState extends State<TimelineTrackBar> {
           children: [
             _LegendItem(
               color: AppColors.trackOne(isDark),
-              label: 'Выбранные логи',
+              label: AppLocalizations.of(context).selectedLogs,
               isDark: isDark,
             ),
             _LegendItem(
               color: AppColors.trackExisting(isDark),
-              label: 'Уже в Jira',
+              label: AppLocalizations.of(context).alreadyInJira,
               isDark: isDark,
             ),
             _LegendItem(
               color: AppColors.trackBreak(isDark),
-              label: 'Паузы',
+              label: AppLocalizations.of(context).breaks,
               isDark: isDark,
             ),
           ],

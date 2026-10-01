@@ -1,6 +1,7 @@
+import '../l10n/app_localizations.dart';
+import '../ui/message_format.dart';
 import 'package:flutter/material.dart';
 import '../app_state.dart';
-import '../log_clock.dart';
 import '../models.dart';
 import 'app_theme.dart';
 
@@ -33,7 +34,7 @@ class MergeLogsDialog extends StatefulWidget {
 class _MergeLogsDialogState extends State<MergeLogsDialog> {
   LocalLog? _selectedCandidate;
   String? _targetIssueId;
-  String? _errorMessage;
+  Object? _errorMessage;
   bool _isSaving = false;
 
   List<LocalLog> get _candidates {
@@ -65,8 +66,21 @@ class _MergeLogsDialogState extends State<MergeLogsDialog> {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              'Логи успешно объединены. Общая длительность: ${LogClock.formatHoursMinutes(widget.primaryLog.accumulatedSeconds + candidate.accumulatedSeconds)}',
+            content: Builder(
+              builder: (context) => Text(
+                AppLocalizations.of(
+                  context,
+                ).logsSuccessfullyMergedTotalDuration(
+                  renderMessage(
+                    context,
+                    formatHoursMinutes(
+                      context,
+                      widget.primaryLog.accumulatedSeconds +
+                          candidate.accumulatedSeconds,
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
         );
@@ -74,7 +88,7 @@ class _MergeLogsDialogState extends State<MergeLogsDialog> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = e.toString();
+          _errorMessage = e;
           _isSaving = false;
         });
       }
@@ -87,7 +101,7 @@ class _MergeLogsDialogState extends State<MergeLogsDialog> {
     final candidates = _candidates;
 
     return AlertDialog(
-      title: const Text('Объединить с другим логом'),
+      title: Text(AppLocalizations.of(context).mergeWithAnotherLog),
       content: SizedBox(
         width: 480,
         child: SingleChildScrollView(
@@ -96,17 +110,30 @@ class _MergeLogsDialogState extends State<MergeLogsDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Текущий лог: ${widget.primaryLog.titleSnapshot}',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                AppLocalizations.of(context).currentLog(
+                  renderMessage(context, widget.primaryLog.titleSnapshot),
+                ),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
               ),
               const SizedBox(height: 2),
               Text(
-                'Длительность: ${LogClock.formatHoursMinutes(widget.primaryLog.accumulatedSeconds)}',
+                AppLocalizations.of(context).duration369(
+                  renderMessage(
+                    context,
+                    formatHoursMinutes(
+                      context,
+                      widget.primaryLog.accumulatedSeconds,
+                    ),
+                  ),
+                ),
                 style: TextStyle(fontSize: 12, color: AppColors.muted(isDark)),
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Выберите лог для объединения:',
+              Text(
+                AppLocalizations.of(context).selectALogToMerge,
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
               ),
               const SizedBox(height: 8),
@@ -116,8 +143,11 @@ class _MergeLogsDialogState extends State<MergeLogsDialog> {
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   child: Center(
                     child: Text(
-                      'Нет доступных свободных логов для объединения.',
-                      style: TextStyle(color: AppColors.muted(isDark), fontSize: 13),
+                      AppLocalizations.of(context).noFreeLogsAvailableToMerge,
+                      style: TextStyle(
+                        color: AppColors.muted(isDark),
+                        fontSize: 13,
+                      ),
                     ),
                   ),
                 )
@@ -131,11 +161,13 @@ class _MergeLogsDialogState extends State<MergeLogsDialog> {
                   child: ListView.separated(
                     shrinkWrap: true,
                     itemCount: candidates.length,
-                    separatorBuilder: (_, index) => Divider(height: 1, color: AppColors.line(isDark)),
+                    separatorBuilder: (_, index) =>
+                        Divider(height: 1, color: AppColors.line(isDark)),
                     itemBuilder: (context, index) {
                       final candidate = candidates[index];
                       final isSelected = _selectedCandidate?.id == candidate.id;
-                      final isSameIssue = candidate.issueId == widget.primaryLog.issueId;
+                      final isSameIssue =
+                          candidate.issueId == widget.primaryLog.issueId;
 
                       return InkWell(
                         onTap: () {
@@ -147,7 +179,10 @@ class _MergeLogsDialogState extends State<MergeLogsDialog> {
                           });
                         },
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
                           color: isSelected
                               ? AppColors.selected(isDark)
                               : Colors.transparent,
@@ -171,7 +206,10 @@ class _MergeLogsDialogState extends State<MergeLogsDialog> {
                                       candidate.titleSnapshot,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w500,
+                                        fontSize: 13,
+                                      ),
                                     ),
                                     if (candidate.description.isNotEmpty)
                                       Text(
@@ -188,7 +226,10 @@ class _MergeLogsDialogState extends State<MergeLogsDialog> {
                               ),
                               const SizedBox(width: 8),
                               Text(
-                                LogClock.formatHoursMinutes(candidate.accumulatedSeconds),
+                                formatHoursMinutes(
+                                  context,
+                                  candidate.accumulatedSeconds,
+                                ),
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 12,
@@ -211,19 +252,27 @@ class _MergeLogsDialogState extends State<MergeLogsDialog> {
                   decoration: BoxDecoration(
                     color: Colors.amber.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: Colors.amber.withValues(alpha: 0.3),
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Логи принадлежат разным задачам. Выберите задачу для результата:',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      Text(
+                        AppLocalizations.of(
+                          context,
+                        ).theLogsBelongToDifferentIssuesSelectThe,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       RadioGroup<String>(
                         groupValue: _targetIssueId,
-                        onChanged: (val) => setState(() => _targetIssueId = val),
+                        onChanged: (val) =>
+                            setState(() => _targetIssueId = val),
                         child: Column(
                           children: [
                             RadioListTile<String>(
@@ -255,7 +304,7 @@ class _MergeLogsDialogState extends State<MergeLogsDialog> {
               if (_errorMessage != null) ...[
                 const SizedBox(height: 12),
                 Text(
-                  _errorMessage!,
+                  renderMessage(context, _errorMessage!),
                   style: const TextStyle(color: Colors.red, fontSize: 12),
                 ),
               ],
@@ -266,17 +315,19 @@ class _MergeLogsDialogState extends State<MergeLogsDialog> {
       actions: [
         TextButton(
           onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
-          child: const Text('Отмена'),
+          child: Text(AppLocalizations.of(context).cancel),
         ),
         FilledButton(
-          onPressed: _isSaving || _selectedCandidate == null ? null : _handleMerge,
+          onPressed: _isSaving || _selectedCandidate == null
+              ? null
+              : _handleMerge,
           child: _isSaving
               ? const SizedBox(
                   width: 16,
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Объединить'),
+              : Text(AppLocalizations.of(context).merge),
         ),
       ],
     );

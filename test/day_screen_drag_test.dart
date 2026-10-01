@@ -1,3 +1,4 @@
+import 'package:jira_time_tracker/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
@@ -19,6 +20,7 @@ void main() {
       db = sqlite3.openInMemory();
       store = LocalStore(db);
       store.init();
+      store.setSetting('ui_language', 'ru');
     });
 
     tearDown(() {
@@ -143,7 +145,12 @@ void main() {
         appState.setSelectedDate(DateTime(2026, 9, 14));
 
         await tester.pumpWidget(
-          MaterialApp(home: DayScreen(appState: appState)),
+          MaterialApp(
+            locale: const Locale('ru'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: DayScreen(appState: appState),
+          ),
         );
         await tester.pumpAndSettle();
 

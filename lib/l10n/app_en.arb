@@ -1,0 +1,1692 @@
+{
+  "@@locale": "en",
+  "work": "Work",
+  "day": "Day",
+  "settings": "Settings",
+  "language": "Язык / Language",
+  "systemDefault": "System default",
+  "languageSaveFailed": "Could not save the language: {error}",
+  "@languageSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "days": "7 days",
+  "days9": "30 days",
+  "all": "All",
+  "invalidInputEnterAKeyProjNumericId": "Invalid input: enter a key (PROJ-123), numeric ID or /browse/... link",
+  "firstCheckAndSaveTheJiraConnectionIn": "First check and save the Jira connection in Settings",
+  "jiraApiTokenWasNotFoundInSecure": "Jira API token was not found in secure storage",
+  "firstConnectJiraInSettings": "First connect Jira in Settings.",
+  "jiraApiTokenWasNotFoundInSecure16": "Jira API token was not found in secure storage.",
+  "theApplicationIsReadOnly": "The application is read-only.",
+  "issueKeyOrIdCannotBeEmpty": "Issue key or ID cannot be empty",
+  "issueIsNotInTheLocalCatalogueAnd": "Issue \"{p0}\" is not in the local catalogue and Jira is unavailable.",
+  "@issueIsNotInTheLocalCatalogueAnd": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "durationMustBeGreaterThanZero": "Duration must be greater than zero",
+  "issueWithIdWasNotFoundInThe": "Issue with ID {p0} was not found in the local catalogue",
+  "@issueWithIdWasNotFoundInThe": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "logWithIdWasNotFound": "Log with ID {p0} was not found",
+  "@logWithIdWasNotFound": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "cannotEditARunningLogPauseItFirst": "Cannot edit a running log. Pause it first.",
+  "cannotEditALogThatHasAlreadyBeen": "Cannot edit a log that has already been used.",
+  "cannotEditALogAlreadyIncludedInThe": "Cannot edit a log already included in the day draft ({p0}).",
+  "@cannotEditALogAlreadyIncludedInThe": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "cannotSplitARunningLogStopItFirst": "Cannot split a running log. Stop it first.",
+  "cannotSplitALogThatHasAlreadyBeen": "Cannot split a log that has already been used.",
+  "cannotSplitALogAlreadyIncludedInA": "Cannot split a log already included in a day draft.",
+  "theFirstPartMustBeGreaterThanAnd": "The first part must be greater than 0 and less than the total duration ({p0} s)",
+  "@theFirstPartMustBeGreaterThanAnd": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "atLeastTwoLogsAreRequiredToMerge": "At least two logs are required to merge",
+  "someOfTheSpecifiedLogsWereNotFound": "Some of the specified logs were not found",
+  "cannotMergeRunningLogs": "Cannot merge running logs.",
+  "cannotMergeLogsAlreadyIncludedInADay": "Cannot merge logs already included in a day draft.",
+  "cannotDeleteARunningLogPauseItFirst": "Cannot delete a running log. Pause it first.",
+  "cannotDeleteALogAlreadyIncludedInThe": "Cannot delete a log already included in the day draft ({p0}).",
+  "@cannotDeleteALogAlreadyIncludedInThe": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "errorLoadingJiraEntries": "Error loading Jira entries:",
+  "errorLoadingJiraEntries37": "Error loading Jira entries: {p0}",
+  "@errorLoadingJiraEntries37": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "noActiveJiraConnectionToLoadWorklogs": "No active Jira connection to load worklogs.",
+  "expectedAJiraIssueKeyOrNumericId": "Expected a Jira issue key or numeric ID.",
+  "noActiveJiraConnection": "No active Jira connection.",
+  "expectedAJiraIssueKeyAndANumeric": "Expected a Jira issue key and a numeric attachment ID.",
+  "theAgentRuleCannotBeEmpty": "The agent rule cannot be empty.",
+  "cannotClearADayAfterSubmissionHasStarted": "Cannot clear a day after submission has started or in read-only mode.",
+  "cannotRebuildAPartiallyOrFullySubmittedDay": "Cannot rebuild a partially or fully submitted day.",
+  "noLogsSelectedToBuildTheDay": "No logs selected to build the day.",
+  "aRunningLogCannotBeIncludedInA": "A running log cannot be included in a day draft.",
+  "logIsAlreadyIncludedInADraftFor": "Log {p0} is already included in a draft for {p1}.",
+  "@logIsAlreadyIncludedInADraftFor": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "daySuccessfullyRebuiltSmartRebuild": "Day successfully rebuilt (smart rebuild).",
+  "daySuccessfullyBuilt": "Day successfully built.",
+  "theSegmentListCannotBeEmpty": "The segment list cannot be empty.",
+  "cannotReplaceTheDraftAfterDaySubmissionHas": "Cannot replace the draft after day submission has started.",
+  "theDayDraftHasChangedSinceItWas": "The day draft has changed since it was read. Get a fresh snapshot and try again.",
+  "theDayDraftHasBeenDeletedSinceIt": "The day draft has been deleted since it was read. Get a fresh snapshot and try again.",
+  "sourceWasNotFound": "Source \"{p0}\" was not found.",
+  "@sourceWasNotFound": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "runningSourceCannotBeIncludedInADay": "Running source \"{p0}\" cannot be included in a day.",
+  "@runningSourceCannotBeIncludedInADay": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "submittedSourceCannotBeIncludedAgain": "Submitted source \"{p0}\" cannot be included again.",
+  "@submittedSourceCannotBeIncludedAgain": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "sourceHasNoRecordedTime": "Source \"{p0}\" has no recorded time.",
+  "@sourceHasNoRecordedTime": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "sourceIsAlreadyIncludedInADraftFor": "Source \"{p0}\" is already included in a draft for {p1}.",
+  "@sourceIsAlreadyIncludedInADraftFor": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "theIssueForSourceWasNotFoundIn": "The issue for source {p0} was not found in the local catalogue.",
+  "@theIssueForSourceWasNotFoundIn": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "issueDoesNotMatchSource": "Issue \"{p0}\" does not match source {p1} ({p2}).",
+  "@issueDoesNotMatchSource": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      },
+      "p2": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentDurationMustBeGreaterThanZero": "Segment duration must be greater than zero.",
+  "theSegmentMustStartOnTheTargetDate": "The segment must start on the target date {p0}.",
+  "@theSegmentMustStartOnTheTargetDate": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "theEntireSegmentMustFitWithinTheTarget": "The entire segment must fit within the target date {p0}.",
+  "@theEntireSegmentMustFitWithinTheTarget": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "theDayDraftChangedWhileTheSnapshotWas": "The day draft changed while the snapshot was being prepared. Get a fresh snapshot and try again.",
+  "thisIntervalHasAlreadyBeenSubmittedOrNeeds": "This interval has already been submitted or needs reconciliation with Jira.",
+  "durationMustBeGreaterThanMinutes": "Duration must be greater than 0 minutes.",
+  "theNextIntervalIsPinnedOrHasAlready": "The next interval is pinned or has already been submitted. It cannot be moved.",
+  "theSplitPointMustBeGreaterThanAnd": "The split point must be greater than 0 and less than the segment duration ({p0} s)",
+  "@theSplitPointMustBeGreaterThanAnd": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "onlySegmentsFromTheSameSourceLogCan": "Only segments from the same source log can be merged.",
+  "theSourceLogForTheSegmentsWasNot": "The source log for the segments was not found.",
+  "cannotRebuildADayAfterSubmissionHasStarted": "Cannot rebuild a day after submission has started or in read-only mode.",
+  "daySuccessfullyRebuiltWithTheOrderPreserved": "Day successfully rebuilt with the order preserved.",
+  "endTimeMustBeAfterStartTime": "End time must be after start time.",
+  "cannotChangeTheBoundaryThereIsAJira": "Cannot change the boundary: there is a Jira entry on the left ({p0}).",
+  "@cannotChangeTheBoundaryThereIsAJira": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "thePreviousTaskMustBeAtLeastMinute": "The previous task must be at least 1 minute long.",
+  "cannotChangeTheBoundaryThereIsAJira76": "Cannot change the boundary: there is a Jira entry on the right ({p0}).",
+  "@cannotChangeTheBoundaryThereIsAJira76": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "theNextTaskMustBeAtLeastMinute": "The next task must be at least 1 minute long.",
+  "notEnoughFreeTimeBeforeJiraEntryRequires": "Not enough free time before Jira entry {p0}: requires {p1} min, available {p2} min.",
+  "@notEnoughFreeTimeBeforeJiraEntryRequires": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      },
+      "p2": {
+        "type": "String"
+      }
+    }
+  },
+  "jiraTokenWasNotFoundInSecureStorage": "Jira token was not found in secure storage",
+  "submittingEntriesToJira": "Submitting entries to Jira...",
+  "allEntriesWereSuccessfullySubmittedToJira": "All entries ({p0}) were successfully submitted to Jira!",
+  "@allEntriesWereSuccessfullySubmittedToJira": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "submissionError": "Submission error: {p0}",
+  "@submissionError": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "submissionFinishedSentFailedUnknown": "Submission finished: {p0} sent, {p1} failed, {p2} unknown.",
+  "@submissionFinishedSentFailedUnknown": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      },
+      "p2": {
+        "type": "String"
+      }
+    }
+  },
+  "errorSubmittingToJira": "Error submitting to Jira: {p0}",
+  "@errorSubmittingToJira": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "reconciliationError": "Reconciliation error: {p0}",
+  "@reconciliationError": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "worklogSuccessfullyLinked": "Worklog successfully linked!",
+  "errorLinkingTheWorklog": "Error linking the worklog",
+  "segmentResetToPendingSubmissionIsAllowedAgain": "Segment reset to Pending. Submission is allowed again.",
+  "conflictPinnedTaskOverlapsTask": "Conflict: pinned task \"{p0}\" overlaps task \"{p1}\".",
+  "@conflictPinnedTaskOverlapsTask": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "conflictPinnedTaskOverlapsExistingJiraEntry": "Conflict: pinned task \"{p0}\" overlaps existing Jira entry \"{p1}\".",
+  "@conflictPinnedTaskOverlapsExistingJiraEntry": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "theLogHasAZeroOrNegativeDuration": "The log has a zero or negative duration.",
+  "conflictExistingJiraEntriesOverlapEachOther": "Conflict: existing Jira entries overlap each other.",
+  "existingWorklog": "Existing worklog",
+  "segment": "Segment",
+  "tasksDoNotFitIntoTheSelectedDate": "Tasks do not fit into the selected date (before 23:59:59). Reduce the duration or move some tasks to another day.",
+  "existingJiraEntriesAlreadyOccupyOrMoreHours": "Existing Jira entries already occupy {p0} or more hours.",
+  "@existingJiraEntriesAlreadyOccupyOrMoreHours": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "existingJiraEntriesOrPinnedTasksFallOutside": "Existing Jira entries or pinned tasks fall outside the permitted 24-hour day window.",
+  "withExistingEntriesAndPinnedTasksTheDay": "With existing entries and pinned tasks, the day exceeds the 24-hour limit.",
+  "pinnedTask": "Pinned task",
+  "existingEntriesBreaksAndPinnedTasksHaveExhausted": "Existing entries, breaks and pinned tasks have exhausted the work time budget.",
+  "aDurationLockedLogIsShorterThanThe": "A duration-locked log is shorter than the minimum work interval of 15 minutes.",
+  "lockedLogsRequireHMinButOnlyH": "Locked logs require {p0} h {p1} min, but only {p2} h {p3} min is available.",
+  "@lockedLogsRequireHMinButOnlyH": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      },
+      "p2": {
+        "type": "String"
+      },
+      "p3": {
+        "type": "String"
+      }
+    }
+  },
+  "allLogsAreLockedHMinButThe": "All logs are locked ({p0} h {p1} min), but the budget is {p2} h {p3} min. Unlock at least one log.",
+  "@allLogsAreLockedHMinButThe": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      },
+      "p2": {
+        "type": "String"
+      },
+      "p3": {
+        "type": "String"
+      }
+    }
+  },
+  "notEnoughTimeEachSelectedLogRequiresAt": "Not enough time: each selected log requires at least 15 minutes.",
+  "cannotFitWorkIntervalsOfAtLeastMinutes": "Cannot fit work intervals of at least 15 minutes with the required breaks. Change the selected logs or day settings.",
+  "theTotalDayDurationSExceedsHours": "The total day duration ({p0} s) exceeds 24 hours.",
+  "@theTotalDayDurationSExceedsHours": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "totalWorkTimeExceedsHours": "Total work time exceeds 24 hours.",
+  "segmentHasANonPositiveDuration": "Segment {p0} has a non-positive duration.",
+  "@segmentHasANonPositiveDuration": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentIsShorterThanTheMinimumOfMinutes": "Segment {p0} is shorter than the minimum of 10 minutes.",
+  "@segmentIsShorterThanTheMinimumOfMinutes": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentFallsOutsideTheWorkDay": "Segment {p0} falls outside the work day.",
+  "@segmentFallsOutsideTheWorkDay": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "breakHasANonPositiveDuration": "Break {p0} has a non-positive duration.",
+  "@breakHasANonPositiveDuration": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "breakFallsOutsideTheWorkDay": "Break {p0} falls outside the work day.",
+  "@breakFallsOutsideTheWorkDay": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "existingEntryHasANonPositiveDuration": "Existing entry {p0} has a non-positive duration.",
+  "@existingEntryHasANonPositiveDuration": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "existingEntryFallsOutsideTheWorkDay": "Existing entry {p0} falls outside the work day.",
+  "@existingEntryFallsOutsideTheWorkDay": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "overlapDetectedAnd": "Overlap detected: {p0} ({p1} - {p2}) and {p3} ({p4} - {p5}).",
+  "@overlapDetectedAnd": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      },
+      "p2": {
+        "type": "String"
+      },
+      "p3": {
+        "type": "String"
+      },
+      "p4": {
+        "type": "String"
+      },
+      "p5": {
+        "type": "String"
+      }
+    }
+  },
+  "breaksMustHaveAWorkIntervalBetweenThem": "Breaks must have a work interval between them.",
+  "theRequiredBreakBetweenWorkIntervalsAndIs": "The required break between work intervals {p0} and {p1} is missing.",
+  "@theRequiredBreakBetweenWorkIntervalsAndIs": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "cannotPlaceTheLongBreakWithinTheStart": "Cannot place the long break within the start range. Change the day settings.",
+  "cannotPlaceTheLongBreakWithinTheStart120": "Cannot place the long break within the start range: the time is occupied. Change the day settings.",
+  "cannotPlaceTheRequiredNumberOfShortBreaks": "Cannot place the required number of short breaks: the free gap is too short. Change the day settings.",
+  "cannotPlaceTheRequiredNumberOfShortBreaks122": "Cannot place the required number of short breaks in the free time. Change the day settings.",
+  "candidate": "Candidate",
+  "couldNotGetTheJiraSiteSCloudid": "Could not get the Jira site's cloudId (code: {p0})",
+  "@couldNotGetTheJiraSiteSCloudid": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "networkErrorRequestingCloudid": "Network error requesting cloudId: {p0}",
+  "@networkErrorRequestingCloudid": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "invalidEmailOrApiTokenUnauthorized": "Invalid email or API token (401 Unauthorized)",
+  "accessDeniedForbidden": "Access denied (403 Forbidden)",
+  "rateLimitExceededTooManyRequests": "Rate limit exceeded (429 Too Many Requests){p0}",
+  "@rateLimitExceededTooManyRequests": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "jiraApiError": "Jira API error: {p0} {p1}",
+  "@jiraApiError": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "jiraUrlIsMissing": "Jira URL is missing",
+  "atlassianAccountEmailIsMissing": "Atlassian account email is missing",
+  "atlassianApiTokenIsMissing": "Atlassian API token is missing",
+  "couldNotConnectViaEitherTheDirectOr": "Could not connect via either the direct or scoped route: {p0}",
+  "@couldNotConnectViaEitherTheDirectOr": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "errorCheckingTheScopedRoute": "Error checking the scoped route: {p0}",
+  "@errorCheckingTheScopedRoute": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "issueWasNotFoundInJiraNotFound": "Issue \"{p0}\" was not found in Jira (404 Not Found)",
+  "@issueWasNotFoundInJiraNotFound": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "jiraAuthenticationErrorUnauthorized": "Jira authentication error (401 Unauthorized)",
+  "accessToTheJiraIssueIsDeniedForbidden": "Access to the Jira issue is denied (403 Forbidden)",
+  "errorLoadingIssue": "Error loading issue \"{p0}\": {p1} {p2}",
+  "@errorLoadingIssue": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      },
+      "p2": {
+        "type": "String"
+      }
+    }
+  },
+  "jiraReturnedAnIncompleteCommentList": "Jira returned an incomplete comment list",
+  "attachmentWasNotFoundInTheSpecifiedJira": "Attachment was not found in the specified Jira issue",
+  "errorLoadingJiraAttachmentCode": "Error loading Jira attachment (code: {p0})",
+  "@errorLoadingJiraAttachmentCode": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "errorLoadingJiraDataCode": "Error loading Jira data (code: {p0})",
+  "@errorLoadingJiraDataCode": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "errorSearchingJiraForIssuesWithWorklogsCode": "Error searching Jira for issues with worklogs (code: {p0})",
+  "@errorSearchingJiraForIssuesWithWorklogsCode": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "errorLoadingWorklogsForIssueCode": "Error loading worklogs for issue \"{p0}\" (code: {p1})",
+  "@errorLoadingWorklogsForIssueCode": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "jiraSResponseDoesNotContainTheCreated": "Jira's 201 response does not contain the created worklog ID",
+  "invalidJsonInJiraSResponse": "Invalid JSON in Jira's 201 response: {p0}",
+  "@invalidJsonInJiraSResponse": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "jiraRejectedTheRequestCode": "Jira rejected the request (code {p0})",
+  "@jiraRejectedTheRequestCode": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "jiraServerErrorCode": "Jira server error (code {p0})",
+  "@jiraServerErrorCode": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "connectionLostOrTimedOut": "Connection lost or timed out: {p0}",
+  "@connectionLostOrTimedOut": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "storageIsReadOnlyAnotherApplicationInstanceHolds": "Storage is read-only: another application instance holds the write lock.",
+  "logIsAlreadyIncludedInADraftFor152": "Log {p0} is already included in a draft for {p1}.",
+  "@logIsAlreadyIncludedInADraftFor152": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "cannotRemoveALogAfterDaySubmissionTo": "Cannot remove a log after day submission to Jira has started.",
+  "negativeTimeDifferenceSTheSystemClockMoved": "Negative time difference ({p0} s): the system clock moved backwards. Check the log.",
+  "@negativeTimeDifferenceSTheSystemClockMoved": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "hM": "{p0}h {p1}m",
+  "@hM": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "m": "{p0}m",
+  "@m": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "dayStartEnterATimeFromToFrom": "Day start: enter a time from 00:00 to 23:59, from ≤ to.",
+  "dayDurationEnterAPositiveDurationUpTo": "Day duration: enter a positive duration up to 24 hours, from ≤ to.",
+  "longBreakStartEnterATimeFromTo": "Long break start: enter a time from 00:00 to 23:59, from ≤ to.",
+  "longBreakDurationEnterToDisableItOr": "Long break duration: enter 0–0 to disable it or a positive duration, from ≤ to.",
+  "shortBreaksEnterAnIntegerFromToFrom": "Short breaks: enter an integer from 0 to {p0}, from ≤ to.",
+  "@shortBreaksEnterAnIntegerFromToFrom": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "shortBreakDurationEnterAPositiveDurationFrom": "Short break duration: enter a positive duration, from ≤ to.",
+  "scheduleSegment": "Schedule segment",
+  "dayStart": "Day start",
+  "dayEnd": "Day end",
+  "couldNotSaveCredentialsInWindowsCredentialManager": "Could not save credentials in Windows Credential Manager",
+  "selectAnIssueFromTheList": "Select an issue from the list",
+  "selectedIssueWasNotFound": "Selected issue was not found",
+  "addedTo": "Added {p0} to {p1}",
+  "@addedTo": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "addTime": "Add time",
+  "close": "Close",
+  "theEntryWillAppearInTheQueueNo": "The entry will appear in the queue. No timer is needed.",
+  "issue": "Issue",
+  "noIssuesAvailableAddAnIssueFirst": "No issues available. Add an issue first.",
+  "quickIssues": "QUICK ISSUES",
+  "recentIssues": "RECENT ISSUES",
+  "hours": "Hours",
+  "minutes": "Minutes",
+  "workDone": "Work done",
+  "optional": "Optional",
+  "forExampleTheLoginFormAndErrorHandling": "For example, the login form and error handling",
+  "setStartTime": "Set start time",
+  "newEntry": "New entry · {p0}",
+  "@newEntry": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "start": "· start {p0}",
+  "@start": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "clearFixedStartTime": "Clear fixed start time",
+  "cancel": "Cancel",
+  "saveEntry": "Save entry",
+  "dayTimeline": "Day timeline",
+  "submissionResultNeedsChecking": "Submission result needs checking",
+  "dayPartiallySubmitted": "Day partially submitted",
+  "couldNotSubmitEntries": "Could not submit entries",
+  "sentFailedWithAnUnknownResultResubmissionOf": "{p0} sent, {p1} failed, {p2} with an unknown result. Resubmission of unknown entries is blocked.",
+  "@sentFailedWithAnUnknownResultResubmissionOf": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      },
+      "p2": {
+        "type": "String"
+      }
+    }
+  },
+  "sentNotSentFailedEntriesCanBeResubmitted": "{p0} sent, {p1} not sent. Failed entries can be resubmitted.",
+  "@sentNotSentFailedEntriesCanBeResubmitted": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "loadingJiraEntries": "Loading Jira entries...",
+  "jiraEntriesForTheSelectedDay": "Jira entries for the selected day",
+  "noJiraEntriesForTheSelectedDay": "No Jira entries for the selected day",
+  "buildAScheduleFromTheSelectedLogs": "Build a schedule from the selected logs",
+  "allEntriesSubmitted": "All entries submitted",
+  "submissionResult": "Submission result",
+  "draftSavedOnThisDevice": "{p0} · Draft saved on this device",
+  "@draftSavedOnThisDevice": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "selectADate": "Select a date",
+  "select": "Select",
+  "moreScheduleActions": "More schedule actions",
+  "selectDate": "Select date ({p0})",
+  "@selectDate": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "previousDay": "Previous day",
+  "nextDay": "Next day",
+  "today": "Today",
+  "refreshJiraEntries": "Refresh Jira entries",
+  "rebuildDay": "Rebuild day",
+  "submissionResults": "Submission results",
+  "clear": "Clear",
+  "smartRebuild": "Smart rebuild",
+  "dayBoundaries": "Day boundaries",
+  "wholeDayIncludingBreaks": "Whole day: {p0} including breaks",
+  "@wholeDayIncludingBreaks": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "sent": "Sent",
+  "newTime": "New time",
+  "ofEntries": "{p0} of {p1, plural, one {{p1} entry} other {{p1} entries}}",
+  "@ofEntries": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "int"
+      }
+    }
+  },
+  "entriesInTheSchedule": "{p0} entries in the schedule",
+  "@entriesInTheSchedule": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "entriesToSubmit": "{count, plural, one {{count} entry} other {{count} entries}} to submit",
+  "@entriesToSubmit": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "alreadyInJira": "Already in Jira",
+  "willNotBeSubmittedAgain": "Will not be submitted again",
+  "breaks": "Breaks",
+  "excludedFromWorkTime": "Excluded from work time",
+  "rebuildIsUnavailableAfterSubmissionHasStartedResolve": "Rebuild is unavailable after submission has started. Resolve all results first.",
+  "reconcileUnknownResultsBeforeResubmitting": "Reconcile unknown results before resubmitting.",
+  "resubmissionAffectsOnlyEntriesThatHaveNotBeen": "Resubmission affects only entries that have not been sent.",
+  "successfulEntriesAreNeverSubmittedAgain": "Successful entries are never submitted again.",
+  "entriesForThisDay": "Entries for this day",
+  "successfulEntriesAreNeverSubmittedAgain229": "Successful entries are never submitted again",
+  "pendingSubmission": "Pending submission",
+  "sending": "Sending...",
+  "notSent": "Not sent",
+  "checkingTheResult": "Checking the result",
+  "noDescription": "(no description)",
+  "actionsForAnUnknownResult": "Actions for an unknown result",
+  "reconcileResultA": "Reconcile result (A15)",
+  "resolveManuallyA": "Resolve manually (A15)",
+  "couldNotLoadJiraEntries": "Could not load Jira entries",
+  "noJiraEntriesForThisDay": "No Jira entries for this day",
+  "buildADayFromYourLogs": "Build a day from your logs",
+  "retryLoadingUsingTheDateMenu": "Retry loading using the date menu.",
+  "selectEntriesAndTheDateOnTheWork": "Select entries and the date on the Work tab.",
+  "selectLogs": "Select logs",
+  "theScheduleNeedsChecking": "The schedule needs checking",
+  "submissionToJiraIsBlocked": "{p0} {p1} · submission to Jira is blocked",
+  "@submissionToJiraIsBlocked": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "scheduleErrors": "Schedule errors",
+  "showErrors": "Show errors",
+  "sources": "Sources",
+  "logsToInclude": "Logs to include",
+  "recordedTimeScheduledTime": "Recorded time → scheduled time",
+  "selectLogsForTheDay": "Select logs for the day",
+  "noSources": "No sources",
+  "durationLockedClickToUnlock": "Duration locked (click to unlock)",
+  "lockDurationWhenRebuilding": "Lock duration when rebuilding",
+  "theQueueHasNoFreeStoppedLogsAdd": "The queue has no free stopped logs. Add time on the Work tab.",
+  "inTheDraftFor": "In the draft for {p0}",
+  "@inTheDraftFor": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "durationLocked": "Duration locked",
+  "lockDuration": "Lock duration",
+  "noPlanBuiltForThisDayYet": "No plan built for this day yet",
+  "selectLogsOnTheLeftAndClickBuild": "Select logs on the left and click Build day",
+  "buildDay": "Build day",
+  "schedule": "Schedule",
+  "clickAnIntervalToEditIt": "Click an interval to edit it",
+  "jiraEntriesAreReadOnly": "Jira entries are read-only",
+  "dragToReorder": "Drag to reorder",
+  "timePinned": "Time pinned",
+  "alreadySubmittedToJira": "Already submitted to Jira",
+  "editIntervalA": "Edit interval (A13)",
+  "moreActions": "More actions",
+  "moveUp": "Move up",
+  "moveDown": "Move down",
+  "unpinTime": "Unpin time",
+  "pinTime": "Pin time",
+  "unlock": "Unlock",
+  "splitInterval": "Split interval",
+  "mergeIntervals": "Merge intervals",
+  "deleteInterval": "Delete interval",
+  "break278": "Break",
+  "editInterval": "Edit interval",
+  "alreadyInJiraReadOnly": "Already in Jira (read-only)",
+  "pending": "Pending",
+  "error": "Error",
+  "unknown": "Unknown",
+  "planReadyToSubmit": "Plan ready to submit",
+  "theScheduleHasErrors": "The schedule has errors",
+  "entriesSent": "{p0} · {p1, plural, one {{p1} entry} other {{p1} entries}} sent",
+  "@entriesSent": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "int"
+      }
+    }
+  },
+  "checkTheUnknownResultInJiraFirst": "Check the unknown result in Jira first",
+  "entriesSomeSubmissionsFailed": "{p0} · {p1, plural, one {{p1} entry} other {{p1} entries}}, some submissions failed",
+  "@entriesSomeSubmissionsFailed": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "int"
+      }
+    }
+  },
+  "entriesWillBeAddedToJira": "{p0} · {p1, plural, one {{p1} entry} other {{p1} entries}} will be added to Jira",
+  "@entriesWillBeAddedToJira": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "int"
+      }
+    }
+  },
+  "backToWork": "Back to work",
+  "checkInJira": "Check in Jira",
+  "retrySubmission": "Retry submission",
+  "submitToJira": "Submit to Jira",
+  "monday": "Monday",
+  "tuesday": "Tuesday",
+  "wednesday": "Wednesday",
+  "thursday": "Thursday",
+  "friday": "Friday",
+  "saturday": "Saturday",
+  "sunday": "Sunday",
+  "january": "January",
+  "february": "February",
+  "march": "March",
+  "april": "April",
+  "may": "May",
+  "june": "June",
+  "july": "July",
+  "august": "August",
+  "september": "September",
+  "october": "October",
+  "november": "November",
+  "december": "December",
+  "smartRebuildTheDay": "Smart rebuild the day?",
+  "theCurrentDraftWillBeReplacedAndManual": "The current draft will be replaced and manual time edits will be lost. The schedule will be optimised with breaks and split long tasks.",
+  "rebuild": "Rebuild",
+  "clearTheDay": "Clear the day?",
+  "allDraftIntervalsAndBreaksWillBeRemoved": "All draft intervals and breaks will be removed. Source logs will return to the queue. Jira entries will remain on screen.",
+  "rebuildTheDay": "Rebuild the day?",
+  "theScheduleWillBeRebuiltWithOrderAnd": "The schedule will be rebuilt with order and pinned intervals preserved. Manual time edits will be replaced.",
+  "dayRebuiltWithOrderAndPinnedIntervalsPreserved": "Day rebuilt with order and pinned intervals preserved.",
+  "breakCollapsedAndTasksMovedTogether": "Break collapsed and tasks moved together.",
+  "previousTaskExtendedToFillTheBreak": "Previous task extended to fill the break.",
+  "breakDurationUpdated": "Break duration updated.",
+  "deleteInterval324": "Delete interval?",
+  "theIntervalWillBeRemovedFromTheSchedule": "The interval will be removed from the schedule. If it is the last interval for its source in this day, the source log will return to the queue.",
+  "delete": "Delete",
+  "successfullySubmittedEntriesToJira": "Successfully submitted {p0, plural, one {{p0} entry} other {{p0} entries}} to Jira!",
+  "@successfullySubmittedEntriesToJira": {
+    "placeholders": {
+      "p0": {
+        "type": "int"
+      }
+    }
+  },
+  "sentFailedUnknown": "Sent: {p0}, Failed: {p1}, Unknown: {p2}",
+  "@sentFailedUnknown": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      },
+      "p2": {
+        "type": "String"
+      }
+    }
+  },
+  "resolveUnknownStatusA": "Resolve unknown status (A15)",
+  "theSegmentHasAnUnknownResultTheJira": "The segment has an unknown result (the Jira response was lost or interrupted). Blind retry is prohibited.",
+  "optionEnterTheIdOfTheCreatedJira": "Option 1: Enter the ID of the created Jira entry",
+  "theApplicationWillCheckTheEntrySAuthor": "The application will check the entry's author, date and duration before confirming:",
+  "worklogIdForExample": "Worklog ID (for example: 10042)",
+  "entrySuccessfullyConfirmedAndLinked": "Entry successfully confirmed and linked!",
+  "linkingError": "Linking error",
+  "link": "Link",
+  "optionConfirmThatTheEntryDoesNotExist": "Option 2: Confirm that the entry does not exist",
+  "ifYouHaveOpenedJiraInABrowser": "If you have opened Jira in a browser and verified that the issue does not contain this entry, you can reset the interval to Pending for resubmission.",
+  "noEntryInJiraAllowRetry": "No entry in Jira, allow retry",
+  "intervalResetToPendingForResubmission": "Interval reset to Pending for resubmission.",
+  "editTimeEntry": "Edit time entry",
+  "workDoneDescription": "Work done (description)",
+  "briefDescriptionOfTheWork": "Brief description of the work...",
+  "fixedStart": "Fixed start",
+  "save": "Save",
+  "selectStartTime": "Select start time",
+  "done": "Done",
+  "editInterval348": "Edit interval",
+  "start349": "Start",
+  "duration": "Duration",
+  "end": "End: {p0}",
+  "@end": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "workDoneDuringThisInterval": "Work done during this interval...",
+  "breakDurationMustBeGreaterThanMinutes": "Break duration must be greater than 0 minutes.",
+  "break354": "Break ({p0})",
+  "@break354": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "quickActions": "Quick actions:",
+  "collapseBreak": "Collapse break",
+  "moveFollowingTasksTogetherRemoveTheGap": "Move following tasks together (remove the gap)",
+  "extendPreviousTask": "Extend previous task",
+  "extendTaskBy": "Extend task by {p0}",
+  "@extendTaskBy": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "thePreviousEntryIsFixedInJira": "The previous entry is fixed in Jira",
+  "thisIsTheStartOfTheDayNo": "This is the start of the day (no previous task)",
+  "setBreakDuration": "Set break duration:",
+  "followingTasksWillShiftTogetherPreservingTheirDurations": "Following tasks will shift together, preserving their durations.",
+  "min": "{p0} min",
+  "@min": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "apply": "Apply",
+  "logsSuccessfullyMergedTotalDuration": "Logs successfully merged. Total duration: {p0}",
+  "@logsSuccessfullyMergedTotalDuration": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "mergeWithAnotherLog": "Merge with another log",
+  "currentLog": "Current log: {p0}",
+  "@currentLog": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "duration369": "Duration: {p0}",
+  "@duration369": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "selectALogToMerge": "Select a log to merge:",
+  "noFreeLogsAvailableToMerge": "No free logs available to merge.",
+  "theLogsBelongToDifferentIssuesSelectThe": "The logs belong to different issues. Select the issue for the result:",
+  "merge": "Merge",
+  "intervalsSuccessfullyMerged": "Intervals successfully merged.",
+  "currentInterval": "Current interval: {p0} ({p1})",
+  "@currentInterval": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "duration376": "Duration: {p0}",
+  "@duration376": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "selectAnIntervalToMerge": "Select an interval to merge:",
+  "noOtherIntervalsAvailableToMerge": "No other intervals available to merge.",
+  "enterAJiraIssueKeyIdOrLink": "Enter a Jira issue key, ID or link",
+  "editQuickIssue": "Edit quick issue",
+  "addQuickIssue": "Add quick issue",
+  "findAnExistingIssueInTheConnectedJira": "Find an existing issue in the connected Jira.",
+  "keyIdOrLink": "Key, ID or link",
+  "forExampleProj": "for example, PROJ-123",
+  "find": "Find",
+  "note": "Note",
+  "optionalWhenToUseThisIssue": "Optional: when to use this issue",
+  "theNoteIsLocalAndIsNotSubmitted": "The note is local and is not submitted to Jira.",
+  "add": "Add",
+  "m390": "{p0} m",
+  "@m390": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "h": "{p0} h",
+  "@h": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "hM392": "{p0} h {p1} m",
+  "@hM392": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "enterTimeInHhMmFormat": "Enter time in HH:MM format.",
+  "enterADurationForExampleHM": "Enter a duration, for example 7 h 30 m.",
+  "enterADurationForExampleH": "Enter a duration, for example 8 h.",
+  "enterADurationForExampleM": "Enter a duration, for example 30 m.",
+  "enterADurationForExampleM398": "Enter a duration, for example 45 m.",
+  "enterAnIntegerFrom": "Enter an integer from 0.",
+  "enterADurationForExampleM400": "Enter a duration, for example 5 m.",
+  "enterADurationForExampleM401": "Enter a duration, for example 10 m.",
+  "dayBuildSettingsSaved": "Day build settings saved.",
+  "couldNotSaveSettings": "Could not save settings: {p0}",
+  "@couldNotSaveSettings": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "connectionError": "Connection error: {p0}",
+  "@connectionError": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "jiraConnectionSuccessfullySaved": "Jira connection successfully saved",
+  "quickIssues406": "Quick issues",
+  "savedIssuesForQuicklyAddingTime": "Saved issues for quickly adding time.",
+  "addIssue": "Add issue",
+  "connectJiraFirst": "Connect Jira first",
+  "quickIssuesAreStoredSeparatelyForEachSite": "Quick issues are stored separately for each site and account.",
+  "goToConnection": "Go to connection",
+  "inReadOnlyModeYouCanViewThe": "In read-only mode you can view the list but cannot change it.",
+  "noQuickIssuesYet": "No quick issues yet",
+  "addAFrequentlyUsedJiraIssueToShow": "Add a frequently used Jira issue to show it here and on the Work screen.",
+  "jiraConnection": "Jira connection",
+  "dayBuild": "Day build",
+  "localApi": "Local API",
+  "settings418": "Settings",
+  "jiraConnectionDayBuildQuickIssuesAndLocal": "Jira connection, day build, quick issues and local API.",
+  "theme": "Theme",
+  "systemDefault422": "System default",
+  "light": "Light",
+  "dark": "Dark",
+  "couldNotSaveTheTheme": "Could not save the theme: {p0}",
+  "@couldNotSaveTheTheme": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "theThemeCannotBeChangedInReadOnly": "The theme cannot be changed in read-only mode.",
+  "smartRebuildChoosesValuesWithinTheseRanges": "Smart rebuild chooses values within these ranges.",
+  "parameter": "PARAMETER",
+  "from": "FROM",
+  "to": "TO",
+  "dayDuration": "Day duration",
+  "longBreakStart": "Long break start",
+  "longBreakDuration": "Long break duration",
+  "shortBreaksPerDay": "Short breaks per day",
+  "shortBreakDuration": "Short break duration",
+  "minimumWorkIntervalMinutes": "Minimum work interval: 15 minutes.",
+  "agentDayBuildRule": "Agent day build rule",
+  "theAgentReceivesThisTextTogetherWithThe": "The agent receives this text together with the ranges via the local API. The built-in builder uses only the ranges.",
+  "describeHowTheAgentShouldUseTheDay": "Describe how the agent should use the day build settings",
+  "couldNot": "Could not",
+  "settingsCannotBeChangedInReadOnlyMode": "Settings cannot be changed in read-only mode.",
+  "reset": "Reset",
+  "saveSettings": "Save settings",
+  "usedToLoadIssuesAndSubmitTime": "Used to load issues and submit time.",
+  "jiraAddress": "Jira address",
+  "apiToken": "API token",
+  "showToken": "Show token",
+  "hideToken": "Hide token",
+  "accountIdRoute": "Account ID: {p0}\nRoute: {p1}",
+  "@accountIdRoute": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "connected": "Connected · {p0}\n{p1}",
+  "@connected": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "checkConnection": "Check connection",
+  "localApiForAiAgents": "Local API for AI agents",
+  "theBuiltInHttpServerAllowsAiAgents": "The built-in HTTP server allows AI agents to log time and provide a complete day schedule.",
+  "localServerAddress": "Local server address",
+  "copyAddress": "Copy address",
+  "serverAddressCopiedToClipboard": "Server address copied to clipboard",
+  "agentSkillInstructions": "Agent skill instructions",
+  "copyInstructions": "Copy instructions",
+  "agentInstructionsCopiedToClipboard": "Agent instructions copied to clipboard",
+  "editNote": "Edit note",
+  "actions": "Actions",
+  "couldNotDeleteTheQuickIssue": "Could not delete the quick issue: {p0}",
+  "@couldNotDeleteTheQuickIssue": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "removeFromQuickIssues": "Remove from quick issues",
+  "jiraConnected": "Jira connected",
+  "readOnlyModeAnotherApplicationInstanceHoldsThe": "Read-only mode: another application instance holds the write lock (A19).",
+  "theFirstPartMustBeGreaterThanAnd466": "The first part must be greater than 0 and less than {p0}",
+  "@theFirstPartMustBeGreaterThanAnd466": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "logSplitIntoTwoPartsAnd": "Log split into two parts: {p0} and {p1}",
+  "@logSplitIntoTwoPartsAnd": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "splitTimeEntry": "Split time entry",
+  "totalTime": "Total time: {p0}",
+  "@totalTime": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "part": "Part 1",
+  "h471": "h",
+  "m472": "m",
+  "partDescription": "Part 1 description",
+  "partRemainder": "Part 2 (remainder)",
+  "min475": "0 min",
+  "partDescription476": "Part 2 description",
+  "split": "Split",
+  "theFirstPartMustBeGreaterThanAnd478": "The first part must be greater than 0 and less than {p0}",
+  "@theFirstPartMustBeGreaterThanAnd478": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "intervalSplitAnd": "Interval split: {p0} and {p1}",
+  "@intervalSplitAnd": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "issue480": "Issue: {p0}",
+  "@issue480": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "totalDuration": "Total duration: {p0}",
+  "@totalDuration": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "firstPartDescription": "First part description",
+  "workDoneInTheFirstPart": "Work done in the first part...",
+  "secondPartDescription": "Second part description",
+  "workDoneInTheSecondPart": "Work done in the second part...",
+  "h486": "{p0} h",
+  "@h486": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "hMin": "{p0} h {p1} min",
+  "@hMin": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "break488": "Break · {p0}–{p1} ({p2})",
+  "@break488": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      },
+      "p2": {
+        "type": "String"
+      }
+    }
+  },
+  "alreadyInJira489": "{p0} · already in Jira · {p1}–{p2}",
+  "@alreadyInJira489": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      },
+      "p2": {
+        "type": "String"
+      }
+    }
+  },
+  "selectedLogs": "Selected logs",
+  "issueAdded": "Issue added: {p0} — {p1}",
+  "@issueAdded": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "couldNotAddTheIssue": "Could not add the issue",
+  "work493": "Work",
+  "pasteAJiraIssueIdOrLink": "Paste a Jira issue ID or link",
+  "frequentlyUsedIssuesHaveNotBeenConfiguredYet": "Frequently used issues have not been configured yet.",
+  "configureQuickIssues": "Configure quick issues",
+  "recentIssues497": "Recent issues",
+  "start498": "Start ({p0})",
+  "@start498": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "selectMultiple": "Select multiple",
+  "searchIssues": "Search issues",
+  "clearSearch": "Clear search",
+  "activityFilter": "Activity filter",
+  "lastDays": "Last 7 days",
+  "lastDays504": "Last 30 days",
+  "allTime": "All time",
+  "noIssuesAddedEnterAKeyIdOr": "No issues added.\nEnter a key, ID or link above.",
+  "noIssuesMatchTheFilter": "No issues match the filter.",
+  "activity": "Activity: {p0}",
+  "@activity": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "stop": "Stop",
+  "start510": "Start",
+  "queue": "Queue",
+  "history": "History",
+  "total": "Total {p0}",
+  "@total": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "pauseAllTimers": "Pause all timers",
+  "theLogQueueIsEmpty": "The log queue is empty",
+  "startAnIssueTimerOrAddTimeManually": "Start an issue timer or add time manually.",
+  "removeLogFromDraftFor": "Remove log from draft for {p0}",
+  "@removeLogFromDraftFor": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "dayContentsCannotBeChangedAfterSubmissionHas": "Day contents cannot be changed after submission has started",
+  "entryIsAlreadyIncludedInTheDayFor": "Entry is already included in the day for {p0}",
+  "@entryIsAlreadyIncludedInTheDayFor": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "selectForDayBuild": "Select for day build",
+  "pauseTheTimerBeforeSelectingItForDay": "Pause the timer before selecting it for day build",
+  "pauseTimer": "Pause timer",
+  "stopTheTimerToAddThisEntryTo": "Stop the timer to add this entry to a day.",
+  "systemClockMovedBackwards": "System clock moved backwards!",
+  "created": "Created: {p0}",
+  "@created": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "inDayOpen": "In day {p0} · Open",
+  "@inDayOpen": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "actionsForAnEntryInAnotherDay": "Actions for an entry in another day",
+  "removeFromDay": "Remove from day {p0}",
+  "@removeFromDay": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "logActions": "Log actions",
+  "edit": "Edit",
+  "mergeWith": "Merge with…",
+  "noSubmittedLogsInHistoryYet": "No submitted logs in history yet.",
+  "submissionHistoryIsStoredOnThisDevice": "Submission history is stored on this device",
+  "noEntriesSelectedFor": "No entries selected for {p0}",
+  "@noEntriesSelectedFor": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "selected": "Selected {p0} {p1}",
+  "@selected": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "recordedTime": " recorded time",
+  "buildFor": "Build for",
+  "dayBuildDate": "Day build date",
+  "monday539": "Monday",
+  "tuesday540": "Tuesday",
+  "wednesday541": "Wednesday",
+  "thursday542": "Thursday",
+  "friday543": "Friday",
+  "saturday544": "Saturday",
+  "sunday545": "Sunday",
+  "entries": "entries",
+  "entry": "entry",
+  "entries548": "entries",
+  "deleteTimeEntry": "Delete time entry?",
+  "entryWillBePermanentlyDeleted": "Entry \"{p0}\" ({p1}) will be permanently deleted.",
+  "@entryWillBePermanentlyDeleted": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "entrySuccessfullyFoundAndConfirmedInJiraId": "Entry successfully found and confirmed in Jira (ID: {p0}).",
+  "@entrySuccessfullyFoundAndConfirmedInJiraId": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "theJiraTimeTrackerSegmentPropertyWasNot": "The jira-time-tracker.segment property was not found among the issue's Jira entries. Blind resubmission is prohibited.",
+  "connectionMismatchTheDraftBelongsToSiteAccount": "Connection mismatch: the draft belongs to site/account \"{p0}\" but the current connection is \"{p1}\". Submission is blocked.",
+  "@connectionMismatchTheDraftBelongsToSiteAccount": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "theDraftIsEmptyThereAreNoIntervals": "The draft is empty, there are no intervals to submit.",
+  "jiraRejectedTheRequest": "Jira rejected the request",
+  "unknownSubmissionResultTheConnectionMayHaveBeen": "Unknown submission result (the connection may have been lost)",
+  "conflictMultipleEntriesFoundWithSegmentIdManual": "Conflict: multiple ({p0}) entries found with segment id \"{p1}\". Manual checking is required.",
+  "@conflictMultipleEntriesFoundWithSegmentIdManual": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "conflictAnEntryWithTheSameSegmentId": "Conflict: an entry with the same segment id was found, but its parameters differ (author: {p0}, duration: {p1}, time: {p2}).",
+  "@conflictAnEntryWithTheSameSegmentId": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      },
+      "p2": {
+        "type": "String"
+      }
+    }
+  },
+  "networkErrorDuringReconciliation": "Network error during reconciliation: {p0}",
+  "@networkErrorDuringReconciliation": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "entryWithIdWasNotFoundInIssue": "Entry with ID \"{p0}\" was not found in issue \"{p1}\".",
+  "@entryWithIdWasNotFoundInIssue": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "theEntryBelongsToAnotherJiraUserAccountid": "The entry belongs to another Jira user (accountId: {p0}).",
+  "@theEntryBelongsToAnotherJiraUserAccountid": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "jiraEntryDurationSDoesNotMatchThe": "Jira entry duration ({p0} s) does not match the segment ({p1} s).",
+  "@jiraEntryDurationSDoesNotMatchThe": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      },
+      "p1": {
+        "type": "String"
+      }
+    }
+  },
+  "errorCheckingTheJiraEntry": "Error checking the Jira entry: {p0}",
+  "@errorCheckingTheJiraEntry": {
+    "placeholders": {
+      "p0": {
+        "type": "String"
+      }
+    }
+  },
+  "resetByUserConfirmedTheEntryDoesNot": "Reset by user: confirmed the entry does not exist in Jira; retry is allowed",
+  "breakLabel": "Break",
+  "submissionInterruptedAtStartup": "Interrupted before confirmation (recovered at startup)",
+  "directApi": "Direct API",
+  "retryAfterSeconds": ". Retry after {seconds} s.",
+  "@retryAfterSeconds": {
+    "placeholders": {
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "mismatch": "does not match",
+  "scheduleEntryCount": "{count, plural, one {{count} entry} other {{count} entries}} in the schedule",
+  "@scheduleEntryCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "scheduleErrorCount": "{count, plural, one {{count} error} other {{count} errors}} · submission to Jira is blocked",
+  "@scheduleErrorCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "readOnlyLanguage": "The language cannot be changed in read-only mode.",
+  "selectedLogCount": "Selected {count, plural, one {{count} entry} other {{count} entries}}",
+  "@selectedLogCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
+}

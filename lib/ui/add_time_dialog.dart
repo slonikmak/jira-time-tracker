@@ -1,7 +1,9 @@
+import '../app_message.dart';
+import '../l10n/app_localizations.dart';
+import '../ui/message_format.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../app_state.dart';
-import '../log_clock.dart';
 import '../models.dart';
 import 'app_theme.dart';
 
@@ -56,7 +58,7 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
   );
   final TextEditingController _descController = TextEditingController();
   String? _fixedStartTime;
-  String? _errorMessage;
+  Object? _errorMessage;
   bool _isSaving = false;
 
   int get _durationSeconds =>
@@ -156,7 +158,11 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
 
     if (_selectedIssueId == null) {
       setState(() {
-        _errorMessage = 'Выберите задачу из списка';
+        _errorMessage = AppMessage(
+          'selectAnIssueFromTheList',
+          [],
+          'Выберите задачу из списка',
+        );
       });
       return;
     }
@@ -169,7 +175,11 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
 
     if (selectedIssue == null) {
       setState(() {
-        _errorMessage = 'Выбранная задача не найдена';
+        _errorMessage = AppMessage(
+          'selectedIssueWasNotFound',
+          [],
+          'Выбранная задача не найдена',
+        );
       });
       return;
     }
@@ -180,7 +190,11 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
 
     if (totalSeconds <= 0) {
       setState(() {
-        _errorMessage = 'Длительность времени должна быть больше нуля';
+        _errorMessage = const AppMessage(
+          'durationMustBeGreaterThanZero',
+          [],
+          'Длительность времени должна быть больше нуля',
+        );
       });
       return;
     }
@@ -201,8 +215,16 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              'Добавлено ${LogClock.formatHoursMinutes(totalSeconds)} к ${selectedIssue.key}',
+            content: Builder(
+              builder: (context) => Text(
+                AppLocalizations.of(context).addedTo(
+                  renderMessage(
+                    context,
+                    formatHoursMinutes(context, totalSeconds),
+                  ),
+                  renderMessage(context, selectedIssue.key),
+                ),
+              ),
             ),
           ),
         );
@@ -210,7 +232,7 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = e.toString();
+          _errorMessage = e;
           _isSaving = false;
         });
       }
@@ -245,14 +267,14 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
             children: [
               Expanded(
                 child: Text(
-                  'Добавить время',
+                  AppLocalizations.of(context).addTime,
                   style: Theme.of(
                     context,
                   ).textTheme.titleLarge?.copyWith(fontSize: 24),
                 ),
               ),
               IconButton(
-                tooltip: 'Закрыть',
+                tooltip: AppLocalizations.of(context).close,
                 onPressed: () => Navigator.of(context).pop(),
                 icon: Icon(
                   Icons.close,
@@ -264,7 +286,7 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
           ),
           const SizedBox(height: 22),
           Text(
-            'Запись появится в очереди. Таймер запускать не нужно.',
+            AppLocalizations.of(context).theEntryWillAppearInTheQueueNo,
             style: TextStyle(fontSize: 13, color: AppColors.muted(isDark)),
           ),
         ],
@@ -278,7 +300,7 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
             children: [
               // Выбор задачи
               Text(
-                'Задача',
+                AppLocalizations.of(context).issue,
                 style: TextStyle(fontSize: 12, color: AppColors.muted(isDark)),
               ),
               const SizedBox(height: 3),
@@ -352,8 +374,8 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
                   },
                 ),
               ] else if (options.isEmpty)
-                const Text(
-                  'Нет доступных задач. Сначала добавьте задачу.',
+                Text(
+                  AppLocalizations.of(context).noIssuesAvailableAddAnIssueFirst,
                   style: TextStyle(color: Colors.red),
                 )
               else ...[
@@ -407,8 +429,10 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
                               if (opt.startsGroup) ...[
                                 Text(
                                   opt.isQuick
-                                      ? 'БЫСТРЫЕ ЗАДАЧИ'
-                                      : 'НЕДАВНИЕ ЗАДАЧИ',
+                                      ? AppLocalizations.of(context).quickIssues
+                                      : AppLocalizations.of(
+                                          context,
+                                        ).recentIssues,
                                   style: TextStyle(
                                     fontSize: 9,
                                     letterSpacing: .4,
@@ -494,7 +518,7 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
                 children: [
                   Expanded(
                     child: Text(
-                      'Часы',
+                      AppLocalizations.of(context).hours,
                       style: TextStyle(
                         fontSize: 12,
                         color: AppColors.muted(isDark),
@@ -504,7 +528,7 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Минуты',
+                      AppLocalizations.of(context).minutes,
                       style: TextStyle(
                         fontSize: 12,
                         color: AppColors.muted(isDark),
@@ -570,7 +594,7 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
               if (_errorMessage != null) ...[
                 const SizedBox(height: 8),
                 Text(
-                  _errorMessage!,
+                  renderMessage(context, _errorMessage!),
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.error,
                     fontSize: 12,
@@ -582,11 +606,14 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
               // Описание сделанной работы (необязательно)
               Row(
                 children: [
-                  const Expanded(
-                    child: Text('Что сделано', style: TextStyle(fontSize: 12)),
+                  Expanded(
+                    child: Text(
+                      AppLocalizations.of(context).workDone,
+                      style: TextStyle(fontSize: 12),
+                    ),
                   ),
                   Text(
-                    'Необязательно',
+                    AppLocalizations.of(context).optional,
                     style: TextStyle(
                       fontSize: 11,
                       color: AppColors.muted(isDark),
@@ -602,9 +629,11 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
                   expands: true,
                   maxLines: null,
                   minLines: null,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     isDense: true,
-                    hintText: 'Например, форма входа и обработка ошибок',
+                    hintText: AppLocalizations.of(
+                      context,
+                    ).forExampleTheLoginFormAndErrorHandling,
                     contentPadding: EdgeInsets.all(12),
                   ),
                 ),
@@ -616,7 +645,7 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
                     InkWell(
                       onTap: _pickFixedStartTime,
                       child: Tooltip(
-                        message: 'Указать время начала',
+                        message: AppLocalizations.of(context).setStartTime,
                         child: Icon(
                           Icons.access_time,
                           size: 15,
@@ -626,7 +655,12 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
                     ),
                     const SizedBox(width: 7),
                     Text(
-                      'Новая запись · ${LogClock.formatHoursMinutes(_durationSeconds)}',
+                      AppLocalizations.of(context).newEntry(
+                        renderMessage(
+                          context,
+                          formatHoursMinutes(context, _durationSeconds),
+                        ),
+                      ),
                       style: TextStyle(
                         color: AppColors.primary(isDark),
                         fontSize: 12,
@@ -635,7 +669,9 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
                     if (_fixedStartTime != null) ...[
                       const SizedBox(width: 8),
                       Text(
-                        '· начало $_fixedStartTime',
+                        AppLocalizations.of(
+                          context,
+                        ).start(renderMessage(context, _fixedStartTime)),
                         style: TextStyle(
                           fontSize: 12,
                           color: AppColors.muted(isDark),
@@ -643,7 +679,9 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
                       ),
                       IconButton(
                         icon: const Icon(Icons.close, size: 15),
-                        tooltip: 'Очистить фиксированное время',
+                        tooltip: AppLocalizations.of(
+                          context,
+                        ).clearFixedStartTime,
                         onPressed: () => setState(() => _fixedStartTime = null),
                       ),
                     ],
@@ -662,7 +700,7 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             textStyle: const TextStyle(fontSize: 12),
           ),
-          child: const Text('Отмена'),
+          child: Text(AppLocalizations.of(context).cancel),
         ),
         FilledButton(
           onPressed: _isSaving ? null : _handleSave,
@@ -677,7 +715,7 @@ class _AddTimeDialogState extends State<AddTimeDialog> {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Сохранить запись'),
+              : Text(AppLocalizations.of(context).saveEntry),
         ),
       ],
     );

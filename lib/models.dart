@@ -1,3 +1,4 @@
+import 'app_message.dart';
 import 'dart:convert';
 
 /// Состояние отправки отдельного сегмента в Jira.
@@ -313,43 +314,65 @@ class DaySettings {
     this.shortBreakDurationSecondsMax = 10 * 60,
   });
 
-  Map<String, String> validationErrors() {
-    final errors = <String, String>{};
+  Map<String, String> validationErrors() =>
+      validationMessages().map((key, value) => MapEntry(key, value.toString()));
+
+  Map<String, Object> validationMessages() {
+    final errors = <String, Object>{};
     if (startMinutesMin < 0 ||
         startMinutesMax >= 24 * 60 ||
         startMinutesMin > startMinutesMax) {
-      errors['start'] = 'Начало дня: укажите время от 00:00 до 23:59, от ≤ до.';
+      errors['start'] = AppMessage(
+        'dayStartEnterATimeFromToFrom',
+        [],
+        'Начало дня: укажите время от 00:00 до 23:59, от ≤ до.',
+      );
     }
     if (totalDurationSecondsMin <= 0 ||
         totalDurationSecondsMax > 24 * 3600 ||
         totalDurationSecondsMin > totalDurationSecondsMax) {
-      errors['duration'] =
-          'Длительность дня: укажите положительное время до 24 часов, от ≤ до.';
+      errors['duration'] = AppMessage(
+        'dayDurationEnterAPositiveDurationUpTo',
+        [],
+        'Длительность дня: укажите положительное время до 24 часов, от ≤ до.',
+      );
     }
     if (lunchStartMinutesMin < 0 ||
         lunchStartMinutesMax >= 24 * 60 ||
         lunchStartMinutesMin > lunchStartMinutesMax) {
-      errors['long_start'] =
-          'Начало длинной паузы: укажите время от 00:00 до 23:59, от ≤ до.';
+      errors['long_start'] = AppMessage(
+        'longBreakStartEnterATimeFromTo',
+        [],
+        'Начало длинной паузы: укажите время от 00:00 до 23:59, от ≤ до.',
+      );
     }
     if (lunchDurationSecondsMin < 0 ||
         lunchDurationSecondsMax > 24 * 3600 ||
         lunchDurationSecondsMin > lunchDurationSecondsMax ||
         (lunchDurationSecondsMin == 0) != (lunchDurationSecondsMax == 0)) {
-      errors['long_duration'] =
-          'Длительность длинной паузы: укажите 0–0 для отключения или положительное время, от ≤ до.';
+      errors['long_duration'] = AppMessage(
+        'longBreakDurationEnterToDisableItOr',
+        [],
+        'Длительность длинной паузы: укажите 0–0 для отключения или положительное время, от ≤ до.',
+      );
     }
     if (shortBreakCountMin < 0 ||
         shortBreakCountMin > shortBreakCountMax ||
         shortBreakCountMax > maxShortBreakCount) {
-      errors['short_count'] =
-          'Короткие паузы: укажите целое число от 0 до $maxShortBreakCount, от ≤ до.';
+      errors['short_count'] = AppMessage(
+        'shortBreaksEnterAnIntegerFromToFrom',
+        [maxShortBreakCount],
+        'Короткие паузы: укажите целое число от 0 до $maxShortBreakCount, от ≤ до.',
+      );
     }
     if (shortBreakDurationSecondsMin <= 0 ||
         shortBreakDurationSecondsMax > 24 * 3600 ||
         shortBreakDurationSecondsMin > shortBreakDurationSecondsMax) {
-      errors['short_duration'] =
-          'Длительность короткой паузы: укажите положительное время, от ≤ до.';
+      errors['short_duration'] = AppMessage(
+        'shortBreakDurationEnterAPositiveDurationFrom',
+        [],
+        'Длительность короткой паузы: укажите положительное время, от ≤ до.',
+      );
     }
     return errors;
   }
@@ -705,17 +728,23 @@ class GapNeighbors {
   bool get isLeftLocked => leftExisting != null;
   bool get isRightLocked => rightExisting != null;
 
-  String? get leftTitle {
-    if (leftSegment != null) return 'Сегмент расписания';
+  String? get leftTitle => leftTitleText?.toString();
+  Object? get leftTitleText {
+    if (leftSegment != null) {
+      return AppMessage('scheduleSegment', [], 'Сегмент расписания');
+    }
     if (leftExisting != null) return 'Jira: ${leftExisting!.issueKey}';
-    if (isStartOfDay) return 'Начало дня';
+    if (isStartOfDay) return AppMessage('dayStart', [], 'Начало дня');
     return null;
   }
 
-  String? get rightTitle {
-    if (rightSegment != null) return 'Сегмент расписания';
+  String? get rightTitle => rightTitleText?.toString();
+  Object? get rightTitleText {
+    if (rightSegment != null) {
+      return AppMessage('scheduleSegment', [], 'Сегмент расписания');
+    }
     if (rightExisting != null) return 'Jira: ${rightExisting!.issueKey}';
-    if (isEndOfDay) return 'Конец дня';
+    if (isEndOfDay) return AppMessage('dayEnd', [], 'Конец дня');
     return null;
   }
 }

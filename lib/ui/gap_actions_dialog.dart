@@ -1,5 +1,7 @@
+import '../app_message.dart';
+import '../l10n/app_localizations.dart';
+import '../ui/message_format.dart';
 import 'package:flutter/material.dart';
-import '../log_clock.dart';
 import '../models.dart';
 import 'app_theme.dart';
 
@@ -10,7 +12,7 @@ class GapActionsDialog extends StatefulWidget {
   final VoidCallback onSnap;
   final VoidCallback onFillLeft;
   final void Function(int newDurationSeconds) onSetDuration;
-  final String? Function(int newDurationSeconds)? onValidateDuration;
+  final Object? Function(int newDurationSeconds)? onValidateDuration;
 
   const GapActionsDialog({
     super.key,
@@ -28,7 +30,7 @@ class GapActionsDialog extends StatefulWidget {
 
 class _GapActionsDialogState extends State<GapActionsDialog> {
   late TextEditingController _minutesController;
-  String? _errorMessage;
+  Object? _errorMessage;
 
   @override
   void initState() {
@@ -46,7 +48,11 @@ class _GapActionsDialogState extends State<GapActionsDialog> {
   void _applyDuration(int minutes) {
     if (minutes <= 0) {
       setState(() {
-        _errorMessage = 'Длительность перерыва должна быть больше 0 минут.';
+        _errorMessage = AppMessage(
+          'breakDurationMustBeGreaterThanMinutes',
+          [],
+          "Длительность перерыва должна быть больше 0 минут.",
+        );
       });
       return;
     }
@@ -74,7 +80,10 @@ class _GapActionsDialogState extends State<GapActionsDialog> {
         '${startLocal.hour.toString().padLeft(2, '0')}:${startLocal.minute.toString().padLeft(2, '0')}';
     final endStr =
         '${endLocal.hour.toString().padLeft(2, '0')}:${endLocal.minute.toString().padLeft(2, '0')}';
-    final durationStr = LogClock.formatHoursMinutes(widget.breakItem.durationSeconds);
+    final durationStr = formatHoursMinutes(
+      context,
+      widget.breakItem.durationSeconds,
+    );
 
     final leftTask = widget.neighbors.leftSegment;
     final leftLocked = widget.neighbors.isLeftLocked;
@@ -83,18 +92,20 @@ class _GapActionsDialogState extends State<GapActionsDialog> {
     return AlertDialog(
       title: Row(
         children: [
-          Icon(
-            Icons.coffee,
-            color: AppColors.muted(isDark),
-          ),
+          Icon(Icons.coffee, color: AppColors.muted(isDark)),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Перерыв ($durationStr)',
-                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                  AppLocalizations.of(
+                    context,
+                  ).break354(renderMessage(context, durationStr)),
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 Text(
                   '$startStr — $endStr',
@@ -134,9 +145,11 @@ class _GapActionsDialogState extends State<GapActionsDialog> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          _errorMessage!,
+                          renderMessage(context, _errorMessage),
                           style: TextStyle(
-                            color: Theme.of(context).colorScheme.onErrorContainer,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onErrorContainer,
                             fontSize: 13,
                           ),
                         ),
@@ -146,23 +159,31 @@ class _GapActionsDialogState extends State<GapActionsDialog> {
                 ),
 
               // Блок быстрых действий
-              const Text(
-                'Быстрые действия:',
+              Text(
+                AppLocalizations.of(context).quickActions,
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
 
               // 1. Схлопнуть паузу
               ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 2,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                   side: BorderSide(color: AppColors.line(isDark)),
                 ),
                 leading: const Icon(Icons.compress, color: Colors.blue),
-                title: const Text('Схлопнуть паузу', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                subtitle: const Text(
-                  'Придвинуть следующие задачи встык (убрать зазор)',
+                title: Text(
+                  AppLocalizations.of(context).collapseBreak,
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  AppLocalizations.of(
+                    context,
+                  ).moveFollowingTasksTogetherRemoveTheGap,
                   style: TextStyle(fontSize: 12),
                 ),
                 onTap: () {
@@ -174,7 +195,10 @@ class _GapActionsDialogState extends State<GapActionsDialog> {
 
               // 2. Растянуть предыдущую задачу
               ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 2,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                   side: BorderSide(color: AppColors.line(isDark)),
@@ -183,16 +207,20 @@ class _GapActionsDialogState extends State<GapActionsDialog> {
                   Icons.trending_flat,
                   color: canFillLeft ? Colors.green : Colors.grey,
                 ),
-                title: const Text(
-                  'Растянуть предыдущую задачу',
+                title: Text(
+                  AppLocalizations.of(context).extendPreviousTask,
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                 ),
                 subtitle: Text(
                   canFillLeft
-                      ? 'Продлить работу над задачей на $durationStr'
+                      ? AppLocalizations.of(
+                          context,
+                        ).extendTaskBy(renderMessage(context, durationStr))
                       : leftLocked
-                      ? 'Предыдущая запись зафиксирована в Jira'
-                      : 'Это начало рабочего дня (нет предыдущей задачи)',
+                      ? AppLocalizations.of(
+                          context,
+                        ).thePreviousEntryIsFixedInJira
+                      : AppLocalizations.of(context).thisIsTheStartOfTheDayNo,
                   style: TextStyle(
                     fontSize: 12,
                     color: canFillLeft ? null : AppColors.muted(isDark),
@@ -212,13 +240,15 @@ class _GapActionsDialogState extends State<GapActionsDialog> {
               const Divider(height: 1),
               const SizedBox(height: 14),
 
-              const Text(
-                'Задать длительность перерыва:',
+              Text(
+                AppLocalizations.of(context).setBreakDuration,
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),
               Text(
-                'Последующие задачи сдвинутся волной, сохранив свою длительность.',
+                AppLocalizations.of(
+                  context,
+                ).followingTasksWillShiftTogetherPreservingTheirDurations,
                 style: TextStyle(fontSize: 11, color: AppColors.muted(isDark)),
               ),
               const SizedBox(height: 10),
@@ -228,7 +258,11 @@ class _GapActionsDialogState extends State<GapActionsDialog> {
                 spacing: 8,
                 children: [15, 30, 45, 60].map((mins) {
                   return ActionChip(
-                    label: Text('$mins мин'),
+                    label: Text(
+                      AppLocalizations.of(
+                        context,
+                      ).min(renderMessage(context, mins)),
+                    ),
                     onPressed: () {
                       _minutesController.text = mins.toString();
                       _applyDuration(mins);
@@ -245,8 +279,8 @@ class _GapActionsDialogState extends State<GapActionsDialog> {
                     child: TextField(
                       controller: _minutesController,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Минуты',
+                      decoration: InputDecoration(
+                        labelText: AppLocalizations.of(context).minutes,
                         border: OutlineInputBorder(),
                         isDense: true,
                       ),
@@ -256,10 +290,11 @@ class _GapActionsDialogState extends State<GapActionsDialog> {
                   const SizedBox(width: 10),
                   FilledButton(
                     onPressed: () {
-                      final mins = int.tryParse(_minutesController.text.trim()) ?? 0;
+                      final mins =
+                          int.tryParse(_minutesController.text.trim()) ?? 0;
                       _applyDuration(mins);
                     },
-                    child: const Text('Применить'),
+                    child: Text(AppLocalizations.of(context).apply),
                   ),
                 ],
               ),
@@ -270,7 +305,7 @@ class _GapActionsDialogState extends State<GapActionsDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Закрыть'),
+          child: Text(AppLocalizations.of(context).close),
         ),
       ],
     );

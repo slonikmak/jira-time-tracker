@@ -1,3 +1,4 @@
+import 'package:jira_time_tracker/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart' hide Row;
@@ -37,6 +38,7 @@ void main() {
     db = sqlite3.openInMemory();
     store = LocalStore(db);
     store.init();
+    store.setSetting('ui_language', 'ru');
     connectionStore = ConnectionStore(
       secureStorage: InMemorySecureStorage(),
       environment: {},
@@ -159,7 +161,14 @@ void main() {
       final appState = createAppState();
       await seedDraftWithSegments(appState);
 
-      await tester.pumpWidget(MaterialApp(home: DayScreen(appState: appState)));
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('ru'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: DayScreen(appState: appState),
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(appState.currentSegments[0].isFixed, isFalse);
@@ -191,7 +200,14 @@ void main() {
     final appState = createAppState();
     await seedDraftWithSegments(appState);
 
-    await tester.pumpWidget(MaterialApp(home: DayScreen(appState: appState)));
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('ru'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: DayScreen(appState: appState),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(appState.currentSegments.map((s) => s.id).toList(), [
@@ -229,7 +245,14 @@ void main() {
     final appState = createAppState();
     await seedDraftWithSegments(appState);
 
-    await tester.pumpWidget(MaterialApp(home: DayScreen(appState: appState)));
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('ru'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: DayScreen(appState: appState),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(appState.currentSegments.length, 2);
@@ -266,7 +289,14 @@ void main() {
     final appState = createAppState();
     await seedDraftWithSegments(appState, sameSource: true);
 
-    await tester.pumpWidget(MaterialApp(home: DayScreen(appState: appState)));
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('ru'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: DayScreen(appState: appState),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(appState.currentSegments.length, 2);
@@ -309,7 +339,14 @@ void main() {
     final appState = createAppState();
     await seedDraftWithSegments(appState);
 
-    await tester.pumpWidget(MaterialApp(home: DayScreen(appState: appState)));
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('ru'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: DayScreen(appState: appState),
+      ),
+    );
     await tester.pumpAndSettle();
 
     final menu = find.byTooltip('Другие действия с расписанием');

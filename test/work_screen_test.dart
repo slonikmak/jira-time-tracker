@@ -22,6 +22,7 @@ void main() {
     db = sqlite3.openInMemory();
     store = LocalStore(db);
     store.init();
+    store.setSetting('ui_language', 'ru');
     connectionStore = ConnectionStore(
       secureStorage: InMemorySecureStorage(),
       environment: {},

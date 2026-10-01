@@ -1,3 +1,4 @@
+import 'app_message.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -20,23 +21,28 @@ enum IssueFilterPeriod {
   days30,
   all;
 
-  String get label {
+  String get label => labelText.toString();
+  Object get labelText {
     switch (this) {
       case IssueFilterPeriod.days7:
-        return '7 дней';
+        return AppMessage('days', [], '7 дней');
       case IssueFilterPeriod.days30:
-        return '30 дней';
+        return AppMessage('days9', [], '30 дней');
       case IssueFilterPeriod.all:
-        return 'Все';
+        return AppMessage('all', [], 'Все');
     }
   }
 }
 
 enum UiThemeMode { system, light, dark }
 
-class AgentDayRevisionConflict implements Exception {
-  final String message;
-  const AgentDayRevisionConflict(this.message);
+enum UiLanguage { system, ru, en }
+
+class AgentDayRevisionConflict implements Exception, MessageException {
+  @override
+  final Object messageText;
+  String get message => messageText.toString();
+  const AgentDayRevisionConflict(this.messageText);
 
   @override
   String toString() => message;
@@ -57,9 +63,10 @@ class AppState extends ChangeNotifier {
   final bool isReadOnly;
   final DateTime Function() nowProvider;
   late final ValueNotifier<UiThemeMode> themeMode;
+  late final ValueNotifier<UiLanguage> language;
 
   int _selectedTabIndex = 0;
-  String? _statusMessage;
+  Object? _statusMessage;
   JiraConnection? _currentConnection;
 
   List<Issue> _issues = [];
@@ -94,6 +101,15 @@ class AppState extends ChangeNotifier {
              nowProvider: nowProvider,
            ) {
     final savedThemeMode = store.getSetting('theme_mode');
+    final savedLanguage = store.getSetting('ui_language');
+    final initialLanguage = UiLanguage.values.firstWhere(
+      (value) => value.name == savedLanguage,
+      orElse: () => store.isNewDatabase ? UiLanguage.system : UiLanguage.ru,
+    );
+    language = ValueNotifier(initialLanguage);
+    if (savedLanguage == null && !isReadOnly) {
+      store.setSetting('ui_language', initialLanguage.name);
+    }
     themeMode = ValueNotifier(
       UiThemeMode.values.firstWhere(
         (mode) => mode.name == savedThemeMode,
@@ -166,7 +182,7 @@ class AppState extends ChangeNotifier {
   DaySettings _daySettings = const DaySettings();
   String _agentDayRule = defaultAgentDayRule;
   final Set<String> _lockedSourceLogIds = {};
-  List<String> _validationErrors = [];
+  List<Object> _validationErrors = [];
   bool _isBuildingDay = false;
   bool _isFetchingJiraWorklogs = false;
   bool _hasLoadedJiraWorklogs = false;
@@ -199,7 +215,9 @@ class AppState extends ChangeNotifier {
   DaySettings get daySettings => _daySettings;
   String get agentDayRule => _agentDayRule;
   Set<String> get lockedSourceLogIds => Set.unmodifiable(_lockedSourceLogIds);
-  List<String> get validationErrors => List.unmodifiable(_validationErrors);
+  List<String> get validationErrors =>
+      _validationErrors.map((value) => value.toString()).toList();
+  List<Object> get validationMessages => List.unmodifiable(_validationErrors);
   bool get isBuildingDay => _isBuildingDay;
 
   String get selectedDateString =>
@@ -254,7 +272,16 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  String? get statusMessage => _statusMessage;
+  void selectLanguage(UiLanguage value) {
+    if (isReadOnly) throw const ReadOnlyException();
+    if (language.value == value) return;
+    store.setSetting('ui_language', value.name);
+    language.value = value;
+    notifyListeners();
+  }
+
+  String? get statusMessage => _statusMessage?.toString();
+  Object? get statusText => _statusMessage;
   JiraConnection? get currentConnection => _currentConnection;
 
   /// Активный scope (normalized baseUrl#accountId) для изоляции данных в SQLite (A17).
@@ -454,20 +481,34 @@ class AppState extends ChangeNotifier {
   Future<Issue> addIssue(String rawInput) async {
     final identifier = IssueParser.parse(rawInput);
     if (identifier == null) {
-      throw const FormatException(
-        'Некорректный ввод: укажите ключ (PROJ-123), числовой ID или ссылку /browse/...',
+      throw AppFormatException(
+        AppMessage(
+          'invalidInputEnterAKeyProjNumericId',
+          [],
+          'Некорректный ввод: укажите ключ (PROJ-123), числовой ID или ссылку /browse/...',
+        ),
       );
     }
 
     if (_currentConnection == null) {
-      throw StateError(
-        'Сначала проверьте и сохраните подключение к Jira в Настройках',
+      throw AppStateError(
+        AppMessage(
+          'firstCheckAndSaveTheJiraConnectionIn',
+          [],
+          'Сначала проверьте и сохраните подключение к Jira в Настройках',
+        ),
       );
     }
 
     final token = await connectionStore.getSavedToken();
     if (token == null || token.isEmpty) {
-      throw StateError('API токен Jira не найден в защищённом хранилище');
+      throw AppStateError(
+        AppMessage(
+          'jiraApiTokenWasNotFoundInSecure',
+          [],
+          'API токен Jira не найден в защищённом хранилище',
+        ),
+      );
     }
 
     final issue = await jiraClient.getIssue(
@@ -490,17 +531,33 @@ class AppState extends ChangeNotifier {
   Future<Issue> previewQuickIssue(String rawInput) async {
     final identifier = IssueParser.parse(rawInput);
     if (identifier == null) {
-      throw const FormatException(
-        'Некорректный ввод: укажите ключ (PROJ-123), числовой ID или ссылку /browse/...',
+      throw AppFormatException(
+        AppMessage(
+          'invalidInputEnterAKeyProjNumericId',
+          [],
+          'Некорректный ввод: укажите ключ (PROJ-123), числовой ID или ссылку /browse/...',
+        ),
       );
     }
     final connection = _currentConnection;
     if (connection == null) {
-      throw StateError('Сначала подключите Jira в Настройках.');
+      throw AppStateError(
+        AppMessage(
+          'firstConnectJiraInSettings',
+          [],
+          'Сначала подключите Jira в Настройках.',
+        ),
+      );
     }
     final token = await connectionStore.getSavedToken();
     if (token == null || token.isEmpty) {
-      throw StateError('API токен Jira не найден в защищённом хранилище.');
+      throw AppStateError(
+        AppMessage(
+          'jiraApiTokenWasNotFoundInSecure16',
+          [],
+          'API токен Jira не найден в защищённом хранилище.',
+        ),
+      );
     }
     return jiraClient.getIssue(
       identifier,
@@ -510,7 +567,15 @@ class AppState extends ChangeNotifier {
   }
 
   Future<QuickIssue> addQuickIssue(String rawInput, {String note = ''}) async {
-    if (isReadOnly) throw StateError('Приложение открыто только для чтения.');
+    if (isReadOnly) {
+      throw AppStateError(
+        AppMessage(
+          'theApplicationIsReadOnly',
+          [],
+          'Приложение открыто только для чтения.',
+        ),
+      );
+    }
     final issue = await addIssue(rawInput);
     final quickIssue = store.addQuickIssue(
       QuickIssue(
@@ -526,14 +591,30 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> updateQuickIssueNote(String issueId, String note) async {
-    if (isReadOnly) throw StateError('Приложение открыто только для чтения.');
+    if (isReadOnly) {
+      throw AppStateError(
+        AppMessage(
+          'theApplicationIsReadOnly',
+          [],
+          'Приложение открыто только для чтения.',
+        ),
+      );
+    }
     store.updateQuickIssueNote(activeScope, issueId, note);
     _quickIssues = store.getQuickIssues(scope: activeScope);
     notifyListeners();
   }
 
   Future<void> deleteQuickIssue(String issueId) async {
-    if (isReadOnly) throw StateError('Приложение открыто только для чтения.');
+    if (isReadOnly) {
+      throw AppStateError(
+        AppMessage(
+          'theApplicationIsReadOnly',
+          [],
+          'Приложение открыто только для чтения.',
+        ),
+      );
+    }
     store.deleteQuickIssue(activeScope, issueId);
     _quickIssues = store.getQuickIssues(scope: activeScope);
     notifyListeners();
@@ -567,7 +648,13 @@ class AppState extends ChangeNotifier {
   Future<Issue> resolveOrCreateIssue(String keyOrId) async {
     final clean = keyOrId.trim();
     if (clean.isEmpty) {
-      throw ArgumentError('Ключ или ID задачи не может быть пустым');
+      throw AppArgumentError(
+        AppMessage(
+          'issueKeyOrIdCannotBeEmpty',
+          [],
+          'Ключ или ID задачи не может быть пустым',
+        ),
+      );
     }
 
     final cached = _issues
@@ -615,7 +702,13 @@ class AppState extends ChangeNotifier {
   Future<Issue> resolveIssueStrict(String keyOrId) async {
     final clean = keyOrId.trim();
     if (clean.isEmpty) {
-      throw ArgumentError('Ключ или ID задачи не может быть пустым');
+      throw AppArgumentError(
+        AppMessage(
+          'issueKeyOrIdCannotBeEmpty',
+          [],
+          'Ключ или ID задачи не может быть пустым',
+        ),
+      );
     }
 
     final cached = store
@@ -631,8 +724,12 @@ class AppState extends ChangeNotifier {
     final connection = _currentConnection;
     final token = await connectionStore.getSavedToken();
     if (connection == null || token == null || token.isEmpty) {
-      throw StateError(
-        'Задача "$clean" отсутствует в локальном каталоге, подключение к Jira недоступно.',
+      throw AppStateError(
+        AppMessage(
+          'issueIsNotInTheLocalCatalogueAnd',
+          [clean],
+          'Задача "$clean" отсутствует в локальном каталоге, подключение к Jira недоступно.',
+        ),
       );
     }
 
@@ -670,12 +767,24 @@ class AppState extends ChangeNotifier {
     String? fixedStartTime,
   }) async {
     if (durationSeconds <= 0) {
-      throw ArgumentError('Длительность времени должна быть больше нуля');
+      throw AppArgumentError(
+        AppMessage(
+          'durationMustBeGreaterThanZero',
+          [],
+          'Длительность времени должна быть больше нуля',
+        ),
+      );
     }
 
     final issue = _issues.where((i) => i.issueId == issueId).firstOrNull;
     if (issue == null) {
-      throw StateError('Задача с ID $issueId не найдена в локальном каталоге');
+      throw AppStateError(
+        AppMessage(
+          'issueWithIdWasNotFoundInThe',
+          [issueId],
+          'Задача с ID $issueId не найдена в локальном каталоге',
+        ),
+      );
     }
 
     final now = nowProvider();
@@ -708,7 +817,13 @@ class AppState extends ChangeNotifier {
   Future<LocalLog> playTimer(String issueId) async {
     final issue = _issues.where((i) => i.issueId == issueId).firstOrNull;
     if (issue == null) {
-      throw StateError('Задача с ID $issueId не найдена в локальном каталоге');
+      throw AppStateError(
+        AppMessage(
+          'issueWithIdWasNotFoundInThe',
+          [issueId],
+          'Задача с ID $issueId не найдена в локальном каталоге',
+        ),
+      );
     }
 
     final currentLog = getCurrentLogForIssue(issueId);
@@ -754,7 +869,7 @@ class AppState extends ChangeNotifier {
     final (pausedLog, result) = LogClock.pause(log: currentLog, nowUtc: now);
 
     if (result.hasClockRollback) {
-      setStatusMessage(result.errorMessage);
+      setStatusMessage(result.errorText);
     }
 
     final updatedIssue = issue.copyWith(
@@ -778,7 +893,7 @@ class AppState extends ChangeNotifier {
     final (pausedLog, result) = LogClock.pause(log: log, nowUtc: now);
 
     if (result.hasClockRollback) {
-      setStatusMessage(result.errorMessage);
+      setStatusMessage(result.errorText);
     }
 
     if (issue != null) {
@@ -806,7 +921,7 @@ class AppState extends ChangeNotifier {
     for (final log in running) {
       final (pausedLog, result) = LogClock.pause(log: log, nowUtc: now);
       if (result.hasClockRollback) {
-        setStatusMessage(result.errorMessage);
+        setStatusMessage(result.errorText);
       }
       final issue = _issues.where((i) => i.issueId == log.issueId).firstOrNull;
       if (issue != null) {
@@ -833,7 +948,13 @@ class AppState extends ChangeNotifier {
   Future<LocalLog> createNewLogForIssue(String issueId) async {
     final issue = _issues.where((i) => i.issueId == issueId).firstOrNull;
     if (issue == null) {
-      throw StateError('Задача с ID $issueId не найдена в локальном каталоге');
+      throw AppStateError(
+        AppMessage(
+          'issueWithIdWasNotFoundInThe',
+          [issueId],
+          'Задача с ID $issueId не найдена в локальном каталоге',
+        ),
+      );
     }
 
     final now = nowProvider();
@@ -843,7 +964,7 @@ class AppState extends ChangeNotifier {
     if (currentLog != null && currentLog.isRunning) {
       final (pausedLog, result) = LogClock.pause(log: currentLog, nowUtc: now);
       if (result.hasClockRollback) {
-        setStatusMessage(result.errorMessage);
+        setStatusMessage(result.errorText);
       }
       logsToSave.add(pausedLog);
     }
@@ -890,23 +1011,47 @@ class AppState extends ChangeNotifier {
     bool clearFixedStartTime = false,
   }) async {
     if (durationSeconds <= 0) {
-      throw ArgumentError('Длительность времени должна быть больше нуля');
+      throw AppArgumentError(
+        AppMessage(
+          'durationMustBeGreaterThanZero',
+          [],
+          'Длительность времени должна быть больше нуля',
+        ),
+      );
     }
     final log = _logs.where((l) => l.id == logId).firstOrNull;
     if (log == null) {
-      throw StateError('Лог с ID $logId не найден');
+      throw AppStateError(
+        AppMessage('logWithIdWasNotFound', [
+          logId,
+        ], 'Лог с ID $logId не найден'),
+      );
     }
     if (log.isRunning) {
-      throw StateError(
-        'Нельзя редактировать работающий лог. Сначала поставьте его на паузу.',
+      throw AppStateError(
+        AppMessage(
+          'cannotEditARunningLogPauseItFirst',
+          [],
+          'Нельзя редактировать работающий лог. Сначала поставьте его на паузу.',
+        ),
       );
     }
     if (log.isConsumed) {
-      throw StateError('Нельзя редактировать уже использованный лог.');
+      throw AppStateError(
+        AppMessage(
+          'cannotEditALogThatHasAlreadyBeen',
+          [],
+          'Нельзя редактировать уже использованный лог.',
+        ),
+      );
     }
     if (isLogInDraft(logId)) {
-      throw StateError(
-        'Нельзя редактировать лог, уже включенный в черновик дня (${getDraftDateForLog(logId)}).',
+      throw AppStateError(
+        AppMessage(
+          'cannotEditALogAlreadyIncludedInThe',
+          [AppMessage.date(getDraftDateForLog(logId))],
+          'Нельзя редактировать лог, уже включенный в черновик дня (${getDraftDateForLog(logId)}).',
+        ),
       );
     }
 
@@ -929,23 +1074,47 @@ class AppState extends ChangeNotifier {
   }) async {
     final log = _logs.where((l) => l.id == logId).firstOrNull;
     if (log == null) {
-      throw StateError('Лог с ID $logId не найден');
+      throw AppStateError(
+        AppMessage('logWithIdWasNotFound', [
+          logId,
+        ], 'Лог с ID $logId не найден'),
+      );
     }
     if (log.isRunning) {
-      throw StateError(
-        'Нельзя разбить работающий лог. Сначала остановите его.',
+      throw AppStateError(
+        AppMessage(
+          'cannotSplitARunningLogStopItFirst',
+          [],
+          'Нельзя разбить работающий лог. Сначала остановите его.',
+        ),
       );
     }
     if (log.isConsumed) {
-      throw StateError('Нельзя разбить уже использованный лог.');
+      throw AppStateError(
+        AppMessage(
+          'cannotSplitALogThatHasAlreadyBeen',
+          [],
+          'Нельзя разбить уже использованный лог.',
+        ),
+      );
     }
     if (isLogInDraft(logId)) {
-      throw StateError('Нельзя разбить лог, уже включенный в черновик дня.');
+      throw AppStateError(
+        AppMessage(
+          'cannotSplitALogAlreadyIncludedInA',
+          [],
+          'Нельзя разбить лог, уже включенный в черновик дня.',
+        ),
+      );
     }
     if (part1DurationSeconds <= 0 ||
         part1DurationSeconds >= log.accumulatedSeconds) {
-      throw ArgumentError(
-        'Длительность первой части должна быть больше 0 и меньше общей длительности (${log.accumulatedSeconds} с)',
+      throw AppArgumentError(
+        AppMessage(
+          'theFirstPartMustBeGreaterThanAnd',
+          [log.accumulatedSeconds],
+          'Длительность первой части должна быть больше 0 и меньше общей длительности (${log.accumulatedSeconds} с)',
+        ),
       );
     }
 
@@ -984,18 +1153,40 @@ class AppState extends ChangeNotifier {
     String? description,
   }) async {
     if (logIds.length < 2) {
-      throw ArgumentError('Для объединения требуется минимум два лога');
+      throw AppArgumentError(
+        AppMessage(
+          'atLeastTwoLogsAreRequiredToMerge',
+          [],
+          'Для объединения требуется минимум два лога',
+        ),
+      );
     }
     final selected = _logs.where((l) => logIds.contains(l.id)).toList();
     if (selected.length != logIds.length) {
-      throw StateError('Некоторые из указанных логов не найдены');
+      throw AppStateError(
+        AppMessage(
+          'someOfTheSpecifiedLogsWereNotFound',
+          [],
+          'Некоторые из указанных логов не найдены',
+        ),
+      );
     }
     if (selected.any((l) => l.isRunning)) {
-      throw StateError('Нельзя объединять работающие логи.');
+      throw AppStateError(
+        AppMessage(
+          'cannotMergeRunningLogs',
+          [],
+          'Нельзя объединять работающие логи.',
+        ),
+      );
     }
     if (selected.any((l) => l.isConsumed || isLogInDraft(l.id))) {
-      throw StateError(
-        'Нельзя объединять логи, уже включенные в черновик дня.',
+      throw AppStateError(
+        AppMessage(
+          'cannotMergeLogsAlreadyIncludedInADay',
+          [],
+          'Нельзя объединять логи, уже включенные в черновик дня.',
+        ),
       );
     }
 
@@ -1041,13 +1232,21 @@ class AppState extends ChangeNotifier {
     final log = _logs.where((l) => l.id == logId).firstOrNull;
     if (log == null) return;
     if (log.isRunning) {
-      throw StateError(
-        'Нельзя удалить работающий лог. Сначала поставьте его на паузу.',
+      throw AppStateError(
+        AppMessage(
+          'cannotDeleteARunningLogPauseItFirst',
+          [],
+          'Нельзя удалить работающий лог. Сначала поставьте его на паузу.',
+        ),
       );
     }
     if (isLogInDraft(logId)) {
-      throw StateError(
-        'Нельзя удалить лог, уже включенный в черновик дня (${getDraftDateForLog(logId)}).',
+      throw AppStateError(
+        AppMessage(
+          'cannotDeleteALogAlreadyIncludedInThe',
+          [AppMessage.date(getDraftDateForLog(logId))],
+          'Нельзя удалить лог, уже включенный в черновик дня (${getDraftDateForLog(logId)}).',
+        ),
       );
     }
     _selectedLogIds.remove(logId);
@@ -1134,7 +1333,9 @@ class AppState extends ChangeNotifier {
 
     _isFetchingJiraWorklogs = true;
     _jiraWorklogsLoadFailed = false;
-    if (_statusMessage?.startsWith('Ошибка загрузки записей Jira:') == true) {
+    if ((_statusMessage is AppMessage &&
+            (_statusMessage as AppMessage).id == 'errorLoadingJiraEntries37') ==
+        true) {
       _statusMessage = null;
     }
     notifyListeners();
@@ -1149,7 +1350,10 @@ class AppState extends ChangeNotifier {
 
       _importedWorklogs = logs;
       _hasLoadedJiraWorklogs = true;
-      if (_statusMessage?.startsWith('Ошибка загрузки записей Jira:') == true) {
+      if ((_statusMessage is AppMessage &&
+              (_statusMessage as AppMessage).id ==
+                  'errorLoadingJiraEntries37') ==
+          true) {
         _statusMessage = null;
       }
 
@@ -1166,7 +1370,9 @@ class AppState extends ChangeNotifier {
     } catch (e) {
       if (requestId == _jiraWorklogsRequestId) {
         _jiraWorklogsLoadFailed = true;
-        _statusMessage = 'Ошибка загрузки записей Jira: $e';
+        _statusMessage = AppMessage('errorLoadingJiraEntries37', [
+          e,
+        ], 'Ошибка загрузки записей Jira: $e');
       }
     } finally {
       if (requestId == _jiraWorklogsRequestId) {
@@ -1183,8 +1389,12 @@ class AppState extends ChangeNotifier {
     final connection = _currentConnection;
     final token = await connectionStore.getSavedToken();
     if (connection == null || token == null || token.isEmpty) {
-      throw StateError(
-        'Нет активного подключения к Jira для загрузки worklogs.',
+      throw AppStateError(
+        AppMessage(
+          'noActiveJiraConnectionToLoadWorklogs',
+          [],
+          'Нет активного подключения к Jira для загрузки worklogs.',
+        ),
       );
     }
 
@@ -1211,13 +1421,23 @@ class AppState extends ChangeNotifier {
   ) async {
     final parsed = IssueParser.parse(issueRef);
     if (parsed == null) {
-      throw ArgumentError('Ожидается ключ или числовой ID задачи Jira.');
+      throw AppArgumentError(
+        AppMessage(
+          'expectedAJiraIssueKeyOrNumericId',
+          [],
+          'Ожидается ключ или числовой ID задачи Jira.',
+        ),
+      );
     }
     final connection = _currentConnection;
     final token = await connectionStore.getSavedToken();
     if (connection == null || token == null || token.isEmpty) {
-      throw StateError(
-        'Нет активного подключения к Jira для загрузки worklogs.',
+      throw AppStateError(
+        AppMessage(
+          'noActiveJiraConnectionToLoadWorklogs',
+          [],
+          'Нет активного подключения к Jira для загрузки worklogs.',
+        ),
       );
     }
     final issue = await resolveIssueStrict(parsed);
@@ -1236,12 +1456,24 @@ class AppState extends ChangeNotifier {
   Future<Map<String, dynamic>> fetchJiraIssueDetails(String issueRef) async {
     final parsed = IssueParser.parse(issueRef);
     if (parsed == null) {
-      throw ArgumentError('Ожидается ключ или числовой ID задачи Jira.');
+      throw AppArgumentError(
+        AppMessage(
+          'expectedAJiraIssueKeyOrNumericId',
+          [],
+          'Ожидается ключ или числовой ID задачи Jira.',
+        ),
+      );
     }
     final connection = _currentConnection;
     final token = await connectionStore.getSavedToken();
     if (connection == null || token == null || token.isEmpty) {
-      throw StateError('Нет активного подключения к Jira.');
+      throw AppStateError(
+        AppMessage(
+          'noActiveJiraConnection',
+          [],
+          'Нет активного подключения к Jira.',
+        ),
+      );
     }
     return jiraClient.getIssueDetails(
       issueIdOrKey: parsed,
@@ -1256,12 +1488,24 @@ class AppState extends ChangeNotifier {
   ) async {
     final parsed = IssueParser.parse(issueRef);
     if (parsed == null || !RegExp(r'^\d+$').hasMatch(attachmentId)) {
-      throw ArgumentError('Ожидается ключ задачи Jira и числовой ID вложения.');
+      throw AppArgumentError(
+        AppMessage(
+          'expectedAJiraIssueKeyAndANumeric',
+          [],
+          'Ожидается ключ задачи Jira и числовой ID вложения.',
+        ),
+      );
     }
     final connection = _currentConnection;
     final token = await connectionStore.getSavedToken();
     if (connection == null || token == null || token.isEmpty) {
-      throw StateError('Нет активного подключения к Jira.');
+      throw AppStateError(
+        AppMessage(
+          'noActiveJiraConnection',
+          [],
+          'Нет активного подключения к Jira.',
+        ),
+      );
     }
     return jiraClient.downloadIssueAttachment(
       issueIdOrKey: parsed,
@@ -1285,12 +1529,18 @@ class AppState extends ChangeNotifier {
   }
 
   void updateDaySettings(DaySettings settings, {String? agentRule}) {
-    final errors = settings.validationErrors();
+    final errors = settings.validationMessages();
     if (errors.isNotEmpty) {
-      throw ArgumentError(errors.values.join('\n'));
+      throw AppArgumentError(AppMessage.join(errors.values));
     }
     if (agentRule != null && agentRule.trim().isEmpty) {
-      throw ArgumentError('Правило для агента не может быть пустым.');
+      throw AppArgumentError(
+        AppMessage(
+          'theAgentRuleCannotBeEmpty',
+          [],
+          'Правило для агента не может быть пустым.',
+        ),
+      );
     }
     store.setSettings({
       'day_settings': settings.toJson(),
@@ -1305,8 +1555,12 @@ class AppState extends ChangeNotifier {
     final draft = _currentDraft;
     if (draft == null) return;
     if (!canClearCurrentDay) {
-      throw StateError(
-        'Нельзя очистить день после начала отправки или в режиме только чтения.',
+      throw AppStateError(
+        AppMessage(
+          'cannotClearADayAfterSubmissionHasStarted',
+          [],
+          'Нельзя очистить день после начала отправки или в режиме только чтения.',
+        ),
       );
     }
     store.deleteDayDraft(draft.id);
@@ -1391,7 +1645,7 @@ class AppState extends ChangeNotifier {
       totalDaySeconds: totalDayDurationSeconds,
     );
 
-    _validationErrors = DayBuilder.validate(
+    _validationErrors = DayBuilder.validateMessages(
       plan: plan,
       existingWorklogs: _importedWorklogs,
       requirePauses: _currentBreaks.isNotEmpty,
@@ -1404,8 +1658,12 @@ class AppState extends ChangeNotifier {
 
   Future<void> buildDay({int? customSeed, bool smart = false}) async {
     if (isDraftLockedFromRebuild) {
-      throw StateError(
-        'Нельзя пересобрать частично или полностью отправленный день.',
+      throw AppStateError(
+        AppMessage(
+          'cannotRebuildAPartiallyOrFullySubmittedDay',
+          [],
+          'Нельзя пересобрать частично или полностью отправленный день.',
+        ),
       );
     }
 
@@ -1422,21 +1680,33 @@ class AppState extends ChangeNotifier {
             .toList();
 
         if (candidates.isEmpty) {
-          throw const DayBuilderException(
-            'Не выбрано ни одного лога для сборки дня.',
+          throw DayBuilderException(
+            AppMessage(
+              'noLogsSelectedToBuildTheDay',
+              [],
+              'Не выбрано ни одного лога для сборки дня.',
+            ),
           );
         }
 
         for (final c in candidates) {
           if (c.isRunning) {
-            throw const DayBuilderException(
-              'Работающий лог нельзя включить в черновик дня.',
+            throw DayBuilderException(
+              AppMessage(
+                'aRunningLogCannotBeIncludedInA',
+                [],
+                'Работающий лог нельзя включить в черновик дня.',
+              ),
             );
           }
           if (isLogInDraft(c.id) &&
               getDraftDateForLog(c.id) != selectedDateString) {
             throw DayBuilderException(
-              'Лог ${c.titleSnapshot} уже включен в черновик на дату ${getDraftDateForLog(c.id)}.',
+              AppMessage(
+                'logIsAlreadyIncludedInADraftFor',
+                [c.titleSnapshot, AppMessage.date(getDraftDateForLog(c.id))],
+                'Лог ${c.titleSnapshot} уже включен в черновик на дату ${getDraftDateForLog(c.id)}.',
+              ),
             );
           }
           final origStart = c.isManual
@@ -1503,21 +1773,33 @@ class AppState extends ChangeNotifier {
         final candidates = unconsumedLogs.where((l) => !l.isRunning).toList();
 
         if (candidates.isEmpty) {
-          throw const DayBuilderException(
-            'Не выбрано ни одного лога для сборки дня.',
+          throw DayBuilderException(
+            AppMessage(
+              'noLogsSelectedToBuildTheDay',
+              [],
+              'Не выбрано ни одного лога для сборки дня.',
+            ),
           );
         }
 
         for (final c in candidates) {
           if (c.isRunning) {
-            throw const DayBuilderException(
-              'Работающий лог нельзя включить в черновик дня.',
+            throw DayBuilderException(
+              AppMessage(
+                'aRunningLogCannotBeIncludedInA',
+                [],
+                'Работающий лог нельзя включить в черновик дня.',
+              ),
             );
           }
           if (isLogInDraft(c.id) &&
               getDraftDateForLog(c.id) != selectedDateString) {
             throw DayBuilderException(
-              'Лог ${c.titleSnapshot} уже включен в черновик на дату ${getDraftDateForLog(c.id)}.',
+              AppMessage(
+                'logIsAlreadyIncludedInADraftFor',
+                [c.titleSnapshot, AppMessage.date(getDraftDateForLog(c.id))],
+                'Лог ${c.titleSnapshot} уже включен в черновик на дату ${getDraftDateForLog(c.id)}.',
+              ),
             );
           }
           final origStart = c.isManual
@@ -1607,8 +1889,12 @@ class AppState extends ChangeNotifier {
       _selectedLogIds.clear();
       _selectedLogIds.addAll(newDraftLogs.map((dl) => dl.sourceLogId));
       _statusMessage = smart
-          ? 'День успешно пересобран (умная пересборка).'
-          : 'День успешно собран.';
+          ? AppMessage(
+              'daySuccessfullyRebuiltSmartRebuild',
+              [],
+              'День успешно пересобран (умная пересборка).',
+            )
+          : AppMessage('daySuccessfullyBuilt', [], 'День успешно собран.');
     } finally {
       _isBuildingDay = false;
       notifyListeners();
@@ -1623,7 +1909,13 @@ class AppState extends ChangeNotifier {
     String? baseRevision,
   }) async {
     if (inputSegments.isEmpty) {
-      throw ArgumentError('Список сегментов не может быть пустым.');
+      throw AppArgumentError(
+        AppMessage(
+          'theSegmentListCannotBeEmpty',
+          [],
+          'Список сегментов не может быть пустым.',
+        ),
+      );
     }
 
     final localDate = DateTime(
@@ -1640,19 +1932,31 @@ class AppState extends ChangeNotifier {
     if (targetDraft != null) {
       if (targetDraft.status != DraftStatus.draft ||
           targetSegments.any((s) => s.sendState != SendState.pending)) {
-        throw const AgentDayRevisionConflict(
-          'Нельзя заменить черновик после начала отправки дня.',
+        throw AgentDayRevisionConflict(
+          AppMessage(
+            'cannotReplaceTheDraftAfterDaySubmissionHas',
+            [],
+            'Нельзя заменить черновик после начала отправки дня.',
+          ),
         );
       }
       if (baseRevision == null ||
           baseRevision != dayDraftRevision(targetDraft)) {
-        throw const AgentDayRevisionConflict(
-          'Черновик дня изменился после чтения. Получите актуальный snapshot и повторите запись.',
+        throw AgentDayRevisionConflict(
+          AppMessage(
+            'theDayDraftHasChangedSinceItWas',
+            [],
+            'Черновик дня изменился после чтения. Получите актуальный snapshot и повторите запись.',
+          ),
         );
       }
     } else if (baseRevision != null) {
-      throw const AgentDayRevisionConflict(
-        'Черновик дня был удалён после чтения. Получите актуальный snapshot и повторите запись.',
+      throw AgentDayRevisionConflict(
+        AppMessage(
+          'theDayDraftHasBeenDeletedSinceIt',
+          [],
+          'Черновик дня был удалён после чтения. Получите актуальный snapshot и повторите запись.',
+        ),
       );
     }
 
@@ -1671,51 +1975,89 @@ class AppState extends ChangeNotifier {
       final input = inputSegments[i];
       final sourceLog = store.getLocalLog(input.sourceLogId);
       if (sourceLog == null || sourceLog.scope != activeScope) {
-        throw ArgumentError('Источник "${input.sourceLogId}" не найден.');
+        throw AppArgumentError(
+          AppMessage('sourceWasNotFound', [
+            input.sourceLogId,
+          ], 'Источник "${input.sourceLogId}" не найден.'),
+        );
       }
       if (sourceLog.isRunning) {
-        throw ArgumentError(
-          'Работающий источник "${sourceLog.id}" нельзя включить в день.',
+        throw AppArgumentError(
+          AppMessage(
+            'runningSourceCannotBeIncludedInADay',
+            [sourceLog.id],
+            'Работающий источник "${sourceLog.id}" нельзя включить в день.',
+          ),
         );
       }
       if (sourceLog.isConsumed) {
-        throw ArgumentError(
-          'Отправленный источник "${sourceLog.id}" нельзя включить повторно.',
+        throw AppArgumentError(
+          AppMessage(
+            'submittedSourceCannotBeIncludedAgain',
+            [sourceLog.id],
+            'Отправленный источник "${sourceLog.id}" нельзя включить повторно.',
+          ),
         );
       }
       if (sourceLog.accumulatedSeconds <= 0) {
-        throw ArgumentError(
-          'Источник "${sourceLog.id}" не содержит записанного времени.',
+        throw AppArgumentError(
+          AppMessage(
+            'sourceHasNoRecordedTime',
+            [sourceLog.id],
+            'Источник "${sourceLog.id}" не содержит записанного времени.',
+          ),
         );
       }
       final reservedDate = activeDraftDates[sourceLog.id];
       if (reservedDate != null && reservedDate != dateStr) {
-        throw ArgumentError(
-          'Источник "${sourceLog.id}" уже включён в черновик на дату $reservedDate.',
+        throw AppArgumentError(
+          AppMessage(
+            'sourceIsAlreadyIncludedInADraftFor',
+            [sourceLog.id, AppMessage.date(reservedDate)],
+            'Источник "${sourceLog.id}" уже включён в черновик на дату $reservedDate.',
+          ),
         );
       }
       final issue = availableIssues[sourceLog.issueId];
       if (issue == null) {
-        throw StateError(
-          'В локальном каталоге не найдена задача источника ${sourceLog.id}.',
+        throw AppStateError(
+          AppMessage(
+            'theIssueForSourceWasNotFoundIn',
+            [sourceLog.id],
+            'В локальном каталоге не найдена задача источника ${sourceLog.id}.',
+          ),
         );
       }
       if (input.issueKey != null &&
           input.issueKey!.toUpperCase() != issue.key.toUpperCase() &&
           input.issueKey != issue.issueId) {
-        throw ArgumentError(
-          'Задача "${input.issueKey}" не соответствует источнику ${sourceLog.id} (${issue.key}).',
+        throw AppArgumentError(
+          AppMessage(
+            'issueDoesNotMatchSource',
+            [input.issueKey, sourceLog.id, issue.key],
+            'Задача "${input.issueKey}" не соответствует источнику ${sourceLog.id} (${issue.key}).',
+          ),
         );
       }
       if (input.durationSeconds <= 0) {
-        throw ArgumentError('Длительность сегмента должна быть больше нуля.');
+        throw AppArgumentError(
+          AppMessage(
+            'segmentDurationMustBeGreaterThanZero',
+            [],
+            'Длительность сегмента должна быть больше нуля.',
+          ),
+        );
       }
       final localStart = input.startUtc.toLocal();
       if (localStart.year != localDate.year ||
           localStart.month != localDate.month ||
           localStart.day != localDate.day) {
-        throw ArgumentError(
-          'Начало сегмента должно попадать в целевую дату $dateStr.',
+        throw AppArgumentError(
+          AppMessage(
+            'theSegmentMustStartOnTheTargetDate',
+            [AppMessage.date(dateStr)],
+            'Начало сегмента должно попадать в целевую дату $dateStr.',
+          ),
         );
       }
       final nextLocalMidnight = DateTime(
@@ -1726,8 +2068,12 @@ class AppState extends ChangeNotifier {
       if (input.startUtc
           .add(Duration(seconds: input.durationSeconds))
           .isAfter(nextLocalMidnight)) {
-        throw ArgumentError(
-          'Сегмент должен полностью помещаться в целевую дату $dateStr.',
+        throw AppArgumentError(
+          AppMessage(
+            'theEntireSegmentMustFitWithinTheTarget',
+            [AppMessage.date(dateStr)],
+            'Сегмент должен полностью помещаться в целевую дату $dateStr.',
+          ),
         );
       }
 
@@ -1808,7 +2154,7 @@ class AppState extends ChangeNotifier {
     );
 
     // Валидация расписания
-    final validationErrors = DayBuilder.validate(
+    final validationErrors = DayBuilder.validateMessages(
       plan: plan,
       existingWorklogs: existingWorklogs,
       requirePauses: false,
@@ -1816,7 +2162,7 @@ class AppState extends ChangeNotifier {
     );
 
     if (validationErrors.isNotEmpty) {
-      throw DayBuilderException(validationErrors.join('; '));
+      throw DayBuilderException(AppMessage.join(validationErrors, '; '));
     }
 
     final newDraft = DayDraft(
@@ -1844,8 +2190,12 @@ class AppState extends ChangeNotifier {
                 store
                     .getSegments(draftId: currentTarget.id)
                     .any((s) => s.sendState != SendState.pending))) {
-      throw const AgentDayRevisionConflict(
-        'Черновик дня изменился во время подготовки snapshot. Получите актуальный snapshot и повторите запись.',
+      throw AgentDayRevisionConflict(
+        AppMessage(
+          'theDayDraftChangedWhileTheSnapshotWas',
+          [],
+          'Черновик дня изменился во время подготовки snapshot. Получите актуальный snapshot и повторите запись.',
+        ),
       );
     }
 
@@ -1905,7 +2255,15 @@ class AppState extends ChangeNotifier {
     required String description,
   }) {
     if (_currentDraft == null) return;
-    if (isReadOnly) throw StateError('Приложение открыто только для чтения.');
+    if (isReadOnly) {
+      throw AppStateError(
+        AppMessage(
+          'theApplicationIsReadOnly',
+          [],
+          'Приложение открыто только для чтения.',
+        ),
+      );
+    }
     final idx = _currentSegments.indexWhere((s) => s.id == segmentId);
     if (idx == -1) return;
 
@@ -1913,12 +2271,22 @@ class AppState extends ChangeNotifier {
     if (oldSegment.sendState == SendState.sent ||
         oldSegment.sendState == SendState.unknown ||
         oldSegment.sendState == SendState.sending) {
-      throw StateError(
-        'Этот интервал уже отправлен или ожидает сверки с Jira.',
+      throw AppStateError(
+        AppMessage(
+          'thisIntervalHasAlreadyBeenSubmittedOrNeeds',
+          [],
+          'Этот интервал уже отправлен или ожидает сверки с Jira.',
+        ),
       );
     }
     if (durationSeconds <= 0) {
-      throw ArgumentError('Длительность должна быть больше 0 минут.');
+      throw AppArgumentError(
+        AppMessage(
+          'durationMustBeGreaterThanMinutes',
+          [],
+          'Длительность должна быть больше 0 минут.',
+        ),
+      );
     }
     final updatedSegment = oldSegment.copyWith(
       startUtc: startUtc,
@@ -1936,8 +2304,12 @@ class AppState extends ChangeNotifier {
       } else if (delta != Duration.zero &&
           !segment.startUtc.isBefore(oldSegment.endUtc)) {
         if (segment.isFixed || segment.sendState != SendState.pending) {
-          throw ArgumentError(
-            'Следующий интервал закреплён или уже отправлялся. Сдвиг невозможен.',
+          throw AppArgumentError(
+            AppMessage(
+              'theNextIntervalIsPinnedOrHasAlready',
+              [],
+              'Следующий интервал закреплён или уже отправлялся. Сдвиг невозможен.',
+            ),
           );
         }
         segments.add(segment.copyWith(startUtc: segment.startUtc.add(delta)));
@@ -2042,8 +2414,12 @@ class AppState extends ChangeNotifier {
     final oldSegment = _currentSegments[idx];
     if (splitOffsetSeconds <= 0 ||
         splitOffsetSeconds >= oldSegment.durationSeconds) {
-      throw ArgumentError(
-        'Смещение точки разделения должно быть больше 0 и меньше длительности сегмента (${oldSegment.durationSeconds} с)',
+      throw AppArgumentError(
+        AppMessage(
+          'theSplitPointMustBeGreaterThanAnd',
+          [oldSegment.durationSeconds],
+          'Смещение точки разделения должно быть больше 0 и меньше длительности сегмента (${oldSegment.durationSeconds} с)',
+        ),
       );
     }
 
@@ -2091,13 +2467,23 @@ class AppState extends ChangeNotifier {
     final seg1 = _currentSegments[idx1];
     final seg2 = _currentSegments[idx2];
     if (seg1.sourceLogId != seg2.sourceLogId) {
-      throw ArgumentError(
-        'Можно объединить только сегменты одного исходного лога.',
+      throw AppArgumentError(
+        AppMessage(
+          'onlySegmentsFromTheSameSourceLogCan',
+          [],
+          'Можно объединить только сегменты одного исходного лога.',
+        ),
       );
     }
     final sourceLog = store.getLocalLog(seg1.sourceLogId);
     if (sourceLog == null || sourceLog.scope != activeScope) {
-      throw StateError('Исходный лог сегментов не найден.');
+      throw AppStateError(
+        AppMessage(
+          'theSourceLogForTheSegmentsWasNot',
+          [],
+          'Исходный лог сегментов не найден.',
+        ),
+      );
     }
 
     final firstSeg = seg1.startUtc.isBefore(seg2.startUtc) ? seg1 : seg2;
@@ -2167,8 +2553,12 @@ class AppState extends ChangeNotifier {
       return;
     }
     if (isReadOnly || isDraftLockedFromRebuild) {
-      throw StateError(
-        'Нельзя пересобрать день после начала отправки или в режиме только чтения.',
+      throw AppStateError(
+        AppMessage(
+          'cannotRebuildADayAfterSubmissionHasStarted',
+          [],
+          'Нельзя пересобрать день после начала отправки или в режиме только чтения.',
+        ),
       );
     }
     _isBuildingDay = true;
@@ -2237,7 +2627,11 @@ class AppState extends ChangeNotifier {
         scope: activeScope,
       );
       _revalidateCurrentPlan();
-      _statusMessage = 'День успешно пересобран с сохранением порядка.';
+      _statusMessage = AppMessage(
+        'daySuccessfullyRebuiltWithTheOrderPreserved',
+        [],
+        'День успешно пересобран с сохранением порядка.',
+      );
     } finally {
       _isBuildingDay = false;
       notifyListeners();
@@ -2313,36 +2707,66 @@ class AppState extends ChangeNotifier {
     required Break gap,
     required DateTime newStartUtc,
     required DateTime newEndUtc,
+  }) => validateGapAdjustmentMessage(
+    gap: gap,
+    newStartUtc: newStartUtc,
+    newEndUtc: newEndUtc,
+  )?.toString();
+
+  Object? validateGapAdjustmentMessage({
+    required Break gap,
+    required DateTime newStartUtc,
+    required DateTime newEndUtc,
   }) {
     if (!newEndUtc.isAfter(newStartUtc)) {
-      return 'Время окончания должно быть позже времени начала.';
+      return AppMessage(
+        'endTimeMustBeAfterStartTime',
+        [],
+        'Время окончания должно быть позже времени начала.',
+      );
     }
 
     final neighbors = findGapNeighbors(gap);
 
     if (neighbors.leftExisting != null) {
       if (newStartUtc != neighbors.leftExisting!.endUtc) {
-        return 'Нельзя изменять границу: слева находится запись из Jira (${neighbors.leftExisting!.issueKey}).';
+        return AppMessage(
+          'cannotChangeTheBoundaryThereIsAJira',
+          [neighbors.leftExisting!.issueKey],
+          'Нельзя изменять границу: слева находится запись из Jira (${neighbors.leftExisting!.issueKey}).',
+        );
       }
     } else if (neighbors.leftSegment != null) {
       final leftDur = newStartUtc
           .difference(neighbors.leftSegment!.startUtc)
           .inSeconds;
       if (leftDur < 60) {
-        return 'Длительность предыдущей задачи не может быть меньше 1 минуты.';
+        return AppMessage(
+          'thePreviousTaskMustBeAtLeastMinute',
+          [],
+          'Длительность предыдущей задачи не может быть меньше 1 минуты.',
+        );
       }
     }
 
     if (neighbors.rightExisting != null) {
       if (newEndUtc != neighbors.rightExisting!.startUtc) {
-        return 'Нельзя изменять границу: справа находится запись из Jira (${neighbors.rightExisting!.issueKey}).';
+        return AppMessage(
+          'cannotChangeTheBoundaryThereIsAJira76',
+          [neighbors.rightExisting!.issueKey],
+          'Нельзя изменять границу: справа находится запись из Jira (${neighbors.rightExisting!.issueKey}).',
+        );
       }
     } else if (neighbors.rightSegment != null) {
       final rightDur = neighbors.rightSegment!.endUtc
           .difference(newEndUtc)
           .inSeconds;
       if (rightDur < 60) {
-        return 'Длительность следующей задачи не может быть меньше 1 минуты.';
+        return AppMessage(
+          'theNextTaskMustBeAtLeastMinute',
+          [],
+          'Длительность следующей задачи не может быть меньше 1 минуты.',
+        );
       }
     }
 
@@ -2357,13 +2781,13 @@ class AppState extends ChangeNotifier {
     required BreakKind newKind,
   }) {
     if (_currentDraft == null) return;
-    final error = validateGapAdjustment(
+    final error = validateGapAdjustmentMessage(
       gap: gap,
       newStartUtc: newStartUtc,
       newEndUtc: newEndUtc,
     );
     if (error != null) {
-      throw ArgumentError(error);
+      throw AppArgumentError(error);
     }
 
     final neighbors = findGapNeighbors(gap);
@@ -2523,6 +2947,14 @@ class AppState extends ChangeNotifier {
   String? canShiftSegmentsRight({
     required DateTime afterUtc,
     required int deltaSeconds,
+  }) => canShiftSegmentsRightMessage(
+    afterUtc: afterUtc,
+    deltaSeconds: deltaSeconds,
+  )?.toString();
+
+  Object? canShiftSegmentsRightMessage({
+    required DateTime afterUtc,
+    required int deltaSeconds,
   }) {
     if (deltaSeconds <= 0) return null;
     final affectedSegments = _currentSegments
@@ -2540,7 +2972,11 @@ class AppState extends ChangeNotifier {
           final availableSec = ew.startUtc.difference(s.startUtc).inSeconds;
           final availMin = (availableSec / 60).round();
           final reqMin = (deltaSeconds / 60).round();
-          return 'Недостаточно свободного времени перед записью Jira ${ew.issueKey}: требуется $reqMin мин, доступно $availMin мин.';
+          return AppMessage(
+            'notEnoughFreeTimeBeforeJiraEntryRequires',
+            [ew.issueKey, reqMin, availMin],
+            'Недостаточно свободного времени перед записью Jira ${ew.issueKey}: требуется $reqMin мин, доступно $availMin мин.',
+          );
         }
       }
     }
@@ -2563,11 +2999,11 @@ class AppState extends ChangeNotifier {
     if (delta == 0) return;
 
     if (delta > 0) {
-      final err = canShiftSegmentsRight(
+      final err = canShiftSegmentsRightMessage(
         afterUtc: currentSegment.endUtc,
         deltaSeconds: delta,
       );
-      if (err != null) throw ArgumentError(err);
+      if (err != null) throw AppArgumentError(err);
 
       final rightSegments =
           _currentSegments
@@ -2787,11 +3223,11 @@ class AppState extends ChangeNotifier {
     final delta = newDurationSeconds - gap.durationSeconds;
 
     if (delta > 0) {
-      final err = canShiftSegmentsRight(
+      final err = canShiftSegmentsRightMessage(
         afterUtc: gap.endUtc,
         deltaSeconds: delta,
       );
-      if (err != null) throw ArgumentError(err);
+      if (err != null) throw AppArgumentError(err);
 
       final rightSegments =
           _currentSegments
@@ -2855,13 +3291,21 @@ class AppState extends ChangeNotifier {
     if (draft == null || conn == null) return null;
     final token = await connectionStore.getSavedToken();
     if (token == null || token.isEmpty) {
-      _statusMessage = 'Токен Jira не найден в защищённом хранилище';
+      _statusMessage = AppMessage(
+        'jiraTokenWasNotFoundInSecureStorage',
+        [],
+        'Токен Jira не найден в защищённом хранилище',
+      );
       notifyListeners();
       return null;
     }
 
     _isSubmittingDay = true;
-    _statusMessage = 'Отправка записей в Jira...';
+    _statusMessage = AppMessage(
+      'submittingEntriesToJira',
+      [],
+      'Отправка записей в Jira...',
+    );
     notifyListeners();
 
     try {
@@ -2879,17 +3323,27 @@ class AppState extends ChangeNotifier {
       _logs = store.getLocalLogs(scope: activeScope);
 
       if (result.isSuccess) {
-        _statusMessage =
-            'Все записи (${result.sent}) успешно отправлены в Jira!';
-      } else if (result.errorMessage != null) {
-        _statusMessage = 'Ошибка отправки: ${result.errorMessage}';
+        _statusMessage = AppMessage(
+          'allEntriesWereSuccessfullySubmittedToJira',
+          [result.sent],
+          'Все записи (${result.sent}) успешно отправлены в Jira!',
+        );
+      } else if (result.errorText != null) {
+        _statusMessage = AppMessage('submissionError', [
+          result.errorText,
+        ], 'Ошибка отправки: ${result.errorText}');
       } else {
-        _statusMessage =
-            'Отправка завершена: отправлено ${result.sent}, ошибок ${result.failed}, неизвестно ${result.unknown}.';
+        _statusMessage = AppMessage(
+          'submissionFinishedSentFailedUnknown',
+          [result.sent, result.failed, result.unknown],
+          'Отправка завершена: отправлено ${result.sent}, ошибок ${result.failed}, неизвестно ${result.unknown}.',
+        );
       }
       return result;
     } catch (e) {
-      _statusMessage = 'Ошибка отправки в Jira: $e';
+      _statusMessage = AppMessage('errorSubmittingToJira', [
+        e,
+      ], 'Ошибка отправки в Jira: $e');
       return null;
     } finally {
       _isSubmittingDay = false;
@@ -2913,11 +3367,13 @@ class AppState extends ChangeNotifier {
       );
       loadDraftForSelectedDate();
       _logs = store.getLocalLogs(scope: activeScope);
-      _statusMessage = res.message;
+      _statusMessage = res.messageText;
       notifyListeners();
       return res;
     } catch (e) {
-      _statusMessage = 'Ошибка сверки: $e';
+      _statusMessage = AppMessage('reconciliationError', [
+        e,
+      ], 'Ошибка сверки: $e');
       notifyListeners();
       return null;
     }
@@ -2943,23 +3399,43 @@ class AppState extends ChangeNotifier {
     loadDraftForSelectedDate();
     _logs = store.getLocalLogs(scope: activeScope);
     _statusMessage = res.isSuccess
-        ? 'Worklog успешно привязан!'
-        : (res.errorMessage ?? 'Ошибка привязки worklog');
+        ? AppMessage(
+            'worklogSuccessfullyLinked',
+            [],
+            'Worklog успешно привязан!',
+          )
+        : (res.errorText ??
+              AppMessage(
+                'errorLinkingTheWorklog',
+                [],
+                'Ошибка привязки worklog',
+              ));
     notifyListeners();
     return res;
   }
 
   /// Пользователь подтвердил отсутствие записи и разрешил повтор (сценарий A15).
   void manuallyConfirmAbsenceAndAllowRetry(Segment segment) {
-    if (isReadOnly) throw StateError('Приложение открыто только для чтения.');
+    if (isReadOnly) {
+      throw AppStateError(
+        AppMessage(
+          'theApplicationIsReadOnly',
+          [],
+          'Приложение открыто только для чтения.',
+        ),
+      );
+    }
     worklogSender.manuallyConfirmAbsenceAndAllowRetry(segment: segment);
     loadDraftForSelectedDate();
-    _statusMessage =
-        'Статус сегмента сброшен на «В очереди». Разрешена повторная отправка.';
+    _statusMessage = AppMessage(
+      'segmentResetToPendingSubmissionIsAllowedAgain',
+      [],
+      'Статус сегмента сброшен на «В очереди». Разрешена повторная отправка.',
+    );
     notifyListeners();
   }
 
-  void setStatusMessage(String? message) {
+  void setStatusMessage(Object? message) {
     _statusMessage = message;
     notifyListeners();
   }
@@ -2978,6 +3454,7 @@ class AppState extends ChangeNotifier {
     _apiServer?.stop();
     _apiServer = null;
     themeMode.dispose();
+    language.dispose();
     super.dispose();
   }
 }

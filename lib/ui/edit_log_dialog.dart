@@ -1,3 +1,6 @@
+import '../app_message.dart';
+import '../l10n/app_localizations.dart';
+import '../ui/message_format.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../app_state.dart';
@@ -30,7 +33,7 @@ class _EditLogDialogState extends State<EditLogDialog> {
   late final TextEditingController _minutesController;
   late final TextEditingController _descController;
   String? _fixedStartTime;
-  String? _errorMessage;
+  Object? _errorMessage;
   bool _isSaving = false;
 
   Future<void> _pickFixedStartTime() async {
@@ -81,7 +84,11 @@ class _EditLogDialogState extends State<EditLogDialog> {
 
     if (totalSeconds <= 0) {
       setState(() {
-        _errorMessage = 'Длительность времени должна быть больше нуля';
+        _errorMessage = AppMessage(
+          'durationMustBeGreaterThanZero',
+          [],
+          "Длительность времени должна быть больше нуля",
+        );
       });
       return;
     }
@@ -105,7 +112,7 @@ class _EditLogDialogState extends State<EditLogDialog> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = e.toString();
+          _errorMessage = e;
           _isSaving = false;
         });
       }
@@ -123,7 +130,7 @@ class _EditLogDialogState extends State<EditLogDialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'Редактировать запись времени',
+            AppLocalizations.of(context).editTimeEntry,
             style: Theme.of(
               context,
             ).textTheme.titleLarge?.copyWith(fontSize: 22),
@@ -151,7 +158,7 @@ class _EditLogDialogState extends State<EditLogDialog> {
                 children: [
                   Expanded(
                     child: Text(
-                      'Часы',
+                      AppLocalizations.of(context).hours,
                       style: TextStyle(
                         fontSize: 12,
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -161,7 +168,7 @@ class _EditLogDialogState extends State<EditLogDialog> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Минуты',
+                      AppLocalizations.of(context).minutes,
                       style: TextStyle(
                         fontSize: 12,
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -215,7 +222,7 @@ class _EditLogDialogState extends State<EditLogDialog> {
               if (_errorMessage != null) ...[
                 const SizedBox(height: 8),
                 Text(
-                  _errorMessage!,
+                  renderMessage(context, _errorMessage!),
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.error,
                     fontSize: 12,
@@ -224,8 +231,8 @@ class _EditLogDialogState extends State<EditLogDialog> {
               ],
               const SizedBox(height: 16),
 
-              const Text(
-                'Что сделано (описание)',
+              Text(
+                AppLocalizations.of(context).workDoneDescription,
                 style: TextStyle(fontSize: 12),
               ),
               const SizedBox(height: 6),
@@ -236,8 +243,10 @@ class _EditLogDialogState extends State<EditLogDialog> {
                   expands: true,
                   maxLines: null,
                   minLines: null,
-                  decoration: const InputDecoration(
-                    hintText: 'Краткое описание работы...',
+                  decoration: InputDecoration(
+                    hintText: AppLocalizations.of(
+                      context,
+                    ).briefDescriptionOfTheWork,
                     isDense: true,
                     contentPadding: EdgeInsets.all(12),
                   ),
@@ -250,13 +259,13 @@ class _EditLogDialogState extends State<EditLogDialog> {
                 TextButton.icon(
                   onPressed: _pickFixedStartTime,
                   icon: const Icon(Icons.schedule, size: 16),
-                  label: const Text('Указать время начала'),
+                  label: Text(AppLocalizations.of(context).setStartTime),
                 )
               else
                 Row(
                   children: [
-                    const Text(
-                      'Фиксированное начало',
+                    Text(
+                      AppLocalizations.of(context).fixedStart,
                       style: TextStyle(fontSize: 11),
                     ),
                     const SizedBox(width: 8),
@@ -265,7 +274,7 @@ class _EditLogDialogState extends State<EditLogDialog> {
                       child: Text(_fixedStartTime!),
                     ),
                     IconButton(
-                      tooltip: 'Очистить фиксированное время',
+                      tooltip: AppLocalizations.of(context).clearFixedStartTime,
                       onPressed: () => setState(() => _fixedStartTime = null),
                       icon: const Icon(Icons.close, size: 16),
                     ),
@@ -278,7 +287,7 @@ class _EditLogDialogState extends State<EditLogDialog> {
       actions: [
         TextButton(
           onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
-          child: const Text('Отмена'),
+          child: Text(AppLocalizations.of(context).cancel),
         ),
         FilledButton(
           onPressed: _isSaving ? null : _handleSave,
@@ -288,7 +297,7 @@ class _EditLogDialogState extends State<EditLogDialog> {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Сохранить'),
+              : Text(AppLocalizations.of(context).save),
         ),
       ],
     );

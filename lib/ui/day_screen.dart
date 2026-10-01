@@ -1,6 +1,8 @@
+import '../app_message.dart';
+import '../l10n/app_localizations.dart';
+import '../ui/message_format.dart';
 import 'package:flutter/material.dart';
 import '../app_state.dart';
-import '../log_clock.dart';
 import '../models.dart';
 import '../worklog_sender.dart';
 import 'app_theme.dart';
@@ -25,22 +27,38 @@ class DayScreen extends StatelessWidget {
         final hasExistingWorklogs = appState.importedWorklogs.isNotEmpty;
         final hasDayData = hasDraft || hasExistingWorklogs;
         return Scaffold(
-          body: Column(
-            children: [
-              _buildHeader(context),
-              if (hasDraft) _buildSummaryStats(context),
-              if (hasDraft) _buildTimeline(context),
-              if (hasDraft) _buildSubmissionNotice(context),
-
-              if (hasDraft && appState.validationErrors.isNotEmpty)
-                _buildValidationErrors(context),
-              Expanded(
-                child: hasDayData
-                    ? _buildDayGrid(context)
-                    : _buildEmptyDay(context),
-              ),
-              if (hasDraft) _buildSubmissionFooter(context),
-            ],
+          body: LayoutBuilder(
+            builder: (context, constraints) {
+              final heading = <Widget>[
+                _buildHeader(context),
+                if (hasDraft) _buildSummaryStats(context),
+                if (hasDraft) _buildTimeline(context),
+                if (hasDraft) _buildSubmissionNotice(context),
+                if (hasDraft && appState.validationErrors.isNotEmpty)
+                  _buildValidationErrors(context),
+              ];
+              final grid = hasDayData
+                  ? _buildDayGrid(context)
+                  : _buildEmptyDay(context);
+              if (hasDraft && constraints.maxHeight < 850) {
+                return SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      ...heading,
+                      SizedBox(height: 360, child: grid),
+                      _buildSubmissionFooter(context),
+                    ],
+                  ),
+                );
+              }
+              return Column(
+                children: [
+                  ...heading,
+                  Expanded(child: grid),
+                  if (hasDraft) _buildSubmissionFooter(context),
+                ],
+              );
+            },
           ),
         );
       },
@@ -53,7 +71,10 @@ class DayScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Шкала дня', style: Theme.of(context).textTheme.titleSmall),
+          Text(
+            AppLocalizations.of(context).dayTimeline,
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
           const SizedBox(height: 10),
           TimelineTrackBar(
             draft: appState.currentDraft!,
@@ -68,7 +89,9 @@ class DayScreen extends StatelessWidget {
               _openEditSegmentDialog(
                 context,
                 seg,
-                issue == null ? 'Задача' : '${issue.key} · ${issue.summary}',
+                issue == null
+                    ? AppLocalizations.of(context).issue
+                    : '${issue.key} · ${issue.summary}',
               );
             },
             onEditBreak: (breakItem) =>
@@ -96,12 +119,11 @@ class DayScreen extends StatelessWidget {
   }
 
   void _showEditError(BuildContext context, Object error) {
-    final message = error is ArgumentError
-        ? (error.message?.toString() ?? error.toString())
-        : error.toString();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
+        content: Builder(
+          builder: (context) => Text(renderMessage(context, error)),
+        ),
         backgroundColor: Theme.of(context).colorScheme.error,
       ),
     );
@@ -120,13 +142,22 @@ class DayScreen extends StatelessWidget {
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final title = unknown > 0
-        ? 'Нужно проверить результат отправки'
+        ? AppLocalizations.of(context).submissionResultNeedsChecking
         : sent > 0
-        ? 'День отправлен частично'
-        : 'Не удалось отправить записи';
+        ? AppLocalizations.of(context).dayPartiallySubmitted
+        : AppLocalizations.of(context).couldNotSubmitEntries;
     final detail = unknown > 0
-        ? '$sent отправлено, $failed с ошибкой, $unknown с неизвестным результатом. Повторная отправка неизвестных записей заблокирована.'
-        : '$sent отправлено, $failed не отправлено. Можно повторить отправку неуспешных записей.';
+        ? AppLocalizations.of(
+            context,
+          ).sentFailedWithAnUnknownResultResubmissionOf(
+            renderMessage(context, sent),
+            renderMessage(context, failed),
+            renderMessage(context, unknown),
+          )
+        : AppLocalizations.of(context).sentNotSentFailedEntriesCanBeResubmitted(
+            renderMessage(context, sent),
+            renderMessage(context, failed),
+          );
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(40, 0, 40, 20),
@@ -174,17 +205,19 @@ class DayScreen extends StatelessWidget {
     final draft = appState.currentDraft;
     final subtitle = draft == null
         ? appState.isFetchingJiraWorklogs
-              ? 'Загружаем записи из Jira...'
+              ? AppLocalizations.of(context).loadingJiraEntries
               : appState.importedWorklogs.isNotEmpty
-              ? 'Записи Jira за выбранный день'
+              ? AppLocalizations.of(context).jiraEntriesForTheSelectedDay
               : appState.hasLoadedJiraWorklogs
-              ? 'Записей Jira за выбранный день нет'
-              : 'Соберите расписание из выбранных логов'
+              ? AppLocalizations.of(context).noJiraEntriesForTheSelectedDay
+              : AppLocalizations.of(context).buildAScheduleFromTheSelectedLogs
         : draft.status == DraftStatus.completed
-        ? 'Все записи отправлены'
+        ? AppLocalizations.of(context).allEntriesSubmitted
         : appState.isDraftLockedFromRebuild
-        ? 'Результат отправки'
-        : '${_weekdayName(date.weekday)} · Черновик сохранён на устройстве';
+        ? AppLocalizations.of(context).submissionResult
+        : AppLocalizations.of(context).draftSavedOnThisDevice(
+            renderMessage(context, _weekdayName(context, date.weekday)),
+          );
 
     Future<void> pickDate() async {
       final picked = await showDatePicker(
@@ -192,15 +225,12 @@ class DayScreen extends StatelessWidget {
         initialDate: appState.selectedDate,
         firstDate: DateTime(2020),
         lastDate: DateTime(2035),
-        helpText: 'Выберите дату',
-        cancelText: 'Отмена',
-        confirmText: 'Выбрать',
       );
       if (picked != null) appState.setSelectedDate(picked);
     }
 
     final dateMenu = PopupMenuButton<String>(
-      tooltip: 'Другие действия с расписанием',
+      tooltip: AppLocalizations.of(context).moreScheduleActions,
       onSelected: (action) {
         switch (action) {
           case 'date':
@@ -218,21 +248,37 @@ class DayScreen extends StatelessWidget {
         }
       },
       itemBuilder: (context) => [
-        PopupMenuItem(value: 'date', child: Text('Выбрать дату ($dateStr)')),
-        const PopupMenuItem(value: 'previous', child: Text('Предыдущий день')),
-        const PopupMenuItem(value: 'next', child: Text('Следующий день')),
-        const PopupMenuItem(value: 'today', child: Text('Сегодня')),
+        PopupMenuItem(
+          value: 'date',
+          child: Text(
+            AppLocalizations.of(
+              context,
+            ).selectDate(renderMessage(context, dateStr)),
+          ),
+        ),
+        PopupMenuItem(
+          value: 'previous',
+          child: Text(AppLocalizations.of(context).previousDay),
+        ),
+        PopupMenuItem(
+          value: 'next',
+          child: Text(AppLocalizations.of(context).nextDay),
+        ),
+        PopupMenuItem(
+          value: 'today',
+          child: Text(AppLocalizations.of(context).today),
+        ),
         PopupMenuItem(
           value: 'refresh',
           enabled: !appState.isFetchingJiraWorklogs,
-          child: const Text('Обновить записи из Jira'),
+          child: Text(AppLocalizations.of(context).refreshJiraEntries),
         ),
         if (draft != null) ...[
           const PopupMenuDivider(),
           PopupMenuItem(
             value: 'rebuild',
             enabled: !appState.isReadOnly && !appState.isDraftLockedFromRebuild,
-            child: const Text('Пересобрать день'),
+            child: Text(AppLocalizations.of(context).rebuildDay),
           ),
         ],
       ],
@@ -250,12 +296,12 @@ class DayScreen extends StatelessWidget {
         TextButton.icon(
           onPressed: () => _showSubmissionResults(context),
           icon: const Icon(Icons.receipt_long_outlined, size: 16),
-          label: const Text('Результаты отправки'),
+          label: Text(AppLocalizations.of(context).submissionResults),
         ),
       if (draft != null)
         OutlinedButton.icon(
           icon: const Icon(Icons.delete_sweep_outlined, size: 16),
-          label: const Text('Очистить'),
+          label: Text(AppLocalizations.of(context).clear),
           style: OutlinedButton.styleFrom(
             minimumSize: const Size(0, 36),
             padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -268,7 +314,7 @@ class DayScreen extends StatelessWidget {
       if (draft != null)
         OutlinedButton.icon(
           icon: const Icon(Icons.auto_awesome, size: 16),
-          label: const Text('Умная пересборка'),
+          label: Text(AppLocalizations.of(context).smartRebuild),
           style: OutlinedButton.styleFrom(
             minimumSize: const Size(0, 36),
             visualDensity: VisualDensity.standard,
@@ -296,7 +342,7 @@ class DayScreen extends StatelessWidget {
                 alignment: Alignment.centerLeft,
               ),
               child: Text(
-                '${date.day} ${_monthName(date.month)}',
+                '${date.day} ${_monthName(context, date.month)}',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   fontSize: 29,
                   fontWeight: FontWeight.w600,
@@ -366,43 +412,59 @@ class DayScreen extends StatelessWidget {
         builder: (context, constraints) {
           final metrics = [
             _DayMetric(
-              label: 'Границы дня',
+              label: AppLocalizations.of(context).dayBoundaries,
               value: '$start — $end',
-              detail:
-                  'Весь день: ${LogClock.formatHoursMinutes(appState.totalDayDurationSeconds)} с паузами',
+              detail: AppLocalizations.of(context).wholeDayIncludingBreaks(
+                renderMessage(
+                  context,
+                  formatHoursMinutes(context, appState.totalDayDurationSeconds),
+                ),
+              ),
             ),
             _DayMetric(
-              label: hasSent ? 'Отправлено' : 'Новое время',
-              value: LogClock.formatHoursMinutes(
+              label: hasSent
+                  ? AppLocalizations.of(context).sent
+                  : AppLocalizations.of(context).newTime,
+              value: formatHoursMinutes(
+                context,
                 hasSent ? sentDuration : appState.totalSegmentsDurationSeconds,
               ),
               detail: hasSent
-                  ? '${sentSegments.length} из ${appState.currentSegments.length} записей'
+                  ? AppLocalizations.of(context).ofEntries(
+                      renderMessage(context, sentSegments.length),
+                      appState.currentSegments.length,
+                    )
                   : appState.currentSegments.any(
                       (segment) =>
                           segment.sendState == SendState.failed ||
                           segment.sendState == SendState.unknown,
                     )
-                  ? '${appState.currentSegments.length} записей в расписании'
-                  : '${appState.currentSegments.length} записей к отправке',
+                  ? AppLocalizations.of(
+                      context,
+                    ).scheduleEntryCount(appState.currentSegments.length)
+                  : AppLocalizations.of(
+                      context,
+                    ).entriesToSubmit(appState.currentSegments.length),
               color: hasSent
                   ? AppColors.green(isDark)
                   : AppColors.primary(isDark),
             ),
             _DayMetric(
-              label: 'Уже в Jira',
-              value: LogClock.formatHoursMinutes(
+              label: AppLocalizations.of(context).alreadyInJira,
+              value: formatHoursMinutes(
+                context,
                 appState.totalExistingDurationSeconds,
               ),
-              detail: 'Не отправляется повторно',
+              detail: AppLocalizations.of(context).willNotBeSubmittedAgain,
               color: AppColors.text(isDark),
             ),
             _DayMetric(
-              label: 'Паузы',
-              value: LogClock.formatHoursMinutes(
+              label: AppLocalizations.of(context).breaks,
+              value: formatHoursMinutes(
+                context,
                 appState.totalBreaksDurationSeconds,
               ),
-              detail: 'Не входят в рабочее время',
+              detail: AppLocalizations.of(context).excludedFromWorkTime,
             ),
           ];
           if (constraints.maxWidth < 760) {
@@ -493,27 +555,34 @@ class DayScreen extends StatelessWidget {
     final hasUnknown = segments.any((s) => s.sendState == SendState.unknown);
     final hasFailed = segments.any((s) => s.sendState == SendState.failed);
     final note = appState.isDraftLockedFromRebuild
-        ? 'Пересборка недоступна после начала отправки. Сначала нужно разрешить все результаты.'
+        ? AppLocalizations.of(
+            context,
+          ).rebuildIsUnavailableAfterSubmissionHasStartedResolve
         : hasUnknown
-        ? 'Сверьте неизвестные результаты перед повторной отправкой.'
+        ? AppLocalizations.of(context).reconcileUnknownResultsBeforeResubmitting
         : hasFailed
-        ? 'Повторная отправка затронет только неотправленные записи.'
-        : 'Успешные записи не отправляются повторно.';
+        ? AppLocalizations.of(
+            context,
+          ).resubmissionAffectsOnlyEntriesThatHaveNotBeen
+        : AppLocalizations.of(context).successfulEntriesAreNeverSubmittedAgain;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(40, 5, 40, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Wrap(
+            spacing: 24,
+            runSpacing: 8,
             children: [
               Text(
-                'Записи этого дня',
+                AppLocalizations.of(context).entriesForThisDay,
                 style: Theme.of(context).textTheme.titleMedium,
               ),
-              const Spacer(),
               Text(
-                'Успешные записи не отправляются повторно',
+                AppLocalizations.of(
+                  context,
+                ).successfulEntriesAreNeverSubmittedAgain229,
                 style: TextStyle(fontSize: 11, color: AppColors.muted(isDark)),
               ),
             ],
@@ -570,27 +639,27 @@ class DayScreen extends StatelessWidget {
     final title = issue?.summary ?? issueKey;
     final status = switch (segment.sendState) {
       SendState.pending => (
-        'Ожидает отправки',
+        AppLocalizations.of(context).pendingSubmission,
         Icons.hourglass_empty,
         AppColors.muted(isDark),
       ),
       SendState.sending => (
-        'Отправка...',
+        AppLocalizations.of(context).sending,
         Icons.sync,
         AppColors.primary(isDark),
       ),
       SendState.sent => (
-        'Отправлено',
+        AppLocalizations.of(context).sent,
         Icons.check_circle_outline,
         AppColors.green(isDark),
       ),
       SendState.failed => (
-        'Не отправлено',
+        AppLocalizations.of(context).notSent,
         Icons.error_outline,
         AppColors.error(isDark),
       ),
       SendState.unknown => (
-        'Проверяем результат',
+        AppLocalizations.of(context).checkingTheResult,
         Icons.sync,
         AppColors.warn(isDark),
       ),
@@ -644,7 +713,7 @@ class DayScreen extends StatelessWidget {
                 Text(
                   segment.description.isNotEmpty
                       ? segment.description
-                      : '(без описания)',
+                      : AppLocalizations.of(context).noDescription,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -662,7 +731,10 @@ class DayScreen extends StatelessWidget {
                   ),
                 if (segment.lastError?.isNotEmpty == true)
                   Text(
-                    segment.lastError!,
+                    renderMessage(
+                      context,
+                      deserializeMessage(segment.lastError!),
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -677,7 +749,7 @@ class DayScreen extends StatelessWidget {
           SizedBox(
             width: 54,
             child: Text(
-              LogClock.formatHoursMinutes(segment.durationSeconds),
+              formatHoursMinutes(context, segment.durationSeconds),
               textAlign: TextAlign.right,
               style: const TextStyle(fontFamily: 'IBM Plex Mono', fontSize: 11),
             ),
@@ -702,7 +774,7 @@ class DayScreen extends StatelessWidget {
           ),
           if (segment.sendState == SendState.unknown)
             PopupMenuButton<String>(
-              tooltip: 'Действия для неопределённого результата',
+              tooltip: AppLocalizations.of(context).actionsForAnUnknownResult,
               enabled: !appState.isReadOnly,
               onSelected: (action) {
                 if (action == 'reconcile') {
@@ -711,14 +783,14 @@ class DayScreen extends StatelessWidget {
                   _openManualResolveDialog(context, segment);
                 }
               },
-              itemBuilder: (context) => const [
+              itemBuilder: (context) => [
                 PopupMenuItem(
                   value: 'reconcile',
-                  child: Text('Сверить результат (A15)'),
+                  child: Text(AppLocalizations.of(context).reconcileResultA),
                 ),
                 PopupMenuItem(
                   value: 'resolve',
-                  child: Text('Разрешить вручную (A15)'),
+                  child: Text(AppLocalizations.of(context).resolveManuallyA),
                 ),
               ],
             )
@@ -733,13 +805,13 @@ class DayScreen extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final jiraLoadFailed = appState.jiraWorklogsLoadFailed;
     if (appState.isFetchingJiraWorklogs) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             CircularProgressIndicator(),
             SizedBox(height: 16),
-            Text('Загружаем записи из Jira...'),
+            Text(AppLocalizations.of(context).loadingJiraEntries),
           ],
         ),
       );
@@ -756,23 +828,23 @@ class DayScreen extends StatelessWidget {
           const SizedBox(height: 14),
           Text(
             jiraLoadFailed
-                ? 'Не удалось загрузить записи Jira'
+                ? AppLocalizations.of(context).couldNotLoadJiraEntries
                 : appState.hasLoadedJiraWorklogs
-                ? 'Записей Jira за этот день нет'
-                : 'Соберите день из своих логов',
+                ? AppLocalizations.of(context).noJiraEntriesForThisDay
+                : AppLocalizations.of(context).buildADayFromYourLogs,
             style: TextStyle(fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 4),
           Text(
             jiraLoadFailed
-                ? 'Повторите загрузку через меню у даты.'
-                : 'На «Работе» выберите записи и нужную дату.',
+                ? AppLocalizations.of(context).retryLoadingUsingTheDateMenu
+                : AppLocalizations.of(context).selectEntriesAndTheDateOnTheWork,
             style: TextStyle(fontSize: 12, color: AppColors.muted(isDark)),
           ),
           const SizedBox(height: 16),
           FilledButton(
             onPressed: () => appState.selectTab(0),
-            child: const Text('Выбрать логи'),
+            child: Text(AppLocalizations.of(context).selectLogs),
           ),
         ],
       ),
@@ -781,7 +853,7 @@ class DayScreen extends StatelessWidget {
 
   Widget _buildValidationErrors(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final errors = appState.validationErrors;
+    final errors = appState.validationMessages;
     return Padding(
       padding: const EdgeInsets.fromLTRB(40, 0, 40, 20),
       child: Container(
@@ -799,7 +871,7 @@ class DayScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Расписание требует проверки',
+                    AppLocalizations.of(context).theScheduleNeedsChecking,
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       color: AppColors.warn(isDark),
@@ -807,7 +879,9 @@ class DayScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    '${errors.length} ${errors.length == 1 ? 'ошибка' : 'ошибок'} · отправка в Jira заблокирована',
+                    AppLocalizations.of(
+                      context,
+                    ).scheduleErrorCount(errors.length),
                     style: TextStyle(
                       fontSize: 12,
                       color: AppColors.muted(isDark),
@@ -820,7 +894,7 @@ class DayScreen extends StatelessWidget {
               onPressed: () => showDialog<void>(
                 context: context,
                 builder: (dialogContext) => AlertDialog(
-                  title: const Text('Ошибки в расписании'),
+                  title: Text(AppLocalizations.of(context).scheduleErrors),
                   content: SizedBox(
                     width: 560,
                     child: SingleChildScrollView(
@@ -832,7 +906,7 @@ class DayScreen extends StatelessWidget {
                             Padding(
                               padding: const EdgeInsets.only(bottom: 10),
                               child: Text(
-                                '• $error',
+                                '• ${renderMessage(context, error)}',
                                 style: const TextStyle(fontSize: 13),
                               ),
                             ),
@@ -843,12 +917,12 @@ class DayScreen extends StatelessWidget {
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.of(dialogContext).pop(),
-                      child: const Text('Закрыть'),
+                      child: Text(AppLocalizations.of(context).close),
                     ),
                   ],
                 ),
               ),
-              child: const Text('Показать ошибки'),
+              child: Text(AppLocalizations.of(context).showErrors),
             ),
           ],
         ),
@@ -867,7 +941,9 @@ class DayScreen extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                hasDraft ? 'Источники' : 'Логи для включения',
+                hasDraft
+                    ? AppLocalizations.of(context).sources
+                    : AppLocalizations.of(context).logsToInclude,
                 style: Theme.of(context).textTheme.titleSmall,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -876,7 +952,9 @@ class DayScreen extends StatelessWidget {
         ),
         const SizedBox(height: 24),
         Text(
-          hasDraft ? 'Исходное время → в расписании' : 'Выберите логи для дня',
+          hasDraft
+              ? AppLocalizations.of(context).recordedTimeScheduledTime
+              : AppLocalizations.of(context).selectLogsForTheDay,
           style: TextStyle(fontSize: 11, color: AppColors.muted(isDark)),
         ),
         const SizedBox(height: 5),
@@ -893,7 +971,7 @@ class DayScreen extends StatelessWidget {
     final draftLogs = appState.currentDraftLogs;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     if (draftLogs.isEmpty) {
-      return const Center(child: Text('Нет источников'));
+      return Center(child: Text(AppLocalizations.of(context).noSources));
     }
 
     return ListView.separated(
@@ -923,10 +1001,11 @@ class DayScreen extends StatelessWidget {
             .where((issue) => issue.issueId == srcLog.issueId)
             .firstOrNull;
 
-        final originalTime = LogClock.formatHoursMinutes(
+        final originalTime = formatHoursMinutes(
+          context,
           dl.sourceDurationSeconds,
         );
-        final allocatedTime = LogClock.formatHoursMinutes(allocatedSec);
+        final allocatedTime = formatHoursMinutes(context, allocatedSec);
 
         return ListTile(
           dense: false,
@@ -993,8 +1072,8 @@ class DayScreen extends StatelessWidget {
                   : AppColors.muted(isDark),
             ),
             tooltip: isLocked
-                ? 'Длительность зафиксирована (нажмите чтобы разблокировать)'
-                : 'Зафиксировать длительность при пересборке',
+                ? AppLocalizations.of(context).durationLockedClickToUnlock
+                : AppLocalizations.of(context).lockDurationWhenRebuilding,
             onPressed: () => appState.toggleLogLock(dl.sourceLogId),
           ),
         );
@@ -1006,11 +1085,11 @@ class DayScreen extends StatelessWidget {
     final queue = appState.unconsumedLogs.where((l) => !l.isRunning).toList();
 
     if (queue.isEmpty) {
-      return const Center(
+      return Center(
         child: Padding(
           padding: EdgeInsets.all(16.0),
           child: Text(
-            'В очереди нет свободных остановленных логов. Добавьте время на вкладке «Работа».',
+            AppLocalizations.of(context).theQueueHasNoFreeStoppedLogsAdd,
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.grey),
           ),
@@ -1045,12 +1124,14 @@ class DayScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                LogClock.formatHoursMinutes(log.accumulatedSeconds),
+                formatHoursMinutes(context, log.accumulatedSeconds),
                 style: TextStyle(color: Theme.of(context).colorScheme.primary),
               ),
               if (isInOtherDraft)
                 Text(
-                  'В черновике на $draftDate',
+                  AppLocalizations.of(
+                    context,
+                  ).inTheDraftFor(formatCalendarDate(draftDate)),
                   style: const TextStyle(color: Colors.red, fontSize: 11),
                 ),
             ],
@@ -1062,8 +1143,8 @@ class DayScreen extends StatelessWidget {
               color: isLocked ? Colors.amber.shade800 : Colors.grey,
             ),
             tooltip: isLocked
-                ? 'Длительность зафиксирована'
-                : 'Зафиксировать длительность',
+                ? AppLocalizations.of(context).durationLocked
+                : AppLocalizations.of(context).lockDuration,
             onPressed: () => appState.toggleLogLock(log.id),
           ),
         );
@@ -1080,19 +1161,19 @@ class DayScreen extends StatelessWidget {
           children: [
             const Icon(Icons.calendar_view_day, size: 64, color: Colors.grey),
             const SizedBox(height: 16),
-            const Text(
-              'План на этот день ещё не собран',
+            Text(
+              AppLocalizations.of(context).noPlanBuiltForThisDayYet,
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Выберите логи слева и нажмите «Собрать день»',
+            Text(
+              AppLocalizations.of(context).selectLogsOnTheLeftAndClickBuild,
               style: TextStyle(color: Colors.grey),
             ),
             const SizedBox(height: 16),
             FilledButton.icon(
               icon: const Icon(Icons.auto_awesome),
-              label: const Text('Собрать день'),
+              label: Text(AppLocalizations.of(context).buildDay),
               onPressed: appState.isReadOnly
                   ? null
                   : () => _handleBuildDay(context),
@@ -1133,12 +1214,15 @@ class DayScreen extends StatelessWidget {
       children: [
         Row(
           children: [
-            Text('Расписание', style: Theme.of(context).textTheme.titleSmall),
+            Text(
+              AppLocalizations.of(context).schedule,
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
             const Spacer(),
             Text(
               hasDraft
-                  ? 'Нажмите на интервал, чтобы изменить'
-                  : 'Записи Jira доступны только для чтения',
+                  ? AppLocalizations.of(context).clickAnIntervalToEditIt
+                  : AppLocalizations.of(context).jiraEntriesAreReadOnly,
               style: TextStyle(fontSize: 12, color: AppColors.muted(isDark)),
             ),
           ],
@@ -1214,7 +1298,7 @@ class DayScreen extends StatelessWidget {
         '${startLocal.hour.toString().padLeft(2, '0')}:${startLocal.minute.toString().padLeft(2, '0')}';
     final endStr =
         '${endLocal.hour.toString().padLeft(2, '0')}:${endLocal.minute.toString().padLeft(2, '0')}';
-    final durationStr = LogClock.formatHoursMinutes(segment.durationSeconds);
+    final durationStr = formatHoursMinutes(context, segment.durationSeconds);
 
     final issue = appState.issues.firstWhere(
       (i) => i.issueId == segment.issueId,
@@ -1253,7 +1337,7 @@ class DayScreen extends StatelessWidget {
             ReorderableDragStartListener(
               index: itemIndex,
               child: Tooltip(
-                message: 'Перетащить для изменения порядка',
+                message: AppLocalizations.of(context).dragToReorder,
                 child: Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: Icon(
@@ -1281,7 +1365,7 @@ class DayScreen extends StatelessWidget {
                 ),
                 if (segment.isFixed)
                   Tooltip(
-                    message: 'Время зафиксировано',
+                    message: AppLocalizations.of(context).timePinned,
                     child: Icon(
                       Icons.lock,
                       size: 12,
@@ -1337,7 +1421,7 @@ class DayScreen extends StatelessWidget {
                 Text(
                   segment.description.isNotEmpty
                       ? segment.description
-                      : '(без описания)',
+                      : AppLocalizations.of(context).noDescription,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -1347,7 +1431,10 @@ class DayScreen extends StatelessWidget {
                 ),
                 if (segment.lastError?.isNotEmpty == true)
                   Text(
-                    segment.lastError!,
+                    renderMessage(
+                      context,
+                      deserializeMessage(segment.lastError!),
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -1372,8 +1459,8 @@ class DayScreen extends StatelessWidget {
             visualDensity: VisualDensity.compact,
             icon: const Icon(Icons.edit_outlined, size: 16),
             tooltip: isSent
-                ? 'Уже отправлено в Jira'
-                : 'Редактировать интервал (A13)',
+                ? AppLocalizations.of(context).alreadySubmittedToJira
+                : AppLocalizations.of(context).editIntervalA,
             onPressed:
                 isSent ||
                     appState.isReadOnly ||
@@ -1387,7 +1474,7 @@ class DayScreen extends StatelessWidget {
                   ),
           ),
           PopupMenuButton<String>(
-            tooltip: 'Другие действия',
+            tooltip: AppLocalizations.of(context).moreActions,
             onSelected: (action) {
               switch (action) {
                 case 'up':
@@ -1421,58 +1508,60 @@ class DayScreen extends StatelessWidget {
               PopupMenuItem(
                 value: 'up',
                 enabled: canMoveUp,
-                child: const Text('Переместить вверх'),
+                child: Text(AppLocalizations.of(context).moveUp),
               ),
               PopupMenuItem(
                 value: 'down',
                 enabled: canMoveDown,
-                child: const Text('Переместить вниз'),
+                child: Text(AppLocalizations.of(context).moveDown),
               ),
               PopupMenuItem(
                 value: 'fixed',
                 enabled: !isSent && !isLocked,
                 child: Tooltip(
                   message: segment.isFixed
-                      ? 'Снять фиксацию времени'
-                      : 'Зафиксировать время',
+                      ? AppLocalizations.of(context).unpinTime
+                      : AppLocalizations.of(context).pinTime,
                   child: Text(
-                    segment.isFixed ? 'Снять фиксацию' : 'Зафиксировать время',
+                    segment.isFixed
+                        ? AppLocalizations.of(context).unlock
+                        : AppLocalizations.of(context).pinTime,
                   ),
                 ),
               ),
               PopupMenuItem(
                 value: 'split',
                 enabled: !isSent && !isLocked,
-                child: const Tooltip(
-                  message: 'Разбить интервал',
-                  child: Text('Разбить интервал'),
+                child: Tooltip(
+                  message: AppLocalizations.of(context).splitInterval,
+                  child: Text(AppLocalizations.of(context).splitInterval),
                 ),
               ),
               PopupMenuItem(
                 value: 'merge',
                 enabled:
                     !isSent && !isLocked && appState.currentSegments.length > 1,
-                child: const Tooltip(
-                  message: 'Объединить интервалы',
-                  child: Text('Объединить интервалы'),
+                child: Tooltip(
+                  message: AppLocalizations.of(context).mergeIntervals,
+                  child: Text(AppLocalizations.of(context).mergeIntervals),
                 ),
               ),
               PopupMenuItem(
                 value: 'delete',
                 enabled: !isSent && !isLocked,
-                child: const Text('Удалить интервал'),
+                child: Text(AppLocalizations.of(context).deleteInterval),
               ),
               if (segment.sendState == SendState.unknown) ...[
                 const PopupMenuDivider(),
                 PopupMenuItem(
                   value: 'reconcile',
                   enabled: !appState.isReadOnly,
-                  child: Text('Сверить результат (A15)'),
+                  child: Text(AppLocalizations.of(context).reconcileResultA),
                 ),
                 PopupMenuItem(
                   value: 'resolve',
                   enabled: !appState.isReadOnly,
-                  child: Text('Разрешить вручную (A15)'),
+                  child: Text(AppLocalizations.of(context).resolveManuallyA),
                 ),
               ],
             ],
@@ -1489,7 +1578,7 @@ class DayScreen extends StatelessWidget {
         '${startLocal.hour.toString().padLeft(2, '0')}:${startLocal.minute.toString().padLeft(2, '0')}';
     final endStr =
         '${endLocal.hour.toString().padLeft(2, '0')}:${endLocal.minute.toString().padLeft(2, '0')}';
-    final durationStr = LogClock.formatHoursMinutes(breakItem.durationSeconds);
+    final durationStr = formatHoursMinutes(context, breakItem.durationSeconds);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final foreground = AppColors.muted(isDark);
     final isLocked = appState.isReadOnly || appState.isDraftLockedFromRebuild;
@@ -1516,7 +1605,7 @@ class DayScreen extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Пауза',
+                AppLocalizations.of(context).break278,
                 style: TextStyle(fontSize: 12, color: foreground),
               ),
             ),
@@ -1531,7 +1620,7 @@ class DayScreen extends StatelessWidget {
             IconButton(
               visualDensity: VisualDensity.compact,
               icon: const Icon(Icons.edit_outlined, size: 16),
-              tooltip: 'Редактировать интервал',
+              tooltip: AppLocalizations.of(context).editInterval,
               onPressed: isLocked
                   ? null
                   : () => _openGapActionsDialog(context, breakItem),
@@ -1549,7 +1638,7 @@ class DayScreen extends StatelessWidget {
         '${startLocal.hour.toString().padLeft(2, '0')}:${startLocal.minute.toString().padLeft(2, '0')}';
     final endStr =
         '${endLocal.hour.toString().padLeft(2, '0')}:${endLocal.minute.toString().padLeft(2, '0')}';
-    final durationStr = LogClock.formatHoursMinutes(ew.durationSeconds);
+    final durationStr = formatHoursMinutes(context, ew.durationSeconds);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
@@ -1606,7 +1695,7 @@ class DayScreen extends StatelessWidget {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        'Уже в Jira (только чтение)',
+                        AppLocalizations.of(context).alreadyInJiraReadOnly,
                         style: TextStyle(
                           fontSize: 11,
                           color: AppColors.muted(isDark),
@@ -1656,27 +1745,27 @@ class DayScreen extends StatelessWidget {
       case SendState.pending:
         bg = AppColors.hover(isDark);
         fg = AppColors.muted(isDark);
-        text = 'Ожидает';
+        text = AppLocalizations.of(context).pending;
         break;
       case SendState.sending:
         bg = AppColors.selected(isDark);
         fg = AppColors.primary(isDark);
-        text = 'Отправка...';
+        text = AppLocalizations.of(context).sending;
         break;
       case SendState.sent:
         bg = AppColors.greenBg(isDark);
         fg = AppColors.green(isDark);
-        text = 'Отправлено';
+        text = AppLocalizations.of(context).sent;
         break;
       case SendState.failed:
         bg = AppColors.warnBg(isDark);
         fg = AppColors.error(isDark);
-        text = 'Ошибка';
+        text = AppLocalizations.of(context).error;
         break;
       case SendState.unknown:
         bg = AppColors.warnBg(isDark);
         fg = AppColors.warn(isDark);
-        text = 'Не определено';
+        text = AppLocalizations.of(context).unknown;
         break;
     }
 
@@ -1702,7 +1791,8 @@ class DayScreen extends StatelessWidget {
     final firstUnknown = segments
         .where((s) => s.sendState == SendState.unknown)
         .firstOrNull;
-    final total = LogClock.formatHoursMinutes(
+    final total = formatHoursMinutes(
+      context,
       appState.totalSegmentsDurationSeconds,
     );
 
@@ -1731,8 +1821,8 @@ class DayScreen extends StatelessWidget {
               children: [
                 Text(
                   appState.validationErrors.isEmpty
-                      ? 'План готов к отправке'
-                      : 'В расписании есть ошибки',
+                      ? AppLocalizations.of(context).planReadyToSubmit
+                      : AppLocalizations.of(context).theScheduleHasErrors,
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
@@ -1740,12 +1830,25 @@ class DayScreen extends StatelessWidget {
                 ),
                 Text(
                   isCompleted
-                      ? '$total · ${segments.length} записей отправлено'
+                      ? AppLocalizations.of(context).entriesSent(
+                          renderMessage(context, total),
+                          segments.length,
+                        )
                       : hasUnknown
-                      ? 'Сначала проверьте неизвестный результат в Jira'
+                      ? AppLocalizations.of(
+                          context,
+                        ).checkTheUnknownResultInJiraFirst
                       : hasFailed
-                      ? '$total · ${segments.length} записей, есть ошибки отправки'
-                      : 'В Jira будет добавлено $total · ${segments.length} записей',
+                      ? AppLocalizations.of(
+                          context,
+                        ).entriesSomeSubmissionsFailed(
+                          renderMessage(context, total),
+                          segments.length,
+                        )
+                      : AppLocalizations.of(context).entriesWillBeAddedToJira(
+                          renderMessage(context, total),
+                          segments.length,
+                        ),
                   style: TextStyle(
                     fontSize: 11,
                     color: AppColors.muted(isDark),
@@ -1763,7 +1866,7 @@ class DayScreen extends StatelessWidget {
                 textStyle: const TextStyle(fontSize: 13),
               ),
               onPressed: () => appState.selectTab(0),
-              child: const Text('Вернуться к работе'),
+              child: Text(AppLocalizations.of(context).backToWork),
             )
           else
             FilledButton.icon(
@@ -1784,10 +1887,10 @@ class DayScreen extends StatelessWidget {
                   : const Icon(Icons.cloud_upload_outlined, size: 18),
               label: Text(
                 hasUnknown
-                    ? 'Проверить в Jira'
+                    ? AppLocalizations.of(context).checkInJira
                     : hasFailed
-                    ? 'Повторить отправку'
-                    : 'Отправить в Jira',
+                    ? AppLocalizations.of(context).retrySubmission
+                    : AppLocalizations.of(context).submitToJira,
               ),
               onPressed:
                   (appState.isBuildingDay ||
@@ -1808,29 +1911,29 @@ class DayScreen extends StatelessWidget {
   String _formatTime(DateTime date) =>
       '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
 
-  String _weekdayName(int weekday) => const [
-    'Понедельник',
-    'Вторник',
-    'Среда',
-    'Четверг',
-    'Пятница',
-    'Суббота',
-    'Воскресенье',
+  String _weekdayName(BuildContext context, int weekday) => [
+    AppLocalizations.of(context).monday,
+    AppLocalizations.of(context).tuesday,
+    AppLocalizations.of(context).wednesday,
+    AppLocalizations.of(context).thursday,
+    AppLocalizations.of(context).friday,
+    AppLocalizations.of(context).saturday,
+    AppLocalizations.of(context).sunday,
   ][weekday - 1];
 
-  String _monthName(int month) => const [
-    'января',
-    'февраля',
-    'марта',
-    'апреля',
-    'мая',
-    'июня',
-    'июля',
-    'августа',
-    'сентября',
-    'октября',
-    'ноября',
-    'декабря',
+  String _monthName(BuildContext context, int month) => [
+    AppLocalizations.of(context).january,
+    AppLocalizations.of(context).february,
+    AppLocalizations.of(context).march,
+    AppLocalizations.of(context).april,
+    AppLocalizations.of(context).may,
+    AppLocalizations.of(context).june,
+    AppLocalizations.of(context).july,
+    AppLocalizations.of(context).august,
+    AppLocalizations.of(context).september,
+    AppLocalizations.of(context).october,
+    AppLocalizations.of(context).november,
+    AppLocalizations.of(context).december,
   ][month - 1];
 
   void _handleBuildDay(BuildContext context) async {
@@ -1840,7 +1943,9 @@ class DayScreen extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(e.toString()),
+            content: Builder(
+              builder: (context) => Text(renderMessage(context, e)),
+            ),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
@@ -1852,21 +1957,23 @@ class DayScreen extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Умная пересборка дня?'),
-        content: const Text(
-          'Текущий черновик будет заменён, а ручные правки времени исчезнут. Расписание будет оптимизировано с перерывами и разделением длинных задач.',
+        title: Text(AppLocalizations.of(context).smartRebuildTheDay),
+        content: Builder(
+          builder: (context) => Text(
+            AppLocalizations.of(context).theCurrentDraftWillBeReplacedAndManual,
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Отмена'),
+            child: Text(AppLocalizations.of(context).cancel),
           ),
           FilledButton(
             onPressed: () {
               Navigator.of(context).pop();
               _handleSmartRebuildDay(context);
             },
-            child: const Text('Пересобрать'),
+            child: Text(AppLocalizations.of(context).rebuild),
           ),
         ],
       ),
@@ -1877,14 +1984,18 @@ class DayScreen extends StatelessWidget {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Очистить день?'),
-        content: const Text(
-          'Все интервалы и паузы черновика будут удалены. Исходные логи вернутся в очередь. Записи Jira останутся на экране.',
+        title: Text(AppLocalizations.of(context).clearTheDay),
+        content: Builder(
+          builder: (context) => Text(
+            AppLocalizations.of(
+              context,
+            ).allDraftIntervalsAndBreaksWillBeRemoved,
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Отмена'),
+            child: Text(AppLocalizations.of(context).cancel),
           ),
           FilledButton(
             onPressed: () {
@@ -1895,7 +2006,7 @@ class DayScreen extends StatelessWidget {
                 _showEditError(context, error);
               }
             },
-            child: const Text('Очистить'),
+            child: Text(AppLocalizations.of(context).clear),
           ),
         ],
       ),
@@ -1906,21 +2017,23 @@ class DayScreen extends StatelessWidget {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Пересобрать день?'),
-        content: const Text(
-          'Расписание будет построено заново с сохранением порядка и закреплённых интервалов. Ручные правки времени будут заменены.',
+        title: Text(AppLocalizations.of(context).rebuildTheDay),
+        content: Builder(
+          builder: (context) => Text(
+            AppLocalizations.of(context).theScheduleWillBeRebuiltWithOrderAnd,
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Отмена'),
+            child: Text(AppLocalizations.of(context).cancel),
           ),
           FilledButton(
             onPressed: () {
               Navigator.of(dialogContext).pop();
               _handleRebuildCurrentDay(context);
             },
-            child: const Text('Пересобрать'),
+            child: Text(AppLocalizations.of(context).rebuild),
           ),
         ],
       ),
@@ -1932,8 +2045,14 @@ class DayScreen extends StatelessWidget {
       await appState.rebuildCurrentDay();
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('День пересобран с сохранением порядка и якорей.'),
+          SnackBar(
+            content: Builder(
+              builder: (context) => Text(
+                AppLocalizations.of(
+                  context,
+                ).dayRebuiltWithOrderAndPinnedIntervalsPreserved,
+              ),
+            ),
           ),
         );
       }
@@ -1941,7 +2060,9 @@ class DayScreen extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(e.toString()),
+            content: Builder(
+              builder: (context) => Text(renderMessage(context, e)),
+            ),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
@@ -1956,7 +2077,9 @@ class DayScreen extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(e.toString()),
+            content: Builder(
+              builder: (context) => Text(renderMessage(context, e)),
+            ),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
@@ -2009,16 +2132,28 @@ class DayScreen extends StatelessWidget {
         onSnap: () {
           appState.snapGap(breakItem);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Пауза схлопнута, задачи подтянуты вплотную.'),
+            SnackBar(
+              content: Builder(
+                builder: (context) => Text(
+                  AppLocalizations.of(
+                    context,
+                  ).breakCollapsedAndTasksMovedTogether,
+                ),
+              ),
             ),
           );
         },
         onFillLeft: () {
           appState.fillGapWithLeftSegment(breakItem);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Предыдущая задача продлена на время паузы.'),
+            SnackBar(
+              content: Builder(
+                builder: (context) => Text(
+                  AppLocalizations.of(
+                    context,
+                  ).previousTaskExtendedToFillTheBreak,
+                ),
+              ),
             ),
           );
         },
@@ -2028,13 +2163,18 @@ class DayScreen extends StatelessWidget {
             newDurationSeconds: newDurationSeconds,
           );
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Длительность паузы обновлена.')),
+            SnackBar(
+              content: Builder(
+                builder: (context) =>
+                    Text(AppLocalizations.of(context).breakDurationUpdated),
+              ),
+            ),
           );
         },
         onValidateDuration: (newDurationSeconds) {
           final delta = newDurationSeconds - breakItem.durationSeconds;
           if (delta > 0) {
-            return appState.canShiftSegmentsRight(
+            return appState.canShiftSegmentsRightMessage(
               afterUtc: breakItem.endUtc,
               deltaSeconds: delta,
             );
@@ -2049,14 +2189,18 @@ class DayScreen extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Удалить интервал?'),
-        content: const Text(
-          'Интервал будет удален из расписания. Если это последний интервал задачи в данном дне, исходный лог будет возвращён обратно в очередь.',
+        title: Text(AppLocalizations.of(context).deleteInterval324),
+        content: Builder(
+          builder: (context) => Text(
+            AppLocalizations.of(
+              context,
+            ).theIntervalWillBeRemovedFromTheSchedule,
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Отмена'),
+            child: Text(AppLocalizations.of(context).cancel),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
@@ -2066,7 +2210,7 @@ class DayScreen extends StatelessWidget {
               Navigator.of(context).pop();
               appState.deleteSegment(segment.id);
             },
-            child: const Text('Удалить'),
+            child: Text(AppLocalizations.of(context).delete),
           ),
         ],
       ),
@@ -2080,22 +2224,37 @@ class DayScreen extends StatelessWidget {
       if (result.isSuccess) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Успешно отправлено ${result.sent} записей в Jira!'),
+            content: Builder(
+              builder: (context) => Text(
+                AppLocalizations.of(
+                  context,
+                ).successfullySubmittedEntriesToJira(result.sent),
+              ),
+            ),
             backgroundColor: Colors.green,
           ),
         );
       } else if (result.errorMessage != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(result.errorMessage!),
+            content: Builder(
+              builder: (context) =>
+                  Text(renderMessage(context, result.errorText)),
+            ),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              'Отправлено: ${result.sent}, Ошибок: ${result.failed}, Не определено: ${result.unknown}',
+            content: Builder(
+              builder: (context) => Text(
+                AppLocalizations.of(context).sentFailedUnknown(
+                  renderMessage(context, result.sent),
+                  renderMessage(context, result.failed),
+                  renderMessage(context, result.unknown),
+                ),
+              ),
             ),
             backgroundColor: Colors.amber.shade800,
           ),
@@ -2110,7 +2269,9 @@ class DayScreen extends StatelessWidget {
     if (res != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(res.message),
+          content: Builder(
+            builder: (context) => Text(renderMessage(context, res.messageText)),
+          ),
           backgroundColor: res.status == ReconcileStatus.recovered
               ? Colors.green
               : (res.status == ReconcileStatus.conflict
@@ -2128,25 +2289,31 @@ class DayScreen extends StatelessWidget {
       builder: (dialogCtx) => StatefulBuilder(
         builder: (context, setDialogState) {
           return AlertDialog(
-            title: const Text('Разрешение неизвестного статуса (A15)'),
+            title: Text(AppLocalizations.of(context).resolveUnknownStatusA),
             content: SizedBox(
               width: 480,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Сегмент находится в состоянии «Не определено» (ответ Jira был потерян или прерван). Слепой повтор запрещён.',
+                  Text(
+                    AppLocalizations.of(
+                      context,
+                    ).theSegmentHasAnUnknownResultTheJira,
                     style: TextStyle(fontSize: 13),
                   ),
                   const SizedBox(height: 16),
-                  const Text(
-                    'Вариант 1: Указать ID созданной записи в Jira',
+                  Text(
+                    AppLocalizations.of(
+                      context,
+                    ).optionEnterTheIdOfTheCreatedJira,
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
-                    'Приложение проверит автора, дату и длительность записи перед подтверждением:',
+                  Text(
+                    AppLocalizations.of(
+                      context,
+                    ).theApplicationWillCheckTheEntrySAuthor,
                     style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                   const SizedBox(height: 8),
@@ -2155,8 +2322,10 @@ class DayScreen extends StatelessWidget {
                       Expanded(
                         child: TextField(
                           controller: idController,
-                          decoration: const InputDecoration(
-                            labelText: 'Worklog ID (например: 10042)',
+                          decoration: InputDecoration(
+                            labelText: AppLocalizations.of(
+                              context,
+                            ).worklogIdForExample,
                             isDense: true,
                             border: OutlineInputBorder(),
                           ),
@@ -2176,10 +2345,20 @@ class DayScreen extends StatelessWidget {
                           if (res != null) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text(
-                                  res.isSuccess
-                                      ? 'Запись успешно подтверждена и связана!'
-                                      : (res.errorMessage ?? 'Ошибка привязки'),
+                                content: Builder(
+                                  builder: (context) => Text(
+                                    res.isSuccess
+                                        ? AppLocalizations.of(
+                                            context,
+                                          ).entrySuccessfullyConfirmedAndLinked
+                                        : renderMessage(
+                                            context,
+                                            res.errorText ??
+                                                AppLocalizations.of(
+                                                  context,
+                                                ).linkingError,
+                                          ),
+                                  ),
                                 ),
                                 backgroundColor: res.isSuccess
                                     ? Colors.green
@@ -2188,31 +2367,39 @@ class DayScreen extends StatelessWidget {
                             );
                           }
                         },
-                        child: const Text('Связать'),
+                        child: Text(AppLocalizations.of(context).link),
                       ),
                     ],
                   ),
                   const Divider(height: 32),
-                  const Text(
-                    'Вариант 2: Подтвердить отсутствие записи',
+                  Text(
+                    AppLocalizations.of(
+                      context,
+                    ).optionConfirmThatTheEntryDoesNotExist,
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
-                    'Если вы открыли Jira в браузере и точно убедились, что в задаче нет этой записи, вы можете вернуть интервал в статус ожидания для повторной отправки.',
+                  Text(
+                    AppLocalizations.of(context).ifYouHaveOpenedJiraInABrowser,
                     style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                   const SizedBox(height: 8),
                   OutlinedButton.icon(
                     icon: const Icon(Icons.replay, size: 16),
-                    label: const Text('Записи нет в Jira, разрешить повтор'),
+                    label: Text(
+                      AppLocalizations.of(context).noEntryInJiraAllowRetry,
+                    ),
                     onPressed: () {
                       Navigator.of(dialogCtx).pop();
                       appState.manuallyConfirmAbsenceAndAllowRetry(segment);
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Интервал переведён в статус ожидания для повторной отправки.',
+                        SnackBar(
+                          content: Builder(
+                            builder: (context) => Text(
+                              AppLocalizations.of(
+                                context,
+                              ).intervalResetToPendingForResubmission,
+                            ),
                           ),
                         ),
                       );
@@ -2224,7 +2411,7 @@ class DayScreen extends StatelessWidget {
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(dialogCtx).pop(),
-                child: const Text('Отмена'),
+                child: Text(AppLocalizations.of(context).cancel),
               ),
             ],
           );

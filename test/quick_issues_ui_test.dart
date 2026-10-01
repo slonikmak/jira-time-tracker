@@ -31,6 +31,7 @@ void main() {
   setUp(() async {
     db = sqlite3.openInMemory();
     store = LocalStore(db)..init();
+    store.setSetting('ui_language', 'ru');
     connectionStore = ConnectionStore(
       secureStorage: InMemorySecureStorage(),
       environment: {},

@@ -1,3 +1,4 @@
+import 'package:jira_time_tracker/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jira_time_tracker/models.dart';
@@ -7,7 +8,9 @@ void main() {
   group('GapActionsDialog Widget Tests (Ticket 02)', () {
     setUp(() {});
 
-    testWidgets('Отображает целевые действия и вызывает onSnap', (tester) async {
+    testWidgets('Отображает целевые действия и вызывает onSnap', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
@@ -26,6 +29,9 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('ru'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: GapActionsDialog(
               breakItem: breakItem,
@@ -60,7 +66,9 @@ void main() {
       expect(setDuration, isNull);
     });
 
-    testWidgets('Быстрый чип длительности вызывает onSetDuration', (tester) async {
+    testWidgets('Быстрый чип длительности вызывает onSetDuration', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
@@ -77,6 +85,9 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('ru'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: GapActionsDialog(
               breakItem: breakItem,
@@ -96,7 +107,9 @@ void main() {
       expect(setDuration, equals(45 * 60));
     });
 
-    testWidgets('Отображает ошибку валидации при невозможности сдвига', (tester) async {
+    testWidgets('Отображает ошибку валидации при невозможности сдвига', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
@@ -109,9 +122,11 @@ void main() {
         kind: BreakKind.short,
       );
 
-
       await tester.pumpWidget(
         MaterialApp(
+          locale: const Locale('ru'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: GapActionsDialog(
               breakItem: breakItem,
@@ -119,7 +134,8 @@ void main() {
               onSnap: () {},
               onFillLeft: () {},
               onSetDuration: (_) {},
-              onValidateDuration: (_) => 'Ошибка: зазор упирается в запись Jira',
+              onValidateDuration: (_) =>
+                  'Ошибка: зазор упирается в запись Jira',
             ),
           ),
         ),
@@ -128,7 +144,10 @@ void main() {
       await tester.tap(find.text('30 мин'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Ошибка: зазор упирается в запись Jira'), findsOneWidget);
+      expect(
+        find.text('Ошибка: зазор упирается в запись Jira'),
+        findsOneWidget,
+      );
     });
   });
 }

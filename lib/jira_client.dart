@@ -1,13 +1,16 @@
+import 'app_message.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'models.dart';
 
 /// Ошибка при взаимодействии с Jira API.
-class JiraApiException implements Exception {
-  final String message;
+class JiraApiException implements Exception, MessageException {
+  @override
+  final Object messageText;
+  String get message => messageText.toString();
   final int? statusCode;
 
-  const JiraApiException(this.message, {this.statusCode});
+  const JiraApiException(this.messageText, {this.statusCode});
 
   @override
   String toString() => message;
@@ -21,14 +24,15 @@ class JiraPostWorklogResult {
   final JiraPostResultKind kind;
   final String? worklogId;
   final int? statusCode;
-  final String? errorMessage;
+  final Object? errorText;
+  String? get errorMessage => errorText?.toString();
 
   const JiraPostWorklogResult({
     required this.kind,
     this.worklogId,
     this.statusCode,
-    this.errorMessage,
-  });
+    Object? errorMessage,
+  }) : errorText = errorMessage;
 
   factory JiraPostWorklogResult.success(String worklogId) =>
       JiraPostWorklogResult(
@@ -38,7 +42,7 @@ class JiraPostWorklogResult {
 
   factory JiraPostWorklogResult.failed({
     int? statusCode,
-    String? errorMessage,
+    Object? errorMessage,
   }) => JiraPostWorklogResult(
     kind: JiraPostResultKind.failed,
     statusCode: statusCode,
@@ -47,7 +51,7 @@ class JiraPostWorklogResult {
 
   factory JiraPostWorklogResult.unknown({
     int? statusCode,
-    String? errorMessage,
+    Object? errorMessage,
   }) => JiraPostWorklogResult(
     kind: JiraPostResultKind.unknown,
     statusCode: statusCode,
@@ -91,12 +95,22 @@ class JiraClient {
         }
       }
       throw JiraApiException(
-        'Не удалось получить cloudId Jira-сайта (код: ${response.statusCode})',
+        AppMessage(
+          'couldNotGetTheJiraSiteSCloudid',
+          [response.statusCode],
+          'Не удалось получить cloudId Jira-сайта (код: ${response.statusCode})',
+        ),
         statusCode: response.statusCode,
       );
     } catch (e) {
       if (e is JiraApiException) rethrow;
-      throw JiraApiException('Сетевая ошибка при запросе cloudId: $e');
+      throw JiraApiException(
+        AppMessage(
+          'networkErrorRequestingCloudid',
+          [e],
+          'Сетевая ошибка при запросе cloudId: $e',
+        ),
+      );
     }
   }
 
@@ -121,23 +135,45 @@ class JiraClient {
       );
     } else if (response.statusCode == 401) {
       throw JiraApiException(
-        'Неверный email или API токен (401 Unauthorized)',
+        AppMessage(
+          'invalidEmailOrApiTokenUnauthorized',
+          [],
+          'Неверный email или API токен (401 Unauthorized)',
+        ),
         statusCode: 401,
       );
     } else if (response.statusCode == 403) {
       throw JiraApiException(
-        'Доступ запрещён (403 Forbidden)',
+        AppMessage(
+          'accessDeniedForbidden',
+          [],
+          'Доступ запрещён (403 Forbidden)',
+        ),
         statusCode: 403,
       );
     } else if (response.statusCode == 429) {
       final retryAfter = response.headers['retry-after'];
       throw JiraApiException(
-        'Превышен лимит запросов (429 Too Many Requests)${retryAfter != null ? ". Повторите через $retryAfter сек." : ""}',
+        AppMessage(
+          'rateLimitExceededTooManyRequests',
+          [
+            retryAfter != null
+                ? AppMessage('retryAfterSeconds', [
+                    retryAfter,
+                  ], ". Повторите через $retryAfter сек.")
+                : "",
+          ],
+          'Превышен лимит запросов (429 Too Many Requests)${retryAfter != null ? AppMessage('retryAfterSeconds', [retryAfter], ". Повторите через $retryAfter сек.") : ""}',
+        ),
         statusCode: 429,
       );
     } else {
       throw JiraApiException(
-        'Ошибка Jira API: ${response.statusCode} ${response.reasonPhrase ?? ''}',
+        AppMessage(
+          'jiraApiError',
+          [response.statusCode, response.reasonPhrase ?? ''],
+          'Ошибка Jira API: ${response.statusCode} ${response.reasonPhrase ?? ''}',
+        ),
         statusCode: response.statusCode,
       );
     }
@@ -156,13 +192,27 @@ class JiraClient {
     final cleanToken = token.trim();
 
     if (cleanBaseUrl.isEmpty) {
-      throw const JiraApiException('Не указан URL Jira');
+      throw JiraApiException(
+        AppMessage('jiraUrlIsMissing', [], 'Не указан URL Jira'),
+      );
     }
     if (cleanEmail.isEmpty) {
-      throw const JiraApiException('Не указан Email аккаунта Atlassian');
+      throw JiraApiException(
+        AppMessage(
+          'atlassianAccountEmailIsMissing',
+          [],
+          'Не указан Email аккаунта Atlassian',
+        ),
+      );
     }
     if (cleanToken.isEmpty) {
-      throw const JiraApiException('Не указан API токен Atlassian');
+      throw JiraApiException(
+        AppMessage(
+          'atlassianApiTokenIsMissing',
+          [],
+          'Не указан API токен Atlassian',
+        ),
+      );
     }
 
     // 1. Попытка прямого маршрута
@@ -207,11 +257,21 @@ class JiraClient {
       );
     } on JiraApiException catch (scopedError) {
       throw JiraApiException(
-        'Не удалось подключиться ни прямым, ни scoped-маршрутом: ${scopedError.message}',
+        AppMessage(
+          'couldNotConnectViaEitherTheDirectOr',
+          [scopedError.messageText],
+          'Не удалось подключиться ни прямым, ни scoped-маршрутом: ${scopedError.message}',
+        ),
         statusCode: scopedError.statusCode,
       );
     } catch (e) {
-      throw JiraApiException('Ошибка при проверке scoped-маршрута: $e');
+      throw JiraApiException(
+        AppMessage(
+          'errorCheckingTheScopedRoute',
+          [e],
+          'Ошибка при проверке scoped-маршрута: $e',
+        ),
+      );
     }
   }
 
@@ -257,22 +317,38 @@ class JiraClient {
       );
     } else if (response.statusCode == 404) {
       throw JiraApiException(
-        'Задача "$cleanIdOrKey" не найдена в Jira (404 Not Found)',
+        AppMessage(
+          'issueWasNotFoundInJiraNotFound',
+          [cleanIdOrKey],
+          'Задача "$cleanIdOrKey" не найдена в Jira (404 Not Found)',
+        ),
         statusCode: 404,
       );
     } else if (response.statusCode == 401) {
-      throw const JiraApiException(
-        'Ошибка авторизации Jira (401 Unauthorized)',
+      throw JiraApiException(
+        AppMessage(
+          'jiraAuthenticationErrorUnauthorized',
+          [],
+          'Ошибка авторизации Jira (401 Unauthorized)',
+        ),
         statusCode: 401,
       );
     } else if (response.statusCode == 403) {
-      throw const JiraApiException(
-        'Нет доступа к задаче в Jira (403 Forbidden)',
+      throw JiraApiException(
+        AppMessage(
+          'accessToTheJiraIssueIsDeniedForbidden',
+          [],
+          'Нет доступа к задаче в Jira (403 Forbidden)',
+        ),
         statusCode: 403,
       );
     } else {
       throw JiraApiException(
-        'Ошибка загрузки задачи "$cleanIdOrKey": ${response.statusCode} ${response.reasonPhrase ?? ''}',
+        AppMessage(
+          'errorLoadingIssue',
+          [cleanIdOrKey, response.statusCode, response.reasonPhrase ?? ''],
+          'Ошибка загрузки задачи "$cleanIdOrKey": ${response.statusCode} ${response.reasonPhrase ?? ''}',
+        ),
         statusCode: response.statusCode,
       );
     }
@@ -302,8 +378,12 @@ class JiraClient {
       final rawComments = page['comments'] as List? ?? [];
       total = page['total'] as int? ?? 0;
       if (rawComments.isEmpty && startAt < total) {
-        throw const JiraApiException(
-          'Jira вернула неполный список комментариев',
+        throw JiraApiException(
+          AppMessage(
+            'jiraReturnedAnIncompleteCommentList',
+            [],
+            'Jira вернула неполный список комментариев',
+          ),
         );
       }
       for (final raw in rawComments) {
@@ -372,8 +452,12 @@ class JiraClient {
         .where((item) => item['id']?.toString() == attachmentId)
         .firstOrNull;
     if (attachment == null) {
-      throw const JiraApiException(
-        'Вложение не найдено в указанной задаче Jira',
+      throw JiraApiException(
+        AppMessage(
+          'attachmentWasNotFoundInTheSpecifiedJira',
+          [],
+          'Вложение не найдено в указанной задаче Jira',
+        ),
         statusCode: 404,
       );
     }
@@ -387,7 +471,11 @@ class JiraClient {
     if (response.statusCode != 200) {
       await response.stream.drain<void>();
       throw JiraApiException(
-        'Ошибка загрузки вложения Jira (код: ${response.statusCode})',
+        AppMessage(
+          'errorLoadingJiraAttachmentCode',
+          [response.statusCode],
+          'Ошибка загрузки вложения Jira (код: ${response.statusCode})',
+        ),
         statusCode: response.statusCode,
       );
     }
@@ -419,7 +507,11 @@ class JiraClient {
     final response = await http.Response.fromStream(streamed);
     if (response.statusCode != 200) {
       throw JiraApiException(
-        'Ошибка загрузки данных Jira (код: ${response.statusCode})',
+        AppMessage(
+          'errorLoadingJiraDataCode',
+          [response.statusCode],
+          'Ошибка загрузки данных Jira (код: ${response.statusCode})',
+        ),
         statusCode: response.statusCode,
       );
     }
@@ -470,7 +562,11 @@ class JiraClient {
 
       if (response.statusCode != 200) {
         throw JiraApiException(
-          'Ошибка поиска задач с worklogs в Jira (код: ${response.statusCode})',
+          AppMessage(
+            'errorSearchingJiraForIssuesWithWorklogsCode',
+            [response.statusCode],
+            'Ошибка поиска задач с worklogs в Jira (код: ${response.statusCode})',
+          ),
           statusCode: response.statusCode,
         );
       }
@@ -525,7 +621,11 @@ class JiraClient {
 
       if (response.statusCode != 200) {
         throw JiraApiException(
-          'Ошибка загрузки worklogs для задачи "$issueIdOrKey" (код: ${response.statusCode})',
+          AppMessage(
+            'errorLoadingWorklogsForIssueCode',
+            [issueIdOrKey, response.statusCode],
+            'Ошибка загрузки worklogs для задачи "$issueIdOrKey" (код: ${response.statusCode})',
+          ),
           statusCode: response.statusCode,
         );
       }
@@ -706,18 +806,28 @@ class JiraClient {
           }
           return JiraPostWorklogResult.unknown(
             statusCode: response.statusCode,
-            errorMessage: 'Ответ Jira 201 не содержит ID созданного worklog',
+            errorMessage: AppMessage(
+              'jiraSResponseDoesNotContainTheCreated',
+              [],
+              'Ответ Jira 201 не содержит ID созданного worklog',
+            ),
           );
         } catch (e) {
           return JiraPostWorklogResult.unknown(
             statusCode: response.statusCode,
-            errorMessage: 'Некорректный JSON в ответе Jira 201: $e',
+            errorMessage: AppMessage(
+              'invalidJsonInJiraSResponse',
+              [e],
+              'Некорректный JSON в ответе Jira 201: $e',
+            ),
           );
         }
       }
 
       if (response.statusCode >= 400 && response.statusCode < 500) {
-        var msg = 'Отказ Jira (код ${response.statusCode})';
+        Object msg = AppMessage('jiraRejectedTheRequestCode', [
+          response.statusCode,
+        ], 'Отказ Jira (код ${response.statusCode})');
         try {
           final errData = jsonDecode(response.body);
           if (errData is Map && errData['errorMessages'] is List) {
@@ -740,12 +850,18 @@ class JiraClient {
 
       return JiraPostWorklogResult.unknown(
         statusCode: response.statusCode,
-        errorMessage: 'Серверная ошибка Jira (код ${response.statusCode})',
+        errorMessage: AppMessage(
+          'jiraServerErrorCode',
+          [response.statusCode],
+          'Серверная ошибка Jira (код ${response.statusCode})',
+        ),
       );
     } catch (e) {
       return JiraPostWorklogResult.unknown(
         statusCode: null,
-        errorMessage: 'Обрыв связи или таймаут: $e',
+        errorMessage: AppMessage('connectionLostOrTimedOut', [
+          e,
+        ], 'Обрыв связи или таймаут: $e'),
       );
     }
   }

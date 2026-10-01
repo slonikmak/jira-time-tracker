@@ -1,3 +1,4 @@
+import 'package:jira_time_tracker/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -22,6 +23,7 @@ void main() {
       db = sqlite3.openInMemory();
       store = LocalStore(db);
       store.init();
+      store.setSetting('ui_language', 'ru');
       secureStorage = InMemorySecureStorage();
       connectionStore = ConnectionStore(
         secureStorage: secureStorage,
@@ -121,6 +123,9 @@ void main() {
 
         await tester.pumpWidget(
           MaterialApp(
+            locale: const Locale('ru'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: Scaffold(
               body: Builder(
                 builder: (ctx) => ElevatedButton(

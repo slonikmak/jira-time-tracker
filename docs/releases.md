@@ -5,13 +5,17 @@
 
 | Пакет | Содержимое | Установка |
 |---|---|---|
-| `jira-time-tracker-windows-x64.zip` | exe, DLL и `data` | Распаковать всю папку и запустить `jira_time_tracker.exe` |
+| `jira-time-tracker-windows-x64.zip` | exe, DLL, Visual C++ runtime и `data` | Распаковать всю папку и запустить `jira_time_tracker.exe` |
 | `jira-time-tracker-macos-arm64.zip` | `Jira Time Tracker.app` для Apple Silicon | Распаковать и перенести приложение в Applications |
 | `jira-time-tracker-macos-x64.zip` | `Jira Time Tracker.app` для Intel | Распаковать и перенести приложение в Applications |
 
 Обновление заменяет приложение и его библиотеки; пользовательскую SQLite-базу
 и системное хранилище credentials удалять не нужно. Путь данных и правила
 подключения описаны в [README](../README.md).
+
+Windows-пакет создаёт [скрипт упаковки](../tool/package_windows.ps1). Он включает
+`msvcp140.dll`, `vcruntime140.dll` и `vcruntime140_1.dll` рядом с exe, поэтому
+получателю не нужно отдельно устанавливать Visual C++ Redistributable.
 
 ## GitHub Actions
 
@@ -54,5 +58,6 @@ GitHub Actions secrets. Их нельзя помещать в исходники
 не требуются: архивы и GitHub Releases уже дают версионную доставку.
 
 Источники: [GitHub runners](https://docs.github.com/en/actions/reference/runners/github-hosted-runners),
+[Flutter Windows: ZIP и runtime](https://docs.flutter.dev/platform-integration/windows/building#building-your-own-zip-file-for-windows),
 [Flutter macOS: entitlements и подпись](https://docs.flutter.dev/platform-integration/macos/building),
 [macOS Keychain](https://pub.dev/packages/flutter_secure_storage).

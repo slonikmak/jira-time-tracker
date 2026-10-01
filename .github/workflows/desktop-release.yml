@@ -53,6 +53,10 @@ jobs:
       - run: flutter test
       - name: Build desktop bundle
         run: flutter build ${{ matrix.platform }} --release
+      - name: Package Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./tool/package_windows.ps1
       - name: Check Windows application startup
         if: runner.os == 'Windows'
         shell: pwsh
@@ -90,16 +94,6 @@ jobs:
             exit 1
           fi
           jq -e '(.settings | type == "object") and (.rule | type == "string")' day-settings.json
-      - name: Package Windows
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $bundle = 'build/windows/x64/runner/Release'
-          if (!(Test-Path "$bundle/jira_time_tracker.exe") -or !(Test-Path "$bundle/data/app.so")) {
-            throw 'Incomplete Windows release bundle'
-          }
-          New-Item -ItemType Directory -Path dist | Out-Null
-          Compress-Archive -Path "$bundle/*" -DestinationPath dist/jira-time-tracker-windows-x64.zip
       - name: Package macOS
         if: runner.os == 'macOS'
         env:

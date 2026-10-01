@@ -1,4 +1,5 @@
 import 'app_message.dart';
+import 'agent_instructions.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -50,12 +51,7 @@ class AgentDayRevisionConflict implements Exception, MessageException {
 
 /// Состояние приложения, координация данных, задач, таймеров и подключений.
 class AppState extends ChangeNotifier {
-  static const defaultAgentDayRule =
-      '''Собирай день из фактически выполненной работы, не придумывая задачи и описания. Каждый интервал связывай с исходным логом; по возможности сохраняй суммарную длительность источника.
-
-Поля start_minutes задают диапазон начала дня в минутах от полуночи; total_duration_seconds — полную длительность дня вместе с паузами. Выбери значения внутри этих диапазонов. Поля lunch_start_minutes и lunch_duration_seconds задают начало и длительность длинной паузы; длительность 0–0 отключает её. Поля short_break_count и short_break_duration_seconds задают число и длительность коротких пауз. Размести паузы вне работы.
-
-Учитывай существующие записи Jira, не создавай их повторно. Не делай рабочие интервалы короче 15 минут. Если факты работы и настройки несовместимы, объясни конфликт пользователю вместо выдумывания времени.''';
+  static const defaultAgentDayRule = defaultAgentDayRuleRu;
   final LocalStore store;
   final ConnectionStore connectionStore;
   final JiraClient jiraClient;
@@ -126,6 +122,9 @@ class AppState extends ChangeNotifier {
       }
     }
     _agentDayRule = store.getSetting('agent_day_rule') ?? defaultAgentDayRule;
+    if (isDefaultAgentDayRule(_agentDayRule)) {
+      _agentDayRule = defaultAgentDayRule;
+    }
     _initData();
     if (autoStartApiServer && !isReadOnly) {
       startApiServer();
@@ -214,6 +213,18 @@ class AppState extends ChangeNotifier {
   bool get isSubmittingDay => _isSubmittingDay;
   DaySettings get daySettings => _daySettings;
   String get agentDayRule => _agentDayRule;
+  String agentDayRuleForLanguage(String languageCode) =>
+      isDefaultAgentDayRule(_agentDayRule)
+      ? defaultAgentDayRuleForLanguage(languageCode)
+      : _agentDayRule;
+  String get interfaceLanguageCode => switch (language.value) {
+    UiLanguage.ru => 'ru',
+    UiLanguage.en => 'en',
+    UiLanguage.system =>
+      PlatformDispatcher.instance.locales.firstOrNull?.languageCode == 'ru'
+          ? 'ru'
+          : 'en',
+  };
   Set<String> get lockedSourceLogIds => Set.unmodifiable(_lockedSourceLogIds);
   List<String> get validationErrors =>
       _validationErrors.map((value) => value.toString()).toList();
@@ -1542,11 +1553,16 @@ class AppState extends ChangeNotifier {
         ),
       );
     }
+    final savedRule = agentRule == null
+        ? null
+        : isDefaultAgentDayRule(agentRule.trim())
+        ? defaultAgentDayRule
+        : agentRule.trim();
     store.setSettings({
       'day_settings': settings.toJson(),
-      if (agentRule != null) 'agent_day_rule': agentRule.trim(),
+      'agent_day_rule': ?savedRule,
     });
-    if (agentRule != null) _agentDayRule = agentRule.trim();
+    if (savedRule != null) _agentDayRule = savedRule;
     _daySettings = settings;
     notifyListeners();
   }

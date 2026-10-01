@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:jira_time_tracker/agent_api_server.dart';
 import 'package:jira_time_tracker/app_state.dart';
+import 'package:jira_time_tracker/agent_instructions.dart';
 import 'package:jira_time_tracker/connection_store.dart';
 import 'package:jira_time_tracker/jira_client.dart';
 import 'package:jira_time_tracker/local_store.dart';
@@ -174,6 +175,47 @@ void main() {
         expect(res.statusCode, HttpStatus.ok);
         expect(body['settings'], settings.toMap());
         expect(body['rule'], 'Начинай день после первого фактического лога.');
+      },
+    );
+
+    test(
+      'API localises help and defaults while preserving the custom rule',
+      () async {
+        Future<String> read(String path) async {
+          final response = await (await client.getUrl(
+            Uri.parse('${server.url}$path'),
+          )).close();
+          expect(response.statusCode, HttpStatus.ok);
+          return response.transform(utf8.decoder).join();
+        }
+
+        appState.selectLanguage(UiLanguage.en);
+        expect(
+          jsonDecode(await read('/api/day-settings'))['rule'],
+          defaultAgentDayRuleEn,
+        );
+        expect(
+          await read('/api/help'),
+          contains('Only the user submits final worklogs'),
+        );
+        appState.selectLanguage(UiLanguage.ru);
+        expect(
+          jsonDecode(await read('/api/day-settings'))['rule'],
+          defaultAgentDayRuleRu,
+        );
+        expect(
+          await read('/api/help'),
+          contains('Финальную отправку worklogs'),
+        );
+        appState.updateDaySettings(
+          const DaySettings(),
+          agentRule: 'Мой порядок работы.',
+        );
+        appState.selectLanguage(UiLanguage.en);
+        expect(
+          jsonDecode(await read('/api/day-settings'))['rule'],
+          'Мой порядок работы.',
+        );
       },
     );
 

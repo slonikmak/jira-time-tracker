@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jira_time_tracker/app_state.dart';
+import 'package:jira_time_tracker/agent_instructions.dart';
 import 'package:jira_time_tracker/connection_store.dart';
 import 'package:jira_time_tracker/jira_client.dart';
 import 'package:jira_time_tracker/local_store.dart';
@@ -69,6 +70,37 @@ void main() {
     expect(restored.agentDayRule, 'Сначала поставь сложные задачи.');
     restored.dispose();
   });
+
+  test(
+    'Старое стандартное правило переводится, пользовательское сохраняется',
+    () {
+      for (final previousDefault in [
+        defaultAgentDayRuleRu,
+        defaultAgentDayRuleEn,
+      ]) {
+        store.setSetting('agent_day_rule', previousDefault);
+        final state = createState();
+        expect(state.agentDayRuleForLanguage('ru'), defaultAgentDayRuleRu);
+        expect(state.agentDayRuleForLanguage('en'), defaultAgentDayRuleEn);
+        state.updateDaySettings(
+          const DaySettings(),
+          agentRule: defaultAgentDayRuleEn,
+        );
+        state.dispose();
+        final restored = createState();
+        expect(restored.agentDayRuleForLanguage('ru'), defaultAgentDayRuleRu);
+        restored.updateDaySettings(
+          const DaySettings(),
+          agentRule: 'My own rule.',
+        );
+        restored.dispose();
+        final custom = createState();
+        expect(custom.agentDayRuleForLanguage('ru'), 'My own rule.');
+        expect(custom.agentDayRuleForLanguage('en'), 'My own rule.');
+        custom.dispose();
+      }
+    },
+  );
 
   test('Очистка дня освобождает источник и не меняет его время', () {
     final start = DateTime.utc(2026, 9, 24, 9);

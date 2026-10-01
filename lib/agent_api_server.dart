@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'app_state.dart';
+import 'agent_instructions.dart';
 import 'day_builder.dart';
 import 'jira_client.dart';
 import 'models.dart';
@@ -63,49 +64,10 @@ class AgentApiServer {
   }
 
   /// Возвращает готовый Markdown-текст инструкции/скилла для AI-агента.
-  static String generateSkillPrompt(String baseUrl) {
-    return '''# Навык: Взаимодействие с локальным Jira Time Tracker
-
-Локальный REST API доступен по адресу `$baseUrl`.
-
-## Правила
-- Финальные worklogs в Jira отправляет только пользователь из UI.
-- `LocalLog` — источник работы; `Segment` — отдельный планируемый Jira worklog.
-- Каждый segment должен содержать `source_log_id` существующего queue log. Несколько сегментов могут ссылаться на один источник в пределах одного дня.
-- Источник должен быть остановлен, не отправлен и не занят черновиком другой даты. Для разных дат раздели исходный лог в очереди через `POST /api/logs/{id}/split`.
-- Сегменты одного дня должны полностью попадать в указанную дату. Пересечения рабочих сегментов разрешены; паузы формируются автоматически вне работы.
-
-## Поиск и очередь
-- `GET /api/issues?q=...` ищет локально по key, summary и status.
-- `GET /api/issues/{key}` читает актуальные текстовые поля, все доступные комментарии и список вложений Jira.
-- `GET /api/issues/{key}/attachments/{id}` отдельно скачивает вложение по ID из списка.
-- `GET /api/issues/{key}/worklogs` читает все доступные записи Jira по тикету, включая записи других авторов; `is_mine` отмечает ваши.
-- `GET /api/logs?q=...&issue_key=...&availability=...` возвращает логи с `availability` (`free`, `running`, `in_draft`) и `draft_date`.
-- `GET /api/quick-issues` возвращает быстрые задачи активного подключения с локальными описаниями `note`; `POST /api/quick-issues`, `PATCH` и `DELETE /api/quick-issues/{issueId}` меняют этот список.
-- `POST /api/logs` и `POST /api/logs/merge` принимают только известные локальные задачи или refs, которые удалось подтвердить через Jira; неизвестный ref не создаётся как offline fallback.
-- Агент может создавать, редактировать, удалять, делить и объединять свободные queue logs.
-
-## Сборка дня
-1. Перед каждой сборкой вызови `GET /api/day-settings`. В одном ответе находятся актуальные числовые диапазоны `settings` и редактируемое пользователем текстовое `rule`. Применяй оба при планировании; не полагайся на старую копию правила.
-2. Вызови `GET /api/day?date=YYYY-MM-DD` для свежих worklogs Jira и текущего draft. Если Jira недоступна, остановись и сообщи об ошибке.
-3. Если draft существует, сохрани его top-level `revision`.
-4. Вызови `POST /api/day`, передав весь набор segments целиком. Каждый segment должен ссылаться на свой `source_log_id`; `issue_key` необязателен и, если передан, должен соответствовать задаче источника.
-5. При существующем draft передай `base_revision`. Ответ `409` означает конфликт правок: перечитай дату, объедини изменения и отправь snapshot заново.
-
-```json
-{
-  "date": "2026-09-17",
-  "base_revision": "revision-from-GET",
-  "segments": [
-    {"source_log_id": "uuid-1", "start": "09:00", "duration_minutes": 30, "description": "Разбор"},
-    {"source_log_id": "uuid-1", "start": "09:45", "duration_minutes": 30, "description": "Реализация"}
-  ]
-}
-```
-
-Для полного контракта вызови `GET /api/help` или `GET /api/openapi.json`.
-''';
-  }
+  static String generateSkillPrompt(
+    String baseUrl, {
+    String languageCode = 'ru',
+  }) => agentSkillPrompt(baseUrl, languageCode: languageCode);
 
   void _handleRequest(HttpRequest request) async {
     final response = request.response;
@@ -160,7 +122,7 @@ class AgentApiServer {
         } else {
           _sendJson(response, HttpStatus.ok, {
             'settings': state.daySettings.toMap(),
-            'rule': state.agentDayRule,
+            'rule': state.agentDayRuleForLanguage(state.interfaceLanguageCode),
           });
         }
         return;
@@ -1323,53 +1285,8 @@ class AgentApiServer {
     }
   }
 
-  String _buildHelpMarkdown() {
-    return '''# Jira Time Tracker Local Agent API
-
-Локальный REST API для интеграции AI-агентов (Claude, Antigravity, MCP-серверов и скриптов).
-
-Базовый URL: `$url`
-
-## Модель и правила
-- `LocalLog` — источник работы; `Segment` — отдельный worklog, который пользователь сможет отправить в Jira.
-- Каждый segment в `POST /api/day` обязан содержать `source_log_id`. Несколько segments могут ссылаться на один источник в пределах одного дня.
-- Рабочие segments и существующие Jira worklogs могут пересекаться по времени; каждый segment останется отдельным worklog после подтверждения в UI. Паузы не пересекаются с работой.
-- Источник должен быть остановлен, не отправлен и не занят активным черновиком другой даты. Чтобы разнести работу на разные даты, сначала раздели source через `POST /api/logs/{id}/split`.
-- Агент заменяет черновик целиком. Перед записью вызови `GET /api/day?date=YYYY-MM-DD`; если `draft` существует, передай его top-level `revision` как `base_revision`. Ответ `409` требует перечитать день и собрать snapshot заново.
-- Jira worklogs в GET/POST `/api/day` загружаются для указанной даты; при ошибке Jira возвращается `502`.
-- Финальную отправку worklogs в Jira всегда выполняет пользователь в приложении.
-
-## Поиск и очередь
-- `GET /api/issues?q=текст` — поиск по локальному каталогу: key, summary и status. Удалённый fuzzy search не выполняется.
-- `GET /api/issues/PROJ-123` — актуальная карточка Jira: текст описания, все доступные комментарии и метаданные вложений с `download_path`.
-- `GET /api/issues/PROJ-123/attachments/10001` — бинарное содержимое вложения; ID берётся из карточки. Файл не сохраняется приложением на диск.
-- `GET /api/issues/PROJ-123/worklogs` — все доступные worklogs Jira по задаче, включая других авторов; `is_mine` отмечает записи текущего аккаунта.
-- `GET /api/logs?q=текст&issue_key=PROJ-123&availability=free` — очередь и фильтры. `availability`: `free`, `running` или `in_draft`; запись также содержит `draft_date`.
-- `POST /api/logs` создаёт source для известной локальной/Jira-задачи; при неизвестной задаче и ошибке Jira запрос отклоняется, fallback-задача не создаётся.
-- `POST /api/logs/{id}/split` и `POST /api/logs/merge` меняют исходные логи очереди. `PATCH /api/logs/{id}` и `DELETE /api/logs/{id}` управляют свободными логами.
-- `GET /api/quick-issues` возвращает быстрые задачи текущего Jira-подключения в порядке добавления. Поля: `issue_id`, `key`, `summary`, `note` (локальное описание); без активного подключения ответ `409`.
-- `POST /api/quick-issues` принимает `{"issue_key":"PROJ-123","note":"Подсказка"}` и добавляет проверенную через Jira задачу. Повторный POST сохраняет позицию и обновляет `note`, если оно передано.
-- `PATCH /api/quick-issues/{issueId}` принимает `{"note":"Новое описание"}`; `null` очищает описание. `DELETE /api/quick-issues/{issueId}` убирает ссылку из быстрого списка, не удаляя задачу и логи.
-
-## Snapshot дня
-1. Перед каждой сборкой получи актуальные диапазоны и пользовательское правило одним запросом `GET /api/day-settings` и используй оба. Затем получи доступные источники через `GET /api/logs` и данные дня через `GET /api/day?date=...`.
-2. Для каждого segment передай `source_log_id`, `start` (`HH:MM` или ISO-8601), длительность и описание. `issue_key` необязателен; если передан, он должен совпадать с задачей источника.
-3. Передай массив `segments` целиком. Если GET вернул draft, включи его revision в `base_revision`.
-
-```json
-{
-  "date": "2026-09-17",
-  "base_revision": "revision-from-GET",
-  "segments": [
-    {"source_log_id": "uuid-1", "start": "09:00", "duration_minutes": 30, "description": "Разбор"},
-    {"source_log_id": "uuid-1", "start": "09:45", "duration_minutes": 30, "description": "Реализация"}
-  ]
-}
-```
-
-`GET /api/help` содержит эту справку; `GET /api/openapi.json` возвращает OpenAPI 3.0.0.
-''';
-  }
+  String _buildHelpMarkdown() =>
+      agentApiHelp(url, languageCode: appState?.interfaceLanguageCode ?? 'ru');
 
   Map<String, dynamic> _buildOpenApiSpec() {
     return {

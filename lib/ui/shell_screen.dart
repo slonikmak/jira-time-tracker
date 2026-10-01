@@ -41,6 +41,16 @@ class _ShellScreenState extends State<ShellScreen> {
       listenable: widget.appState,
       builder: (context, _) {
         final appState = widget.appState;
+        final appTitle = Text(
+          'Jira Time Tracker',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+            color: AppColors.text(isDark),
+          ),
+        );
         return Scaffold(
           body: Column(
             children: [
@@ -63,18 +73,10 @@ class _ShellScreenState extends State<ShellScreen> {
                       color: AppColors.text(isDark),
                     ),
                     const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        'Jira Time Tracker',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                          color: AppColors.text(isDark),
-                        ),
-                      ),
-                    ),
+                    if (MediaQuery.sizeOf(context).width < 700)
+                      Flexible(child: appTitle)
+                    else
+                      appTitle,
                     SizedBox(
                       width: MediaQuery.sizeOf(context).width >= 1200
                           ? 152
@@ -133,7 +135,10 @@ class _ShellScreenState extends State<ShellScreen> {
                         minimumSize: const Size(0, 36),
                         visualDensity: VisualDensity.standard,
                         padding: const EdgeInsets.symmetric(horizontal: 14),
-                        textStyle: const TextStyle(fontSize: 13),
+                        textStyle: const TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 13,
+                        ),
                       ),
                       icon: const Icon(Icons.tune, size: 15),
                       label: Text(AppLocalizations.of(context).settings),

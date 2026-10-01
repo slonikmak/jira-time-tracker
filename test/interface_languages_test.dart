@@ -13,6 +13,7 @@ import 'package:jira_time_tracker/ui/add_time_dialog.dart';
 import 'package:jira_time_tracker/ui/settings_dialog.dart';
 import 'package:jira_time_tracker/l10n/app_localizations.dart';
 import 'package:jira_time_tracker/app_message.dart';
+import 'package:jira_time_tracker/agent_instructions.dart';
 import 'package:jira_time_tracker/ui/edit_log_dialog.dart';
 import 'package:jira_time_tracker/ui/message_format.dart';
 import 'package:jira_time_tracker/ui/app_theme.dart';
@@ -149,6 +150,106 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('only the default day rule follows language changes', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final store = LocalStore(sqlite3.openInMemory())..init();
+    addTearDown(store.close);
+    final state = createState(store)..selectLanguage(UiLanguage.ru);
+    await tester.pumpWidget(JiraTimeTrackerApp(appState: state));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Настройки'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('settings-section-day')));
+    await tester.pumpAndSettle();
+    final rule = find.byKey(const ValueKey('agent-day-rule'));
+    String text() => tester.widget<TextField>(rule).controller!.text;
+    expect(text(), defaultAgentDayRuleRu);
+    state.selectLanguage(UiLanguage.en);
+    await tester.pumpAndSettle();
+    expect(text(), defaultAgentDayRuleEn);
+    const custom = 'Сначала поставь сложные задачи. Keep my text.';
+    await tester.enterText(rule, custom);
+    state.selectLanguage(UiLanguage.ru);
+    await tester.pumpAndSettle();
+    expect(text(), custom);
+    await tester.ensureVisible(find.text('Сохранить параметры'));
+    await tester.tap(find.text('Сохранить параметры'));
+    await tester.pumpAndSettle();
+    expect(state.agentDayRule, custom);
+    state.selectLanguage(UiLanguage.en);
+    await tester.pumpAndSettle();
+    expect(text(), custom);
+    await tester.ensureVisible(find.text('Reset'));
+    await tester.tap(find.text('Reset'));
+    await tester.pumpAndSettle();
+    expect(text(), defaultAgentDayRuleEn);
+    await tester.tap(find.text('Save settings'));
+    await tester.pumpAndSettle();
+    expect(store.getSetting('agent_day_rule'), defaultAgentDayRuleRu);
+    state.selectLanguage(UiLanguage.ru);
+    await tester.pumpAndSettle();
+    expect(text(), defaultAgentDayRuleRu);
+  });
+
+  testWidgets('system language updates the copied agent instructions', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1200);
+    tester.view.devicePixelRatio = 1;
+    tester.binding.platformDispatcher.localesTestValue = [const Locale('ru')];
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.binding.platformDispatcher.clearLocalesTestValue);
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    final store = LocalStore(sqlite3.openInMemory())..init();
+    addTearDown(store.close);
+    final state = createState(store);
+    await tester.pumpWidget(JiraTimeTrackerApp(appState: state));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Настройки'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('settings-section-agent-api')));
+    await tester.pumpAndSettle();
+    final prompt = find.byKey(const ValueKey('agent-skill-instructions'));
+    expect(
+      tester.widget<TextField>(prompt).controller!.text,
+      startsWith('# Навык:'),
+    );
+    tester.binding.platformDispatcher.localesTestValue = [const Locale('en')];
+    await tester.pumpAndSettle();
+    final english = tester.widget<TextField>(prompt).controller!.text;
+    expect(english, startsWith('# Skill:'));
+    expect(english, contains('http://127.0.0.1:8765'));
+    expect(english, contains('GET /api/day-settings'));
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('copy-agent-instructions')),
+    );
+    await tester.tap(find.byKey(const ValueKey('copy-agent-instructions')));
+    await tester.pumpAndSettle();
+    expect(copied, english);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'reconciliation messages and nested draft dates localise after decoding',

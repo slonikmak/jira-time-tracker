@@ -1,5 +1,6 @@
 import '../app_message.dart';
 import '../l10n/app_localizations.dart';
+import '../agent_instructions.dart';
 import '../ui/message_format.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -65,7 +66,7 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
     ),
     textStyle: WidgetStatePropertyAll(
-      TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+      TextStyle(fontFamily: 'Inter', fontSize: 13, fontWeight: FontWeight.w500),
     ),
     visualDensity: VisualDensity.standard,
   );
@@ -76,6 +77,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _agentUrlController;
   late final TextEditingController _skillPromptController;
   late final TextEditingController _agentDayRuleController;
+  String _displayedDefaultAgentDayRule = AppState.defaultAgentDayRule;
   late final Map<String, TextEditingController> _dayControllers;
 
   bool _isLoading = true;
@@ -141,6 +143,16 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final languageCode = Localizations.localeOf(context).languageCode;
+    final defaultRule = defaultAgentDayRuleForLanguage(languageCode);
+    if (_agentDayRuleController.text == _displayedDefaultAgentDayRule) {
+      _agentDayRuleController.text = defaultRule;
+    }
+    _displayedDefaultAgentDayRule = defaultRule;
+    _skillPromptController.text = AgentApiServer.generateSkillPrompt(
+      _agentUrlController.text,
+      languageCode: languageCode,
+    );
     if (!_filledDaySettings) {
       _fillDaySettings(widget.appState.daySettings);
       _filledDaySettings = true;
@@ -805,44 +817,61 @@ class _SettingsPageState extends State<SettingsPage> {
             style: theme.textTheme.titleSmall,
           ),
           const SizedBox(height: 8),
-          DropdownButton<UiLanguage>(
-            isExpanded: true,
-            key: const ValueKey('language-selector'),
-            value: widget.appState.language.value,
-            items: [
-              DropdownMenuItem(
-                value: UiLanguage.system,
-                child: Text(AppLocalizations.of(context).systemDefault),
+          SizedBox(
+            height: 40,
+            child: InputDecorator(
+              expands: true,
+              decoration: InputDecoration(
+                isDense: true,
+                enabled: !widget.appState.isReadOnly,
               ),
-              const DropdownMenuItem(
-                value: UiLanguage.ru,
-                child: Text('Русский'),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<UiLanguage>(
+                  isDense: true,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  isExpanded: true,
+                  key: const ValueKey('language-selector'),
+                  value: widget.appState.language.value,
+                  items: [
+                    DropdownMenuItem(
+                      value: UiLanguage.system,
+                      child: Text(AppLocalizations.of(context).systemDefault),
+                    ),
+                    const DropdownMenuItem(
+                      value: UiLanguage.ru,
+                      child: Text('Русский'),
+                    ),
+                    const DropdownMenuItem(
+                      value: UiLanguage.en,
+                      child: Text('English'),
+                    ),
+                  ],
+                  onChanged: widget.appState.isReadOnly
+                      ? null
+                      : (value) {
+                          if (value == null) return;
+                          try {
+                            widget.appState.selectLanguage(value);
+                          } catch (error) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Builder(
+                                  builder: (context) => Text(
+                                    AppLocalizations.of(
+                                      context,
+                                    ).languageSaveFailed(error.toString()),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                ),
               ),
-              const DropdownMenuItem(
-                value: UiLanguage.en,
-                child: Text('English'),
-              ),
-            ],
-            onChanged: widget.appState.isReadOnly
-                ? null
-                : (value) {
-                    if (value == null) return;
-                    try {
-                      widget.appState.selectLanguage(value);
-                    } catch (error) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Builder(
-                            builder: (context) => Text(
-                              AppLocalizations.of(
-                                context,
-                              ).languageSaveFailed(error.toString()),
-                            ),
-                          ),
-                        ),
-                      );
-                    }
-                  },
+            ),
           ),
 
           if (widget.appState.isReadOnly)
@@ -860,7 +889,7 @@ class _SettingsPageState extends State<SettingsPage> {
     runSpacing: 16,
     children: [
       _buildLanguageSelector(context),
-      SizedBox(width: 340, child: _buildThemeSelector(context)),
+      SizedBox(width: 420, child: _buildThemeSelector(context)),
     ],
   );
 
@@ -876,11 +905,16 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
         const SizedBox(height: 8),
         SegmentedButton<UiThemeMode>(
+          expandedInsets: EdgeInsets.zero,
           showSelectedIcon: false,
           segments: [
             ButtonSegment(
               value: UiThemeMode.system,
-              label: Text(AppLocalizations.of(context).systemDefault422),
+              label: Text(
+                AppLocalizations.of(context).systemDefault422,
+                maxLines: 1,
+                softWrap: false,
+              ),
             ),
             ButtonSegment(
               value: UiThemeMode.light,
@@ -913,6 +947,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   }
                 },
           style: _actionButtonStyle.copyWith(
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             side: WidgetStatePropertyAll(BorderSide(color: scheme.outline)),
             backgroundColor: WidgetStateProperty.resolveWith((states) {
               if (states.contains(WidgetState.disabled)) return null;
@@ -1090,7 +1125,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       setState(() {
                         _fillDaySettings(const DaySettings());
                         _agentDayRuleController.text =
-                            AppState.defaultAgentDayRule;
+                            _displayedDefaultAgentDayRule;
                         _dayErrors = {};
                         _dayMessage = null;
                       });
@@ -1347,6 +1382,7 @@ class _SettingsPageState extends State<SettingsPage> {
               style: _actionButtonStyle,
               icon: const Icon(Icons.copy, size: 16),
               label: Text(AppLocalizations.of(context).copyInstructions),
+              key: const ValueKey('copy-agent-instructions'),
               onPressed: () {
                 Clipboard.setData(
                   ClipboardData(text: _skillPromptController.text),
@@ -1368,6 +1404,7 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
         const SizedBox(height: 8),
         TextField(
+          key: const ValueKey('agent-skill-instructions'),
           controller: _skillPromptController,
           readOnly: true,
           minLines: 16,

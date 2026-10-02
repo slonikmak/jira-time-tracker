@@ -14,6 +14,7 @@ Read the relevant sections before changing behavior:
 | Module boundaries, data, transactions, test dependencies | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Screens, forms, navigation, appearance | [UX/UI](docs/design/UX.md) and the current [astra.pen](astra.pen) design |
 | Installation, running, usage | [README.md](README.md) |
+| Changelog, versions, builds, release publication | [Release guide](docs/releases.md); use the [desktop-release skill](.agents/skills/desktop-release/SKILL.md) for preparing, building, or publishing a release |
 | Domain terms and architectural decisions | [CONTEXT.md](CONTEXT.md) and applicable ADRs under the [domain documentation rules](docs/agents/domain.md) |
 
 User instructions take precedence. If they change an agreed rule, update its owning document. Verify actual behavior against code and execution results: a description of intended behavior does not prove implementation. Describe any discrepancy concretely.
@@ -23,6 +24,7 @@ User instructions take precedence. If they change an agreed rule, update its own
 1. Inspect the working tree and affected code. Preserve unrelated changes.
 2. Fix the rule in its owning module, then update callers as needed. Keep SQL, the Jira protocol, and day building behind their respective module interfaces.
 3. When changing a contract, layout, module responsibility, or startup method, update the owning document from the table above. Link to it from other documents instead of duplicating the rule.
+4. For user-visible features, fixes, removals, compatibility changes, or security changes, update `CHANGELOG.md` under `Unreleased` in the same change. Write concise English descriptions of the resulting behavior, following the [changelog rules](docs/releases.md#changelog). Internal refactoring, tests, and documentation-only changes need no entry unless they affect installation or usage. Keep published version sections unchanged; the release skill moves eligible entries into a version section.
 
 For local tasks in `.scratch/`, use the [issue tracker rules](docs/agents/issue-tracker.md). For incoming task triage, use the [label vocabulary](docs/agents/triage-labels.md).
 

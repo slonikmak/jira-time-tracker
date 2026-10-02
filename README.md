@@ -4,7 +4,7 @@ A local Flutter desktop application for tracking work time, running parallel iss
 
 The interface supports English and Russian. Project documentation is maintained in English.
 
-Application packages will be distributed through GitHub Releases. Package formats, the build workflow, and the release process are described in the [release guide](docs/releases.md).
+Download published packages from [GitHub Releases](https://github.com/slonikmak/jira-time-tracker/releases). Before the first publication, builds are available as artifacts in [GitHub Actions](https://github.com/slonikmak/jira-time-tracker/actions/workflows/desktop-release.yml). See the [changelog](CHANGELOG.md) for changes and the [release guide](docs/releases.md) for package formats and publication. Release preparation can be delegated to the repository's [desktop-release skill](.agents/skills/desktop-release/SKILL.md).
 
 End-to-end workflows for people and local AI agents are covered in the [user stories](docs/specs/user-stories.md). Detailed product rules and acceptance scenarios A01–A24 are defined in the [MVP specification](docs/specs/jira-time-tracker-mvp.md).
 
